@@ -1,0 +1,63 @@
+JustCode — Proprietary Software License
+Copyright (c) 2026 Nebosa. All rights reserved.
+
+This software and its source code, documentation, assets and any accompanying
+materials (together, the "Software") are the confidential and proprietary
+property of Nebosa (the "Licensor"). The Software is licensed, not sold.
+
+1. NO GRANT OF RIGHTS
+
+   No licence, right, title or interest in the Software is granted to any
+   person except under a separate written agreement signed by the Licensor.
+   Access to this repository does not by itself grant any such licence.
+
+2. RESTRICTIONS
+
+   Except as expressly permitted in writing by the Licensor, you may not:
+
+   (a) copy, publish, distribute, sublicense, sell, rent, lease or otherwise
+       transfer the Software or any part of it;
+   (b) modify, adapt, translate or create derivative works from the Software;
+   (c) reverse engineer, decompile or disassemble the Software, or attempt to
+       derive its source code, except to the extent that this restriction is
+       expressly prohibited by applicable law;
+   (d) remove, obscure or alter any copyright, trademark or other proprietary
+       notice contained in the Software;
+   (e) use the Software to provide a service to any third party.
+
+3. CONFIDENTIALITY
+
+   The Software contains trade secrets of the Licensor. You must not disclose
+   the Software, or any information derived from it, to any third party, and
+   must protect it with no less care than you apply to your own confidential
+   information of comparable importance.
+
+4. THIRD-PARTY COMPONENTS
+
+   The Software incorporates third-party open source components, each of which
+   remains subject to the terms of its own licence. Those terms govern the
+   components they accompany and are not altered by this licence. A listing of
+   such components and their licences is available from the project's
+   dependency manifests (package.json, package-lock.json, src-tauri/Cargo.toml
+   and src-tauri/Cargo.lock).
+
+5. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+6. LIMITATION OF LIABILITY
+
+   IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+7. TERMINATION
+
+   Any rights granted under a separate written agreement terminate immediately
+   if you breach these terms. On termination you must cease all use of the
+   Software and destroy all copies in your possession or control.
+
+For licensing enquiries, contact Nebosa.

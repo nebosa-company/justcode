@@ -1,0 +1,659 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "JustCode",
+  "version": "0.1.0",
+  "identifier": "com.justcode.editor",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "title": "JustCode",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 640,
+        "minHeight": 400,
+        "dragDropEnabled": false,
+        "visible": false,
+        "backgroundColor": "#1e1f26"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "JustCode",
+    "shortDescription": "A small, fast code editor",
+    "fileAssociations": [
+      {
+        "ext": [
+          "bash"
+        ],
+        "name": "JustCode.bash",
+        "description": "Bash script",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "bat"
+        ],
+        "name": "JustCode.bat",
+        "description": "Batch file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "c"
+        ],
+        "name": "JustCode.c",
+        "description": "C source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "cc"
+        ],
+        "name": "JustCode.cc",
+        "description": "C / C++ file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "cjs"
+        ],
+        "name": "JustCode.cjs",
+        "description": "CommonJS module",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "cmd"
+        ],
+        "name": "JustCode.cmd",
+        "description": "Command script",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "cpp"
+        ],
+        "name": "JustCode.cpp",
+        "description": "C++ source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "cs"
+        ],
+        "name": "JustCode.cs",
+        "description": "C# source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "css"
+        ],
+        "name": "JustCode.css",
+        "description": "Style sheet",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "csv"
+        ],
+        "name": "JustCode.csv",
+        "description": "Comma-separated values",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "csx"
+        ],
+        "name": "JustCode.csx",
+        "description": "C# file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "cts"
+        ],
+        "name": "JustCode.cts",
+        "description": "TypeScript file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "cxx"
+        ],
+        "name": "JustCode.cxx",
+        "description": "C / C++ file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "dart"
+        ],
+        "name": "JustCode.dart",
+        "description": "Dart source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "dpk"
+        ],
+        "name": "JustCode.dpk",
+        "description": "Delphi package",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "dpr"
+        ],
+        "name": "JustCode.dpr",
+        "description": "Delphi project",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "dproj"
+        ],
+        "name": "JustCode.dproj",
+        "description": "Delphi project file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "go"
+        ],
+        "name": "JustCode.go",
+        "description": "Go source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "h"
+        ],
+        "name": "JustCode.h",
+        "description": "C/C++ header",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "hcl"
+        ],
+        "name": "JustCode.hcl",
+        "description": "HCL document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "hh"
+        ],
+        "name": "JustCode.hh",
+        "description": "C / C++ file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "hpp"
+        ],
+        "name": "JustCode.hpp",
+        "description": "C / C++ file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "htm"
+        ],
+        "name": "JustCode.htm",
+        "description": "HTML document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "html"
+        ],
+        "name": "JustCode.html",
+        "description": "HTML document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "hxx"
+        ],
+        "name": "JustCode.hxx",
+        "description": "C / C++ file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "inc"
+        ],
+        "name": "JustCode.inc",
+        "description": "Include file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "java"
+        ],
+        "name": "JustCode.java",
+        "description": "Java source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "js"
+        ],
+        "name": "JustCode.js",
+        "description": "JavaScript",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "json"
+        ],
+        "name": "JustCode.json",
+        "description": "JSON document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "jsonc"
+        ],
+        "name": "JustCode.jsonc",
+        "description": "JSON file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "jsx"
+        ],
+        "name": "JustCode.jsx",
+        "description": "JavaScript JSX",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "ksh"
+        ],
+        "name": "JustCode.ksh",
+        "description": "Shell file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "kt"
+        ],
+        "name": "JustCode.kt",
+        "description": "Kotlin source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "kts"
+        ],
+        "name": "JustCode.kts",
+        "description": "Kotlin file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "log"
+        ],
+        "name": "JustCode.log",
+        "description": "Log file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "lpr"
+        ],
+        "name": "JustCode.lpr",
+        "description": "Lazarus project",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "markdown"
+        ],
+        "name": "JustCode.markdown",
+        "description": "Markdown",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "md"
+        ],
+        "name": "JustCode.md",
+        "description": "Markdown",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "mdown"
+        ],
+        "name": "JustCode.mdown",
+        "description": "Markdown file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "mjs"
+        ],
+        "name": "JustCode.mjs",
+        "description": "JavaScript module",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "mkd"
+        ],
+        "name": "JustCode.mkd",
+        "description": "Markdown file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "mts"
+        ],
+        "name": "JustCode.mts",
+        "description": "TypeScript file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "mysql"
+        ],
+        "name": "JustCode.mysql",
+        "description": "SQL (MySQL) file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "pas"
+        ],
+        "name": "JustCode.pas",
+        "description": "Object Pascal unit",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "pgsql"
+        ],
+        "name": "JustCode.pgsql",
+        "description": "SQL (PostgreSQL) file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "pp"
+        ],
+        "name": "JustCode.pp",
+        "description": "Free Pascal unit",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "proto"
+        ],
+        "name": "JustCode.proto",
+        "description": "Protocol Buffers",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "ps1"
+        ],
+        "name": "JustCode.ps1",
+        "description": "PowerShell script",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "psd1"
+        ],
+        "name": "JustCode.psd1",
+        "description": "PowerShell file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "psm1"
+        ],
+        "name": "JustCode.psm1",
+        "description": "PowerShell module",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "psql"
+        ],
+        "name": "JustCode.psql",
+        "description": "SQL (PostgreSQL) file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "py"
+        ],
+        "name": "JustCode.py",
+        "description": "Python script",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "pyi"
+        ],
+        "name": "JustCode.pyi",
+        "description": "Python file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "pyw"
+        ],
+        "name": "JustCode.pyw",
+        "description": "Python file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "r"
+        ],
+        "name": "JustCode.r",
+        "description": "R script",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "rs"
+        ],
+        "name": "JustCode.rs",
+        "description": "Rust source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "sh"
+        ],
+        "name": "JustCode.sh",
+        "description": "Shell script",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "sql"
+        ],
+        "name": "JustCode.sql",
+        "description": "SQL script",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "sqlite"
+        ],
+        "name": "JustCode.sqlite",
+        "description": "SQL (SQLite) file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "sqlite3"
+        ],
+        "name": "JustCode.sqlite3",
+        "description": "SQL (SQLite) file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "swift"
+        ],
+        "name": "JustCode.swift",
+        "description": "Swift source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "tf"
+        ],
+        "name": "JustCode.tf",
+        "description": "Terraform config",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "tfvars"
+        ],
+        "name": "JustCode.tfvars",
+        "description": "Terraform variables",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "toml"
+        ],
+        "name": "JustCode.toml",
+        "description": "TOML document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "ts"
+        ],
+        "name": "JustCode.ts",
+        "description": "TypeScript",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "tsx"
+        ],
+        "name": "JustCode.tsx",
+        "description": "TypeScript JSX",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "txt"
+        ],
+        "name": "JustCode.txt",
+        "description": "Plain text",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "webmanifest"
+        ],
+        "name": "JustCode.webmanifest",
+        "description": "JSON file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "xhtml"
+        ],
+        "name": "JustCode.xhtml",
+        "description": "XHTML document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "xml"
+        ],
+        "name": "JustCode.xml",
+        "description": "XML document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "xsd"
+        ],
+        "name": "JustCode.xsd",
+        "description": "XML file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "xsl"
+        ],
+        "name": "JustCode.xsl",
+        "description": "XML file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "xslt"
+        ],
+        "name": "JustCode.xslt",
+        "description": "XML file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "yaml"
+        ],
+        "name": "JustCode.yaml",
+        "description": "YAML document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "yml"
+        ],
+        "name": "JustCode.yml",
+        "description": "YAML document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "zsh"
+        ],
+        "name": "JustCode.zsh",
+        "description": "Shell file",
+        "role": "Editor"
+      }
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "installer-hooks.nsh"
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "default": "../src-tauri/icons/justcode-source.png",
+  "bg_color": "#ffffff",
+  "android_bg": "android-bg-white.png",
+  "android_fg": "justcode-mark-android-fg.png"
+}

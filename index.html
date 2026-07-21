@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JustCode</title>
+    <!-- Paint the themed background on the very first frame. Without this the
+         webview shows its default white until the stylesheet and app have
+         loaded, which reads as a flash before the editor appears. -->
+    <style>
+      html,
+      body {
+        background: #1e1f26;
+      }
+      html[data-theme="light"],
+      html[data-theme="light"] body {
+        background: #ffffff;
+      }
+    </style>
+    <script>
+      // Runs before the stylesheet and bundle so the first paint already uses
+      // the saved theme rather than defaulting to dark and correcting later.
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("justcode.theme") === "light" ? "light" : "dark";
+      } catch (_) {
+        document.documentElement.dataset.theme = "dark";
+      }
+    </script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="menubar"></div>
+
+      <div id="toolbar">
+        <button id="btn-new" title="New file (Ctrl+N)"><span>New</span></button>
+        <button id="btn-open" title="Open file (Ctrl+O)"><span>Open</span></button>
+        <button id="btn-save" title="Save (Ctrl+S)"><span>Save</span></button>
+        <button id="btn-run" title="Run in browser (F5)" class="primary"><span>Run</span></button>
+        <span class="spacer"></span>
+        <button id="btn-theme" class="icon-only" title="Switch theme"></button>
+        <button id="btn-zoom-out" class="icon-only" title="Zoom out (Ctrl+-)"></button>
+        <span id="zoom-level">14px</span>
+        <button id="btn-zoom-in" class="icon-only" title="Zoom in (Ctrl++)"></button>
+      </div>
+
+      <!-- One or more panes, each with its own tab bar and editor. -->
+      <div id="panes"></div>
+
+      <div id="statusbar">
+        <span id="status-path">No file</span>
+        <span class="spacer"></span>
+        <button id="status-lang" title="Select language mode"></button>
+        <span id="status-cursor" title="Line, Column">1:1</span>
+        <button id="status-problems" title="Show problems panel (F8)">0 problems</button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

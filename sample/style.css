@@ -1,0 +1,37 @@
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #14151a;
+  color: #e6e8f0;
+}
+
+main {
+  text-align: center;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 44px;
+}
+
+p {
+  color: #9aa0b0;
+}
+
+button {
+  font: inherit;
+  margin-top: 16px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 6px;
+  background: #4d9cf5;
+  color: #fff;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #6bb0f8;
+}

@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies and build output
+node_modules
+dist
+dist-ssr
+*.local
+
+# Rust / Tauri build artefacts. `target` reaches several GB after a release
+# build; `gen` is regenerated from tauri.conf.json on every build.
+src-tauri/target/
+src-tauri/gen/
+
+# Bundles produced by scripts/pack.mjs
+*.msi
+*.nsis.zip
+*.exe.sig
+
+# Vendored UPX binary. It is GPL-licensed, so it is fetched rather than
+# redistributed from here; tools/README.md says where to get it, and
+# scripts/pack.mjs fails with that pointer when it is absent.
+tools/upx.exe
+tools/upx
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local Claude Code state; .claude/launch.json is shared deliberately.
+.claude/settings.local.json
+.claude/state/
