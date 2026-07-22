@@ -112,6 +112,8 @@ const SHORTCUTS = [
       ["Ctrl+Shift+G", "sc.goToSymbol"],
       ["sc.k.wordWrap", "sc.wordWrap"],
       ["Ctrl+`", "sc.terminal"],
+      ["Ctrl+Shift+`", "terminal.new"],
+      ["Ctrl+F5", "file.runInTerminal"],
       ["F1", "sc.shortcutList"],
     ],
   },

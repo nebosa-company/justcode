@@ -2,7 +2,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -189,13 +189,18 @@ fn run_script(path: String, kind: String) -> Result<(), String> {
                 // /k takes its argument as a *command line* and re-parses it,
                 // so `ok&md PWNED&rem .cmd` runs `md`. Verified.
                 //
-                // Passing the path through the environment and expanding it
+                // Passing the command through the environment and expanding it
                 // with delayed expansion (`!VAR!`) keeps it out of the parser
                 // entirely — the value is substituted after the line has been
                 // tokenised, so `&` in a file name stays part of the name.
+                //
+                // The *whole* command lives in the variable, not just the path.
+                // With `call "!JUSTCODE_SCRIPT!"` on the command line the argv
+                // quoter escapes the inner quotes to `\"`, which cmd treats as
+                // literal characters — safe, but the script never ran.
                 let mut c = std::process::Command::new("cmd.exe");
-                c.env("JUSTCODE_SCRIPT", &script);
-                c.args(["/v:on", "/k", "call \"!JUSTCODE_SCRIPT!\""]);
+                c.env("JUSTCODE_CMD", format!("call \"{}\"", script.display()));
+                c.args(["/v:on", "/k", "!JUSTCODE_CMD!"]);
                 c
             }
             // .sh has no interpreter on a stock Windows box; say so plainly
@@ -613,6 +618,8 @@ fn shell_command(profile: &str) -> Result<portable_pty::CommandBuilder, String> 
         #[cfg(windows)]
         "cmd" => CommandBuilder::new("cmd.exe"),
         #[cfg(not(windows))]
+        "zsh" => CommandBuilder::new("zsh"),
+        #[cfg(not(windows))]
         "bash" => CommandBuilder::new("bash"),
         #[cfg(not(windows))]
         "sh" => CommandBuilder::new("sh"),
@@ -631,7 +638,67 @@ fn dirs_home() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// Builds the command that runs `script` under `kind` inside a terminal.
+///
+/// Deliberately *not* "open a shell and type the path into it": a shell
+/// re-parses whatever it is given, so a file called `build&calc&.ps1` would run
+/// `calc`. Every case below hands the path over as an argument vector, or —
+/// for `cmd`, whose `/k` re-parses its argument — through the environment with
+/// delayed expansion, exactly as `run_script` does.
+#[cfg(windows)]
+fn script_command(kind: &str, script: &Path) -> Result<portable_pty::CommandBuilder, String> {
+    use portable_pty::CommandBuilder;
+    let mut command = match kind {
+        "powershell" => {
+            let mut c = CommandBuilder::new("powershell.exe");
+            // -NoExit leaves a usable prompt behind once the script finishes.
+            c.args(["-NoExit", "-ExecutionPolicy", "Bypass", "-File"]);
+            c.arg(script);
+            c
+        }
+        "batch" => {
+            let mut c = CommandBuilder::new("cmd.exe");
+            // The whole command goes in the variable, not just the path, so the
+            // argument left on the command line — `!JUSTCODE_CMD!` — has no
+            // spaces and no quotes for the argv quoter to mangle. Passing
+            // `call "!JUSTCODE_SCRIPT!"` here instead gets escaped to
+            // `call \"!JUSTCODE_SCRIPT!\"`, which cmd reads as a literal.
+            // Delayed expansion still substitutes after the line is tokenised,
+            // so an `&` in the file name never becomes an operator.
+            c.env("JUSTCODE_CMD", format!("call \"{}\"", script.display()));
+            c.args(["/v:on", "/k", "!JUSTCODE_CMD!"]);
+            c
+        }
+        "shell" => {
+            return Err("Shell scripts need WSL or Git Bash, which JustCode does not launch".into())
+        }
+        other => return Err(format!("Don't know how to run '{other}' scripts")),
+    };
+    if let Some(folder) = script.parent() {
+        command.cwd(folder);
+    }
+    Ok(command)
+}
+
+#[cfg(not(windows))]
+fn script_command(kind: &str, script: &Path) -> Result<portable_pty::CommandBuilder, String> {
+    use portable_pty::CommandBuilder;
+    let mut command = match kind {
+        "powershell" => CommandBuilder::new("pwsh"),
+        "shell" => CommandBuilder::new("sh"),
+        other => return Err(format!("Don't know how to run '{other}' scripts")),
+    };
+    command.arg(script);
+    if let Some(folder) = script.parent() {
+        command.cwd(folder);
+    }
+    Ok(command)
+}
+
 /// Starts a shell in a pseudo-terminal and streams its output to the frontend.
+///
+/// With `script` set, the interpreter named by `profile` runs that file instead
+/// of an interactive shell being started.
 #[tauri::command(async)]
 fn terminal_open(
     app: tauri::AppHandle,
@@ -639,6 +706,7 @@ fn terminal_open(
     id: u32,
     profile: String,
     cwd: Option<String>,
+    script: Option<String>,
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
@@ -651,9 +719,22 @@ fn terminal_open(
         return Err(format!("terminal {id} is already open"));
     }
 
-    let mut command = shell_command(&profile)?;
-    if let Some(cwd) = cwd.filter(|path| PathBuf::from(path).is_dir()) {
-        command.cwd(cwd);
+    let mut command = match &script {
+        Some(script) => {
+            let script = PathBuf::from(script);
+            if !script.is_file() {
+                return Err(format!("{} does not exist", script.display()));
+            }
+            script_command(&profile, &script)?
+        }
+        None => shell_command(&profile)?,
+    };
+    // A script already starts in its own folder; only a plain shell takes the
+    // editor's current directory.
+    if script.is_none() {
+        if let Some(cwd) = cwd.filter(|path| PathBuf::from(path).is_dir()) {
+            command.cwd(cwd);
+        }
     }
 
     let pty = native_pty_system()
@@ -1110,9 +1191,113 @@ mod terminal_tests {
         );
     }
 
+    /// The "Run in Terminal" path end to end: a real script file, started by
+    /// the same command `terminal_open` builds, with its output read back off
+    /// the pty. The file name carries an injection payload, so this also fails
+    /// if the path is ever handed to a parser instead of being passed through.
+    #[test]
+    fn run_in_terminal_executes_the_script() {
+        let dir = std::env::temp_dir().join("justcode-run-in-terminal-test");
+        let _ = std::fs::create_dir_all(&dir);
+        let evidence = dir.join("PWNED");
+        let _ = std::fs::remove_dir_all(&evidence);
+
+        let (name, body, kind) = if cfg!(windows) {
+            ("ok&md PWNED&rem .cmd", "@echo off\r\necho JUSTCODE_RUN_OK\r\n", "batch")
+        } else {
+            ("ok;mkdir PWNED;: .sh", "echo JUSTCODE_RUN_OK\n", "shell")
+        };
+        let script = dir.join(name);
+        std::fs::write(&script, body).expect("write script");
+
+        let pty = native_pty_system()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .expect("openpty");
+        let command = super::script_command(kind, &script).expect("known kind");
+        let mut child = pty.slave.spawn_command(command).expect("spawn interpreter");
+        drop(pty.slave);
+
+        let mut reader = pty.master.try_clone_reader().expect("reader");
+        // The interpreter is left at a prompt on purpose (`/k`, `-NoExit`), and
+        // on Windows killing it does not close the ConPTY master — so a read on
+        // this thread would block past any deadline. Read on its own thread and
+        // bound the wait here instead.
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 4096];
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        let chunk = String::from_utf8_lossy(&buffer[..n]).into_owned();
+                        if tx.send(chunk).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut seen = String::new();
+        while Instant::now() < deadline && !seen.contains("JUSTCODE_RUN_OK") {
+            match rx.recv_timeout(Duration::from_millis(250)) {
+                Ok(chunk) => seen.push_str(&chunk),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(_) => break,
+            }
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+
+        let injected = evidence.is_dir();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(!injected, "the file name was re-parsed as a command");
+        assert!(
+            seen.contains("JUSTCODE_RUN_OK"),
+            "the script should have run; saw: {seen:?}"
+        );
+    }
+
     #[test]
     fn unknown_profile_is_rejected() {
         assert!(super::shell_command("evil --rm-rf").is_err());
+    }
+
+    #[test]
+    fn unknown_script_kind_is_rejected() {
+        let script = std::path::Path::new("x");
+        assert!(super::script_command("evil --rm-rf", script).is_err());
+    }
+
+    /// "Run in Terminal" must not degrade into typing the path at a prompt.
+    /// PowerShell takes it as a literal `-File` argument; cmd never sees it at
+    /// all, because `/k` re-parses its argument and would run the `&calc&` in
+    /// this name. Both are the same defence `run_script` uses.
+    #[cfg(windows)]
+    #[test]
+    fn script_command_keeps_the_file_name_out_of_the_command_line() {
+        let script = std::path::Path::new(r"C:\tmp\ok&calc&.ps1");
+        let argv = |kind| {
+            super::script_command(kind, script)
+                .expect("known kind")
+                .get_argv()
+                .iter()
+                .map(|part| part.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+
+        let powershell = argv("powershell");
+        assert_eq!(powershell.last().map(String::as_str), Some(r"C:\tmp\ok&calc&.ps1"));
+        assert!(powershell.contains(&"-File".to_string()));
+
+        let batch = argv("batch");
+        assert!(
+            !batch.iter().any(|part| part.contains("calc")),
+            "the path reached cmd's command line: {batch:?}"
+        );
+        assert!(batch.contains(&"/v:on".to_string()));
     }
 }
 
@@ -1167,24 +1352,35 @@ mod launch_safety_tests {
         let _ = std::fs::remove_dir_all(&evidence);
 
         // Payload uses only characters that are legal in a Windows file name.
+        let proof = dir.join("RAN");
+        let _ = std::fs::remove_file(&proof);
         let script = dir.join("ok&md PWNED&rem .cmd");
-        std::fs::write(&script, "@echo off\r\nexit\r\n").expect("write script");
+        std::fs::write(&script, "@echo off\r\necho ran > \"%~dp0RAN\"\r\nexit\r\n")
+            .expect("write script");
 
+        // Exactly what `run_script` builds, minus the new console so the test
+        // does not open a window. `/k` is kept: it is what makes the argument a
+        // command line, which is the thing under test.
         let mut command = std::process::Command::new("cmd.exe");
-        command.env("JUSTCODE_SCRIPT", &script);
-        command.args(["/v:on", "/k", "call \"!JUSTCODE_SCRIPT!\""]);
+        command.env("JUSTCODE_CMD", format!("call \"{}\"", script.display()));
+        command.args(["/v:on", "/k", "!JUSTCODE_CMD!"]);
         command.creation_flags(CREATE_NEW_CONSOLE).current_dir(&dir);
         if let Ok(mut child) = command.spawn() {
-            std::thread::sleep(std::time::Duration::from_millis(900));
+            std::thread::sleep(std::time::Duration::from_millis(1500));
             let _ = child.kill();
             let _ = child.wait();
         }
 
         let injected = evidence.is_dir();
+        // Asserting only "did not inject" passed happily while the quoting was
+        // broken and nothing ran at all; this pins down that it still works.
+        let ran = proof.is_file();
         let _ = std::fs::remove_dir_all(&evidence);
+        let _ = std::fs::remove_file(&proof);
         let _ = std::fs::remove_file(&script);
         let _ = std::fs::remove_dir_all(&dir);
         assert!(!injected, "file name was re-parsed as a command");
+        assert!(ran, "the script did not actually run");
     }
 
     /// The extension check must run on the resolved path, or a `.html` symlink

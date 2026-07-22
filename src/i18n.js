@@ -68,6 +68,7 @@ export const EN = {
   "file.revealLinux": "Show in File Manager",
   "file.copyPath": "Copy File Path",
   "file.run": "Run",
+  "file.runInTerminal": "Run in Terminal",
   "file.closeTab": "Close Tab",
   "file.closeOthers": "Close All But Current",
   "file.closeAll": "Close All",

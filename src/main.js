@@ -58,6 +58,8 @@ import {
   relayout as relayoutTerminals,
   closeAllTerminals,
   PROFILES as TERMINAL_PROFILES,
+  DEFAULT_PROFILE as DEFAULT_TERMINAL,
+  runInTerminal,
 } from "./terminal.js";
 import { iconMarkup } from "./icons.js";
 
@@ -1033,6 +1035,38 @@ async function saveTab(tab, { forcePrompt = false } = {}) {
 }
 
 /**
+ * Languages a terminal can execute, mapped to the interpreter that runs them.
+ * Anything not listed here is a document, not a program.
+ */
+const SCRIPT_KINDS = { powershell: "powershell", batch: "batch", shell: "shell" };
+
+/** Whether the active file is something a shell could run. */
+function runnableTab() {
+  const tab = activeTab();
+  return tab && SCRIPT_KINDS[tab.language] ? tab : null;
+}
+
+/**
+ * Runs the current script inside the integrated terminal, rather than in the
+ * separate console window `run()` opens. Output stays in the app and the shell
+ * is left at a prompt afterwards, so a failing script can be poked at on the
+ * spot instead of vanishing with its window.
+ */
+async function runInTerminalCommand() {
+  const current = runnableTab();
+  if (!current) return;
+  // The interpreter reads the file, so unsaved edits would not be run.
+  if (current.dirty || !current.path) {
+    if (!(await saveTab(current))) return;
+  }
+  try {
+    await runInTerminal(current.path, SCRIPT_KINDS[current.language], current.name);
+  } catch (error) {
+    flashStatus(String(error?.message || error));
+  }
+}
+
+/**
  * Saves everything that needs saving, then hands the HTML file to the OS so it
  * opens in the default browser. Relative <link>/<script> paths resolve because
  * the file is opened from its own directory.
@@ -1064,7 +1098,6 @@ async function run() {
   // Scripts are executed by their interpreter in a console window rather than
   // shown in a browser. They must be on disk first — an interpreter reads the
   // file, not the buffer.
-  const SCRIPT_KINDS = { powershell: "powershell", batch: "batch", shell: "shell" };
   if (current && SCRIPT_KINDS[current.language]) {
     if (current.dirty || !current.path) {
       if (!(await saveTab(current))) return;
@@ -1807,6 +1840,14 @@ function buildMenus() {
       { label: t("file.associations"), icon: "link", run: chooseFileAssociations },
       { separator: true },
       { label: t("file.run"), icon: "play", accel: "F5", run },
+      {
+        label: t("file.runInTerminal"),
+        icon: "terminal",
+        accel: "Ctrl+F5",
+        // Only scripts; there is nothing to run for a .txt or a .json.
+        enabled: () => runnableTab() !== null,
+        run: runInTerminalCommand,
+      },
       { separator: true },
       {
         label: t("file.closeTab"),
@@ -1980,6 +2021,11 @@ function buildMenus() {
           ...TERMINAL_PROFILES.map((profile) => ({
             label: profile.label,
             icon: "terminal",
+            // The shortcut opens whichever shell is first for this platform, so
+            // it is shown against that one rather than on the parent item —
+            // "Ctrl+Shift+`" next to "PowerShell" says what it does; next to
+            // "New Terminal" it would not.
+            accel: profile.id === DEFAULT_TERMINAL.id ? "Ctrl+Shift+`" : undefined,
             run: () => openTerminal(profile.id),
           })),
           { separator: true },
@@ -2121,9 +2167,12 @@ window.addEventListener(
       }
     }
 
-    if (event.key === "F5" && !ctrl) {
+    if (event.key === "F5") {
       event.preventDefault();
-      run();
+      // Ctrl+F5 keeps the run inside the app; plain F5 opens a console or a
+      // browser, depending on the file.
+      if (ctrl) runInTerminalCommand();
+      else run();
       return;
     }
     if (event.key === "F8" && !ctrl) {
@@ -2170,11 +2219,19 @@ window.addEventListener(
       return;
     }
 
-    // Ctrl+` toggles the terminal, as in VS Code.
-    if (!altGr && (event.key === "`" || event.code === "Backquote")) {
+    // Ctrl+` toggles the terminal and Ctrl+Shift+` opens another one, as in
+    // VS Code. Shift+` is `~` on most layouts, so this already matched on
+    // `event.code` — which meant Ctrl+Shift+` silently toggled instead of
+    // being free to bind.
+    if (!altGr && (event.key === "`" || event.key === "~" || event.code === "Backquote")) {
       event.preventDefault();
       event.stopPropagation();
-      toggleTerminals();
+      if (event.shiftKey) {
+        // Which shell this starts depends on the platform; see PROFILES.
+        openTerminal().catch((error) => flashStatus(String(error?.message || error)));
+      } else {
+        toggleTerminals();
+      }
       return;
     }
 

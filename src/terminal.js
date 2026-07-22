@@ -12,17 +12,39 @@ import { listen } from "@tauri-apps/api/event";
 import { iconMarkup, iconElement } from "./icons.js";
 import { t } from "./i18n.js";
 
-/** Profiles offered in the "new terminal" menu. */
-export const PROFILES =
-  navigator.userAgent.includes("Windows")
-    ? [
-        { id: "powershell", label: "PowerShell" },
-        { id: "cmd", label: "Command Prompt" },
-      ]
-    : [
-        { id: "bash", label: "bash" },
-        { id: "sh", label: "sh" },
-      ];
+/**
+ * Profiles offered in the "new terminal" menu, most idiomatic first — the
+ * first entry is what the Ctrl+Shift+` shortcut opens, so the order decides
+ * which shell that shortcut means on each platform.
+ *
+ * macOS has defaulted to zsh since Catalina; listing bash first there gave a
+ * shell most users have not configured, and on newer machines an old 3.2 build
+ * kept only for licensing reasons.
+ */
+function profilesFor(agent) {
+  if (agent.includes("Windows")) {
+    return [
+      { id: "powershell", label: "PowerShell" },
+      { id: "cmd", label: "Command Prompt" },
+    ];
+  }
+  if (agent.includes("Macintosh") || agent.includes("Mac OS")) {
+    return [
+      { id: "zsh", label: "zsh" },
+      { id: "bash", label: "bash" },
+      { id: "sh", label: "sh" },
+    ];
+  }
+  return [
+    { id: "bash", label: "bash" },
+    { id: "sh", label: "sh" },
+  ];
+}
+
+export const PROFILES = profilesFor(navigator.userAgent);
+
+/** The shell Ctrl+Shift+` opens — named in the menu so the binding is obvious. */
+export const DEFAULT_PROFILE = PROFILES[0];
 
 let xterm = null;
 let panel = null;
@@ -253,8 +275,19 @@ function ensureListeners() {
   return listenerSetup;
 }
 
+/**
+ * Runs a script in its own terminal tab, named after the file.
+ *
+ * `kind` is the interpreter (`powershell`, `batch`, `shell`) rather than a
+ * profile id — the backend starts that interpreter on the file directly, so
+ * the path is never text a shell has to parse.
+ */
+export async function runInTerminal(path, kind, title) {
+  return openTerminal(kind, { script: path, title });
+}
+
 /** Opens a new terminal running `profile` and shows it. */
-export async function openTerminal(profile = PROFILES[0].id) {
+export async function openTerminal(profile = PROFILES[0].id, options = {}) {
   const { Terminal, FitAddon } = await loadXterm();
 
   const id = nextId++;
@@ -274,7 +307,8 @@ export async function openTerminal(profile = PROFILES[0].id) {
   term.loadAddon(fit);
   term.open(element);
 
-  const label = PROFILES.find((entry) => entry.id === profile)?.label || profile;
+  const label =
+    options.title || PROFILES.find((entry) => entry.id === profile)?.label || profile;
   const record = { id, title: label, term, fit, element, exited: false };
   terminals.set(id, record);
 
@@ -302,6 +336,7 @@ export async function openTerminal(profile = PROFILES[0].id) {
       id,
       profile,
       cwd: cwdProvider(),
+      script: options.script ?? null,
       cols: term.cols || 80,
       rows: term.rows || 24,
     });
