@@ -14,8 +14,21 @@
   --hover: #3a3e4a;
   --active: #454a58;
   --control: #2e313b;
+  /* `--border` alone is only ~1.4:1 against the background — fine for a
+     purely decorative divider (a tab separator, a panel split), but most of
+     what uses it is a button or input whose fill is nearly the same colour
+     as whatever it sits on (~1.2:1), meaning that faint border is the
+     *only* thing marking the control's boundary. This variant is
+     calibrated to clear the 3:1 WCAG AA minimum (SC 1.4.11) for exactly
+     those cases: buttons, text inputs, and floating popups (menus,
+     dropdowns, the language/symbol pickers). Calibrated to clear 3:1 against
+     the worst-case background among --bg/--bg-soft/--menu-bg/--control,
+     since those elements sit on all four depending on context. */
+  --border-strong: #75798d;
   --accent: #4d9cf5;
-  --accent-fg: #ffffff;
+  /* Near-black rather than white: white-on-#4d9cf5 is only ~2.8:1, short of
+     the 4.5:1 WCAG AA text minimum a filled button's label needs. */
+  --accent-fg: #0a0a0a;
   --danger: #f0736a;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
@@ -32,14 +45,91 @@
   --hover: #eaeef2;
   --active: #dde3ea;
   --control: #f6f8fa;
+  --border-strong: #7f92a5;
   --accent: #0969da;
   --accent-fg: #ffffff;
   --danger: #cf222e;
   --shadow: 0 8px 24px rgba(31, 35, 40, 0.18);
 }
 
+/* Low-arousal palette for sensory-sensitive users — see the long comment in
+   theme.js for the research this is built from. Same structure as the other
+   two themes, just muted: warm charcoal instead of near-black, warm cream
+   instead of stark white, and every colour desaturated well below what the
+   other themes use so nothing "vibrates" against its neighbours. */
+:root[data-theme="autism"] {
+  color-scheme: dark;
+  --bg: #2a2825;
+  --bg-soft: #302e2a;
+  --bg-hard: #211f1c;
+  --menu-bg: #322f2b;
+  --border: #46423a;
+  --fg: #ddd6c9;
+  --fg-dim: #9c968a;
+  --hover: #3a372f;
+  --active: #454138;
+  --control: #322f2a;
+  --border-strong: #7e7769;
+  --accent: #5f93c4;
+  /* Warm near-black rather than the theme's usual cream: cream-on-#5f93c4
+     is only ~3.3:1, short of the 4.5:1 WCAG AA text minimum. Kept warm
+     rather than neutral black to stay in character with the rest of the
+     palette. */
+  --accent-fg: #1a1613;
+  --danger: #bd8672;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
 * {
   box-sizing: border-box;
+}
+
+/* ---------- accessibility baseline ---------- */
+
+/* A single, deliberate, theme-aware focus ring for every focusable element —
+   :focus-visible so it only appears for keyboard/AT focus, never a mouse
+   click, which is what everything below individually turning off `outline`
+   was reaching for piecemeal (and in most other places just left to the
+   browser default, which does not reliably read against every one of the
+   three themes). Applies globally rather than per-component so nothing new
+   can silently ship without a visible focus state. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Chromium's own "was this a mouse click" heuristic already keeps this from
+   flashing on click, but text inputs with a caret don't need the added ring
+   as well — the caret already shows where keyboard input is going. */
+input:focus-visible {
+  outline-offset: 1px;
+}
+
+/* Respects a system-level "reduce motion" preference (Windows ▸ Settings ▸
+   Accessibility ▸ Visual effects ▸ Animation effects). There is very little
+   motion in this app today, but this is cheap insurance against any being
+   added later without the same consideration. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Windows High Contrast Mode (and other forced-colors user stylesheets):
+   the browser already remaps most of this app's colours to the user's
+   chosen palette automatically, but a custom `outline` colour is exactly
+   the kind of decorative-looking property that mode tends to flatten — this
+   keeps the focus ring itself pinned to the OS's own highlight colour so it
+   survives that remapping instead of disappearing. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 html,
@@ -117,7 +207,7 @@ body {
   white-space: nowrap;
   padding: 4px;
   background: var(--menu-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   box-shadow: var(--shadow);
   z-index: 30;
@@ -203,7 +293,9 @@ button {
   font: inherit;
   color: var(--fg);
   background: var(--control);
-  border: 1px solid var(--border);
+  /* `--control` is only ~1.1–1.3:1 against the backgrounds buttons sit on —
+     this border is what actually reads as "this is a button" (SC 1.4.11). */
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 4px 10px;
   cursor: pointer;
@@ -219,6 +311,10 @@ button:active {
 
 button.icon-only {
   padding: 4px 7px;
+  /* WCAG 2.2 SC 2.5.8 (Target Size Minimum) — the icon plus this padding
+     alone came out just under 24px tall. */
+  min-width: 24px;
+  min-height: 24px;
 }
 
 button.primary {
@@ -417,6 +513,46 @@ button.primary:hover {
   font-family: "Cascadia Code", Consolas, "Courier New", monospace;
 }
 
+/* Themed scrollbars for both the editor and the terminal, so the two don't
+   clash — xterm.js ships its own default look otherwise, and CodeMirror's
+   scroller falls back to the bare OS one. Selectors are combined rather than
+   duplicated so the two stay in sync if this is ever tweaked. */
+.cm-scroller,
+.xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.cm-scroller::-webkit-scrollbar,
+.xterm-viewport::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.cm-scroller::-webkit-scrollbar-track,
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cm-scroller::-webkit-scrollbar-thumb,
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 7px;
+}
+
+.cm-scroller::-webkit-scrollbar-thumb:hover,
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fg-dim);
+  background-clip: padding-box;
+}
+
+.cm-scroller::-webkit-scrollbar-corner,
+.xterm-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Chevrons replace CodeMirror's default ▾/▸ text markers. */
 .cm-fold-marker {
   display: flex;
@@ -478,7 +614,7 @@ button.primary:hover {
   max-width: 420px;
   padding: 1px 2px 1px 6px;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 3px;
 }
 
@@ -632,7 +768,7 @@ button.primary:hover {
   display: flex;
   flex-direction: column;
   background: var(--menu-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -643,9 +779,13 @@ button.primary:hover {
   color: var(--fg);
   background: var(--bg);
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-strong);
   padding: 7px 10px;
   outline: none;
+}
+
+.lang-picker-filter:focus-visible {
+  border-bottom-color: var(--accent);
 }
 
 .lang-picker-list {
@@ -735,6 +875,9 @@ button.primary:hover {
   color: var(--fg-dim);
   padding: 4px;
   border-radius: 4px;
+  /* WCAG 2.2 SC 2.5.8 (Target Size Minimum). */
+  min-width: 24px;
+  min-height: 24px;
 }
 
 .modal-close:hover {
@@ -773,7 +916,7 @@ button.primary:hover {
 
 .spell-fix {
   padding: 2px 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   background: var(--control);
   color: var(--fg);
@@ -922,11 +1065,15 @@ button.primary:hover {
   color: var(--fg);
   background: var(--bg);
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-strong);
   padding: 9px 12px;
   margin-bottom: 6px;
   outline: none;
   flex: none;
+}
+
+.newfile-filter:focus-visible {
+  border-bottom-color: var(--accent);
 }
 
 .newfile-count {
@@ -1077,6 +1224,96 @@ button.primary:hover {
   overflow: auto;
 }
 
+.feature-help-list {
+  margin: 12px 0;
+  padding-inline-start: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feature-help-list li {
+  line-height: 1.5;
+}
+
+/* Help Centre: a search box, then a sidebar/content row that fills whatever
+   height is left. `.help-body` overrides `.modal-body`'s own scrolling —
+   here it's the sidebar and content that scroll independently, not the
+   dialog as a whole — which needs `min-height: 0` on the flex row below;
+   without it a flex item won't shrink past its content's natural height, so
+   it would grow instead of scrolling. */
+.help-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.help-search {
+  margin: 14px 16px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--control);
+  color: var(--fg);
+  font: inherit;
+}
+
+.help-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+
+.help-sidebar {
+  width: 220px;
+  flex: none;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.help-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  font: inherit;
+}
+
+.help-sidebar-item:hover {
+  background: var(--hover);
+}
+
+.help-sidebar-item.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.help-sidebar-item .icon {
+  flex: none;
+}
+
+.help-empty {
+  padding: 7px 10px;
+}
+
+.help-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  user-select: text;
+}
+
 .dialog-buttons {
   display: flex;
   justify-content: flex-end;
@@ -1086,7 +1323,7 @@ button.primary:hover {
 
 .dialog-button {
   padding: 6px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
   background: var(--control);
   color: var(--fg);
@@ -1191,7 +1428,7 @@ button.primary:hover {
   overflow-y: auto;
   padding: 4px;
   background: var(--menu-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   box-shadow: var(--shadow);
   z-index: 40;
@@ -1211,10 +1448,14 @@ button.primary:hover {
   color: var(--fg);
   background: var(--bg);
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-strong);
   padding: 9px 12px;
   outline: none;
   flex: none;
+}
+
+.symbol-filter:focus-visible {
+  border-bottom-color: var(--accent);
 }
 
 .symbol-list {
@@ -1291,7 +1532,7 @@ button.primary:hover {
   padding: 10px 12px;
   text-align: left;
   background: var(--control);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   color: var(--fg);
 }

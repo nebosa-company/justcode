@@ -95,16 +95,22 @@ export const EN = {
   "view.spellCheck": "Spell Check",
   "view.darkTheme": "Dark Theme",
   "view.lightTheme": "Light Theme",
+  "view.autismTheme": "Autism Theme",
+  "view.autismThemeHint": "Muted, low-contrast colours for sensory sensitivity",
+  "view.bionicReading": "Bionic Reading",
   "view.problems": "Problems",
   "view.language": "Language…",
 
   "help.shortcuts": "Shortcuts",
+  "help.autismTheme": "Autism Theme",
+  "help.bionicReading": "Bionic Reading",
   "help.about": "About JustCode",
 
   "toolbar.new": "New",
   "toolbar.open": "Open",
   "toolbar.save": "Save",
   "toolbar.run": "Run",
+  "toolbar.switchToTheme": "Switch to {theme}",
 
   "status.noFile": "No file",
   "status.unsaved": "unsaved",
@@ -185,9 +191,133 @@ export const EN = {
   "about.builtWith": "Built with Tauri 2 and CodeMirror 6.",
   "about.version": "Version {version}",
 
+  "autismHelp.intro":
+    "A muted, low-arousal colour theme for sensory-sensitive users — autism, ADHD, migraine and other visual-stress conditions. It keeps the editor calm to look at over long stretches, without giving up readability.",
+  "autismHelp.point1":
+    "No pure black or pure white. A warm charcoal background and a soft cream foreground avoid both screen glare and the halation effect stark black-on-white contrast causes.",
+  "autismHelp.point2":
+    "No red or yellow anywhere — the two hues most consistently reported as overstimulating. Errors use a muted terracotta and search highlights a muted gold instead of the usual alarm red and bright yellow.",
+  "autismHelp.point3":
+    "Every colour is desaturated well below what the Dark and Light themes use, so nothing \"vibrates\" against its neighbours even though contrast against the background stays the same.",
+  "autismHelp.point4":
+    "Calming hues lead throughout: dusty blue and sage green for most syntax highlighting, muted lavender and tan for the rest.",
+  "autismHelp.footer":
+    "Switch to it any time from View ▸ Autism Theme, with the button below, or by pressing Ctrl+Shift+T to cycle Dark ▸ Light ▸ Autism.",
+  "autismHelp.switch": "Switch to Autism Theme",
+  "autismHelp.active": "This is your current theme.",
+
+  "bionicHelp.intro":
+    "A typography trick that bolds the leading part of each word, so the eye has fewer, shorter fixation points to land on per line. It's marketed as a reading aid for ADHD, dyslexia and sometimes autism.",
+  "bionicHelp.point1":
+    "Roughly the first 40% of each word is bolded and the rest stays regular weight — the idea being that the brain recognises a word from its start and fills in the ending from context.",
+  "bionicHelp.point2":
+    "The evidence is mixed. Several controlled studies found no measurable gain in reading speed or comprehension over ordinary text, and some readers find it more distracting, not less. Try it rather than assuming it will help.",
+  "bionicHelp.point3":
+    "Applies to whatever document is on screen, the same as Word Wrap — it isn't limited to prose, so turning it on while editing code bolds the start of identifiers and keywords too.",
+  "bionicHelp.footer":
+    "Switch it on any time from View ▸ Bionic Reading, with the button below, or by pressing Ctrl+Shift+B.",
+  "bionicHelp.turnOn": "Turn On Bionic Reading",
+  "bionicHelp.turnOff": "Turn Off Bionic Reading",
+
+  // The Help & How-to centre: one topic per feature area, picked from a
+  // sidebar. Autism Theme and Bionic Reading reuse the `autismHelp.*` /
+  // `bionicHelp.*` strings above rather than duplicating them.
+  "help.center": "Help & How-to",
+  "modal.helpCenterTitle": "Help & How-to",
+  "help.searchPlaceholder": "Search help…",
+  "help.noResults": "No matching topics",
+
+  "help.overviewTitle": "Overview",
+  "help.overviewIntro":
+    "JustCode is a small, fast editor for HTML, CSS, JavaScript and general text or code — built to open quickly and stay out of the way, not to replace a full IDE.",
+  "help.overviewPoint1":
+    "Files open as tabs in one window; there's no project or workspace to set up first.",
+  "help.overviewPoint2": "Press F1 any time for the full keyboard shortcut reference.",
+
+  "help.filesTitle": "Files",
+  "help.filesIntro": "Files open as tabs; JustCode has no project or workspace concept.",
+  "help.filesPoint1":
+    "New File (Ctrl+N) offers starter templates for many languages, or a blank document; Open… (Ctrl+O) accepts several files at once.",
+  "help.filesPoint2":
+    "Save (Ctrl+S) and Save As (Ctrl+Shift+S) write straight to disk; Save All (Ctrl+Alt+S) covers every changed tab in one go.",
+  "help.filesPoint3": "File ▸ Recent Files remembers the last 15 files across restarts.",
+  "help.filesPoint4":
+    "File ▸ File Associations… registers JustCode with Windows so it appears as an \"Open with\" option — or the default — for the file types it understands.",
+
+  "help.editingTitle": "Editing",
+  "help.editingIntro": "Standard editing, plus a few extras beyond cut, copy, paste, undo and redo.",
+  "help.editingPoint1":
+    "Ctrl+/ toggles a comment using whatever syntax the current language has — line comments for a single line, block comments across a selection.",
+  "help.editingPoint2":
+    "Ctrl+Shift+U / Ctrl+Shift+L change the selection's case; Ctrl+Alt+G inserts a fresh GUID.",
+  "help.editingPoint3":
+    "Alt+↑ / Alt+↓ moves the current line; Alt+Shift+↑ / Alt+Shift+↓ duplicates it up or down.",
+  "help.editingPoint4": "Ctrl+click adds another cursor; Alt+drag makes a rectangular (column) selection.",
+
+  "help.searchTitle": "Search",
+  "help.searchIntro": "Find and replace inside the current file, or jump straight to a definition.",
+  "help.searchPoint1":
+    "Ctrl+F opens Find; Ctrl+H opens Find and Replace. F3 / Shift+F3 repeat the last search forward or backward.",
+  "help.searchPoint2":
+    "Ctrl+Shift+G opens Go to Symbol — a filterable list of the functions, classes and other declarations in the current file.",
+
+  "help.bookmarksTitle": "Bookmarks",
+  "help.bookmarksIntro":
+    "Three numbered bookmark slots per document, for jumping around a large file without scrolling to find your place.",
+  "help.bookmarksPoint1":
+    "Ctrl+Shift+1 / 2 / 3 sets or clears a bookmark at the current line; Ctrl+1 / 2 / 3 jumps straight to it.",
+
+  "help.splitTabsTitle": "Split View & Tabs",
+  "help.splitTabsIntro": "Tabs can be arranged into up to four panes.",
+  "help.splitTabsPoint1":
+    "Ctrl+K then an arrow key splits the active pane in that direction; dragging a tab to a screen edge does the same.",
+  "help.splitTabsPoint2":
+    "Dragging a tab onto another pane's tab bar moves it there; dragging the last tab back out of a pane undoes the split.",
+  "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab cycle through tabs; middle-click a tab to close it.",
+
+  "help.foldingTitle": "Code Folding",
+  "help.foldingIntro": "Any block can be collapsed to get it out of the way.",
+  "help.foldingPoint1":
+    "Click the chevron in the gutter, or press Ctrl+Shift+[ / ] to fold or unfold the block at the cursor.",
+  "help.foldingPoint2": "Ctrl+Alt+[ / ] folds or unfolds everything in the file at once.",
+
+  "help.terminalTitle": "Terminal",
+  "help.terminalIntro": "An integrated terminal panel, not a separate window.",
+  "help.terminalPoint1":
+    "Ctrl+` shows or hides it; Ctrl+Shift+` opens a new one alongside any already running.",
+  "help.terminalPoint2": "A new terminal starts in the folder of the file currently being edited.",
+  "help.terminalPoint3":
+    "File ▸ Run in Terminal (Ctrl+F5) runs the current script and leaves the shell open at a prompt afterwards, so a failure can be poked at on the spot.",
+
+  "help.runTitle": "Run",
+  "help.runIntro": "F5 shows the current file the way it will actually look or behave, rather than as source text.",
+  "help.runPoint1":
+    "HTML: opens in the default browser. Running the same file again refreshes that tab instead of opening a second one, as long as it's still open.",
+  "help.runPoint2": "Markdown: rendered to a styled HTML document first, then previewed the same way.",
+  "help.runPoint3":
+    "PowerShell, Batch and Shell scripts: run in their own console window, which stays open after the script finishes.",
+
+  "help.wordWrapIntro":
+    "Off by default. Wrapping keeps long lines on screen without side-scrolling, but it breaks the one-row-per-line match between the gutter and the actual line numbers.",
+  "help.wordWrapPoint1":
+    "Toggle it from View ▸ Word Wrap or Alt+Z. It applies to whichever document is on screen.",
+
+  "help.spellCheckIntro": "Off by default — most identifiers in source code are \"misspelled\" by definition.",
+  "help.spellCheckPoint1":
+    "Runs as a linter over the real text rather than the webview's built-in checker, so misspellings are counted in the Problems total and come with suggested corrections.",
+  "help.spellCheckPoint2": "Toggle it from View ▸ Spell Check.",
+
+  "help.languageTitle": "Interface Language",
+  "help.languageIntro":
+    "The language of JustCode's own menus and dialogs — independent of any file's content or programming language.",
+  "help.languagePoint1":
+    "View ▸ Language… lists every translation by its own name rather than its English name, since \"German\" is no help to someone who only reads Deutsch.",
+  "help.languagePoint2": "English is built in; every other language downloads the first time it's selected.",
+
   // The shortcut reference. Key names (Ctrl, F5, Tab) are the same on every
   // Windows keyboard and stay untranslated; the gestures under `sc.k.` are
   // prose and do get translated, as do all the descriptions.
+  "sc.g.menus": "Menus",
   "sc.g.file": "File",
   "sc.g.editing": "Editing",
   "sc.g.bookmarks": "Bookmarks",
@@ -214,6 +344,11 @@ export const EN = {
   "sc.k.ctrlClickUrl": "Ctrl+click a URL",
   "sc.k.clickPath": "Click the path in the status bar",
   "sc.k.clickLanguage": "Click the language in the status bar",
+
+  "sc.openFileMenu": "Open the File menu",
+  "sc.openEditMenu": "Open the Edit menu",
+  "sc.openViewMenu": "Open the View menu",
+  "sc.openHelpMenu": "Open the Help menu",
 
   "sc.newFile": "New file",
   "sc.openFile": "Open file",
@@ -275,7 +410,12 @@ export const EN = {
   "sc.foldUnfold": "Fold / unfold",
 
   "sc.saveAll": "Save all",
+  "sc.toolbar": "Toggle the toolbar",
+  "sc.statusBar": "Toggle the status bar",
   "sc.wordWrap": "Toggle word wrap",
+  "sc.spellCheck": "Toggle spell check",
+  "sc.bionicReading": "Toggle Bionic Reading",
+  "sc.cycleTheme": "Cycle themes (Dark ▸ Light ▸ Autism)",
   "sc.split": "Split up / down / left / right",
   "sc.contextMenu": "Context menu",
   "sc.terminal": "Show or hide the terminal",
@@ -285,7 +425,7 @@ export const EN = {
   "sc.showProblems": "Show problems",
   "sc.problemsPanel": "Open the problems panel",
   "sc.goToSymbol": "Go to symbol",
-  "sc.shortcutList": "This shortcut list",
+  "sc.shortcutList": "Help & How-to",
 
   "sc.nextPrevTab": "Next / previous tab",
   "sc.moveTab": "Move tab right / left",

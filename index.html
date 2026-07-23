@@ -16,13 +16,21 @@
       html[data-theme="light"] body {
         background: #ffffff;
       }
+      html[data-theme="autism"],
+      html[data-theme="autism"] body {
+        background: #2a2825;
+      }
     </style>
     <script>
       // Runs before the stylesheet and bundle so the first paint already uses
       // the saved theme rather than defaulting to dark and correcting later.
+      // Kept in sync with THEMES in src/theme.js — an unrecognised or missing
+      // value falls back to dark, same as setTheme() does once the app loads.
       try {
-        document.documentElement.dataset.theme =
-          localStorage.getItem("justcode.theme") === "light" ? "light" : "dark";
+        const stored = localStorage.getItem("justcode.theme");
+        document.documentElement.dataset.theme = ["light", "autism"].includes(stored)
+          ? stored
+          : "dark";
       } catch (_) {
         document.documentElement.dataset.theme = "dark";
       }
@@ -39,10 +47,20 @@
         <button id="btn-save" title="Save (Ctrl+S)"><span>Save</span></button>
         <button id="btn-run" title="Run in browser (F5)" class="primary"><span>Run</span></button>
         <span class="spacer"></span>
-        <button id="btn-theme" class="icon-only" title="Switch theme"></button>
-        <button id="btn-zoom-out" class="icon-only" title="Zoom out (Ctrl+-)"></button>
+        <button id="btn-theme" class="icon-only" title="Switch theme" aria-label="Switch theme"></button>
+        <button
+          id="btn-zoom-out"
+          class="icon-only"
+          title="Zoom out (Ctrl+-)"
+          aria-label="Zoom out"
+        ></button>
         <span id="zoom-level">14px</span>
-        <button id="btn-zoom-in" class="icon-only" title="Zoom in (Ctrl++)"></button>
+        <button
+          id="btn-zoom-in"
+          class="icon-only"
+          title="Zoom in (Ctrl++)"
+          aria-label="Zoom in"
+        ></button>
       </div>
 
       <!-- One or more panes, each with its own tab bar and editor. -->

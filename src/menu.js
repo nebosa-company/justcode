@@ -1,33 +1,67 @@
 import { iconElement } from "./icons.js";
 
 /**
- * Renders a list of menu items into `container`.
+ * Renders a list of menu items into `container`, wiring up the keyboard
+ * interaction the ARIA "menu" pattern expects — Up/Down to move between
+ * items (wrapping at the ends), Home/End to jump, Right to open and step
+ * into a submenu, Left/Escape to back out of one. Mouse hover/click keeps
+ * working exactly as before; this only adds a second, keyboard-driven way
+ * to drive the same menu.
  *
- * Shared by the menu bar, its submenu flyouts and the editor's context menu, so
- * all three get the same check column, icons, shortcut column and disabled
- * handling. `close` is called before an item runs.
+ * Shared by the menu bar, its submenu flyouts and the editor's context menu,
+ * so all three get the same check column, icons, shortcut column, disabled
+ * handling and now the same keyboard behaviour. `close` is called before an
+ * item runs. `parent`, only set for a submenu flyout, is the button that
+ * opened it plus the function that hides it — how Left/Escape know what to
+ * close and which button to send focus back to.
  *
  * @param {HTMLElement} container
  * @param {Array<object>} items
  * @param {() => void} close
+ * @param {{ button: HTMLElement, hide: () => void } | null} parent
  */
-export function renderMenuItems(container, items, close) {
+export function renderMenuItems(container, items, close, parent = null) {
   container.textContent = "";
+  container.setAttribute("role", "menu");
+  // Roving tabindex: only ever one stop in the whole menu tree, moved by
+  // hand as arrow keys fire, rather than every item sitting in the Tab
+  // order — Tab is for moving *past* a menu, arrows are for moving *within*
+  // one, per the standard menu keyboard pattern.
+  const itemEls = [];
+  const enabledItems = () => itemEls.filter((el) => !el.disabled);
+  const focusEnabledAt = (index) => {
+    const list = enabledItems();
+    if (!list.length) return;
+    list[((index % list.length) + list.length) % list.length].focus();
+  };
+
   for (const item of items) {
     if (item.separator) {
-      container.append(document.createElement("hr"));
+      const hr = document.createElement("hr");
+      hr.setAttribute("role", "separator");
+      container.append(hr);
       continue;
     }
 
     const button = document.createElement("button");
     button.className = "menu-item";
     button.type = "button";
+    button.tabIndex = -1;
 
     // A fixed check column keeps every label in a menu aligned, whether or not
     // the item is a toggle.
     const check = document.createElement("span");
     check.className = "menu-check";
     const isChecked = item.checked?.();
+    if (item.checked) {
+      // A screen reader only reads `aria-checked` as a checkbox state when
+      // the role says so — setting the attribute alone on a plain menuitem
+      // is silently ignored.
+      button.setAttribute("role", "menuitemcheckbox");
+      button.setAttribute("aria-checked", String(Boolean(isChecked)));
+    } else {
+      button.setAttribute("role", "menuitem");
+    }
     if (isChecked) check.append(iconElement("check"));
     button.append(check);
 
@@ -55,8 +89,10 @@ export function renderMenuItems(container, items, close) {
     // `hint` (a recent file's full path) is more useful than either.
     button.title = item.hint || (item.accel ? `${item.label} — ${item.accel}` : item.label);
 
-    if (item.enabled && !item.enabled()) button.disabled = true;
-    if (isChecked) button.setAttribute("aria-checked", "true");
+    if (item.enabled && !item.enabled()) {
+      button.disabled = true;
+      button.setAttribute("aria-disabled", "true");
+    }
 
     if (item.submenu) {
       // The flyout sits beside the button, not inside it — a <button> may not
@@ -65,25 +101,42 @@ export function renderMenuItems(container, items, close) {
       const wrap = document.createElement("div");
       wrap.className = "menu-item-wrap";
       button.classList.add("has-submenu");
+      button.setAttribute("aria-haspopup", "menu");
+      button.setAttribute("aria-expanded", "false");
 
       const flyout = document.createElement("div");
       flyout.className = "menu-flyout";
       flyout.hidden = true;
 
-      const reveal = () => {
-        renderMenuItems(flyout, item.submenu(), close);
+      const hide = () => {
+        flyout.hidden = true;
+        button.setAttribute("aria-expanded", "false");
+      };
+      const reveal = (focusFirst) => {
+        renderMenuItems(flyout, item.submenu(), close, { button, hide });
         flyout.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+        if (focusFirst) {
+          const first = flyout.querySelector(".menu-item:not(:disabled)");
+          first?.focus();
+        }
       };
       if (!button.disabled) {
-        wrap.addEventListener("mouseenter", reveal);
-        button.addEventListener("click", reveal);
+        wrap.addEventListener("mouseenter", () => reveal(false));
+        button.addEventListener("click", () => reveal(false));
+        button.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            event.stopPropagation();
+            reveal(true);
+          }
+        });
       }
-      wrap.addEventListener("mouseleave", () => {
-        flyout.hidden = true;
-      });
+      wrap.addEventListener("mouseleave", hide);
 
       wrap.append(button, flyout);
       container.append(wrap);
+      itemEls.push(button);
       continue;
     }
 
@@ -101,7 +154,45 @@ export function renderMenuItems(container, items, close) {
       }
     });
     container.append(button);
+    itemEls.push(button);
   }
+
+  container.addEventListener("keydown", (event) => {
+    const list = enabledItems();
+    if (!list.length) return;
+    // -1 (nothing in this menu focused yet) is a deliberately usable index
+    // below: Up wraps to the last item, Down lands on the first.
+    const index = list.indexOf(document.activeElement);
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusEnabledAt(index + 1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusEnabledAt(index - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusEnabledAt(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusEnabledAt(-1);
+    } else if (parent && event.key === "ArrowLeft") {
+      // Backs out of just this submenu. Escape deliberately is not handled
+      // here too: the menu bar's own Escape listener runs in the capture
+      // phase, so it always sees the key first regardless of anything this
+      // bubble-phase handler does, and closes the whole menu tree — which
+      // is a fine, simple answer for Escape (close everything) as long as
+      // ArrowLeft is the one that steps back exactly one level.
+      event.preventDefault();
+      event.stopPropagation();
+      parent.hide();
+      parent.button.focus();
+    }
+  });
 }
 
 /**
@@ -111,8 +202,14 @@ export function renderMenuItems(container, items, close) {
  * that expose state (the theme in use, whether the toolbar is visible) always
  * show the current value without anything having to invalidate them.
  *
+ * `mnemonic`, a single letter, gives a top-level menu an Alt+<letter> shortcut
+ * that opens it from anywhere — the underlined-letter convention every
+ * Windows menu bar uses. It is matched against `event.key`, not the rendered
+ * label, so it keeps working under a translation whose label doesn't
+ * literally contain that letter (the underline just won't show in that case).
+ *
  * @param {HTMLElement} container
- * @param {Array<{label: string, items: Array<object>}>} menus
+ * @param {Array<{label: string, mnemonic?: string, items: Array<object>}>} menus
  */
 export function createMenuBar(container, menus) {
   // The bar is rebuilt on every language change. Clearing the container drops
@@ -120,6 +217,7 @@ export function createMenuBar(container, menus) {
   // the whole previous menu tree alive, so the last build is torn down first.
   container.__teardown?.();
   container.textContent = "";
+  container.setAttribute("role", "menubar");
   let openIndex = -1;
   const titles = [];
   const dropdowns = [];
@@ -137,9 +235,10 @@ export function createMenuBar(container, menus) {
   // immediately toggling it shut.
   let openedByClick = false;
 
-  function open(index, byClick) {
+  function open(index, byClick, focusFirst = false) {
     if (openIndex === index) {
       openedByClick = openedByClick || byClick;
+      if (focusFirst) dropdowns[index].querySelector(".menu-item:not(:disabled)")?.focus();
       return;
     }
     close();
@@ -149,6 +248,7 @@ export function createMenuBar(container, menus) {
     titles[index].setAttribute("aria-expanded", "true");
     renderMenuItems(dropdowns[index], menus[index].items, close);
     dropdowns[index].hidden = false;
+    if (focusFirst) dropdowns[index].querySelector(".menu-item:not(:disabled)")?.focus();
   }
 
   menus.forEach((menu, index) => {
@@ -158,9 +258,24 @@ export function createMenuBar(container, menus) {
     const title = document.createElement("button");
     title.className = "menu-title";
     title.type = "button";
-    title.textContent = menu.label;
-    title.setAttribute("aria-haspopup", "true");
+    const mnemonicIndex = menu.mnemonic
+      ? menu.label.toLowerCase().indexOf(menu.mnemonic.toLowerCase())
+      : -1;
+    if (mnemonicIndex === -1) {
+      title.textContent = menu.label;
+    } else {
+      const mark = document.createElement("u");
+      mark.textContent = menu.label[mnemonicIndex];
+      title.append(
+        document.createTextNode(menu.label.slice(0, mnemonicIndex)),
+        mark,
+        document.createTextNode(menu.label.slice(mnemonicIndex + 1)),
+      );
+    }
+    title.setAttribute("role", "menuitem");
+    title.setAttribute("aria-haspopup", "menu");
     title.setAttribute("aria-expanded", "false");
+    if (menu.mnemonic) title.setAttribute("aria-keyshortcuts", `Alt+${menu.mnemonic.toUpperCase()}`);
     title.addEventListener("click", () => {
       if (openIndex === index && openedByClick) close();
       else open(index, true);
@@ -168,6 +283,21 @@ export function createMenuBar(container, menus) {
     // Once a menu is open, sliding across the bar should follow the pointer.
     title.addEventListener("mouseenter", () => {
       if (openIndex !== -1) open(index, false);
+    });
+    title.addEventListener("keydown", (event) => {
+      // Left/Right walk the bar itself — opening whichever title's menu was
+      // already showing one, so arrowing across File ▸ Edit ▸ View behaves
+      // like sliding the mouse across them.
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        const delta = event.key === "ArrowRight" ? 1 : -1;
+        const next = (index + delta + titles.length) % titles.length;
+        titles[next].focus();
+        if (openIndex !== -1) open(next, openedByClick);
+      } else if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        open(index, true, true);
+      }
     });
 
     const dropdown = document.createElement("div");
@@ -187,7 +317,25 @@ export function createMenuBar(container, menus) {
     if (!container.contains(event.target)) close();
   };
   const onDocumentKeyDown = (event) => {
-    if (event.key === "Escape") close();
+    if (event.key === "Escape" && openIndex !== -1) {
+      const focused = titles[openIndex];
+      close();
+      focused.focus();
+      return;
+    }
+    // Alt+<mnemonic> opens the matching top-level menu from anywhere, not
+    // just while the bar already has focus — mirrors Windows' menu-bar
+    // access keys. Plain Alt only: Ctrl+Alt is AltGr on many layouts, and
+    // Alt+Shift+letter is a layout-switch chord on some systems.
+    if (event.altKey && !event.ctrlKey && !event.shiftKey && event.key.length === 1) {
+      const key = event.key.toLowerCase();
+      const index = menus.findIndex((menu) => menu.mnemonic === key);
+      if (index !== -1) {
+        event.preventDefault();
+        open(index, true, true);
+        titles[index].focus();
+      }
+    }
   };
   document.addEventListener("mousedown", onDocumentMouseDown, true);
   document.addEventListener("keydown", onDocumentKeyDown, true);
@@ -246,6 +394,10 @@ export function showContextMenu(x, y, items) {
   menu.style.insetInlineEnd = "auto";
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
+  // A right-click opens this with the mouse, but a keyboard user reaching it
+  // via the Menu key or Shift+F10 needs the same starting focus a dropdown
+  // gets, rather than being left on whatever was focused in the editor.
+  menu.querySelector(".menu-item:not(:disabled)")?.focus();
 
   const dismiss = (event) => {
     if (event.type === "mousedown" && menu.contains(event.target)) return;

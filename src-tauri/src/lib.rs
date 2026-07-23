@@ -1,8 +1,12 @@
+use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasher, Hash, Hasher};
+use std::io::BufRead;
 use std::io::Read;
 use std::io::Write as _;
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -86,12 +90,319 @@ fn write_preview(name: String, html: String) -> Result<String, String> {
     Ok(path.to_string_lossy().into_owned())
 }
 
-/// Hands an HTML file to the OS shell, which opens it in the default browser.
+/// Rejects anything that is not a web page. `open_path`/`open_url` use the
+/// default shell association, so passing an executable extension (`.bat`,
+/// `.exe`, …) would *run* it rather than preview it.
+fn require_html_extension(path: &Path) -> Result<(), String> {
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    if matches!(ext.as_deref(), Some("html") | Some("htm") | Some("xhtml")) {
+        Ok(())
+    } else {
+        Err(format!("Only HTML files can be opened in the browser: {}", path.display()))
+    }
+}
+
+/// Windows canonicalization yields a verbatim prefix browsers reject: turns
+/// `\\?\UNC\server\share` into `\\server\share`, and `\\?\C:\…` into `C:\…`.
+fn strip_verbatim_prefix(path: &Path) -> String {
+    path.to_string_lossy().replace(r"\\?\UNC\", r"\\").replace(r"\\?\", "")
+}
+
+/// One previewed file's reload state: bumping `generation` wakes any
+/// in-flight `/wait` long-poll for this path, which tells the page to
+/// `location.reload()`.
+struct PreviewEntry {
+    generation: u64,
+    last_seen: Instant,
+}
+
+#[derive(Default)]
+struct PreviewRegistry {
+    /// Directories previews have been served from — a `/file` request may
+    /// only read from inside one of these, never an arbitrary path.
+    roots: HashSet<PathBuf>,
+    entries: HashMap<PathBuf, PreviewEntry>,
+}
+
+/// A loopback-only HTTP server that lets repeat `Run`s refresh a tab that is
+/// already open instead of opening a new one. The OS shell has no concept of
+/// "the tab already showing this file" — it always opens a new one — so a
+/// direct `file://` open can never do this. Serving over HTTP instead gives
+/// the page somewhere to long-poll back to: the app wakes that poll to
+/// trigger a reload rather than asking the shell to open anything.
 ///
-/// Only `.html`/`.htm`/`.xhtml` are allowed: `open_path` uses the default shell
-/// association, so passing an executable extension (`.bat`, `.exe`, …) would
-/// *run* it. Restricting to web pages keeps this a preview command, not an
-/// arbitrary launcher.
+/// Bound to 127.0.0.1 and gated by a random per-launch token in the URL path,
+/// with a matching `Host` header required on every request, so another local
+/// process or a page loaded from the web can't probe or use this server.
+struct PreviewServer {
+    port: std::sync::Mutex<Option<u16>>,
+    token: String,
+    registry: std::sync::Mutex<PreviewRegistry>,
+}
+
+impl Default for PreviewServer {
+    fn default() -> Self {
+        // Not cryptographically strong, just unguessable: two independent
+        // `RandomState`s, each reseeded from the OS on construction.
+        let token = format!(
+            "{:016x}{:016x}",
+            std::collections::hash_map::RandomState::new().build_hasher().finish(),
+            std::collections::hash_map::RandomState::new().build_hasher().finish(),
+        );
+        Self { port: std::sync::Mutex::new(None), token, registry: Default::default() }
+    }
+}
+
+impl PreviewServer {
+    fn registry(&self) -> std::sync::MutexGuard<'_, PreviewRegistry> {
+        self.registry.lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+fn percent_encode(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for byte in input.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*byte as char)
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(value) = u8::from_str_radix(&input[i + 1..i + 3], 16) {
+                out.push(value);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn parse_query(query: &str) -> HashMap<String, String> {
+    query
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(k, v)| (k.to_string(), percent_decode(v)))
+        .collect()
+}
+
+fn content_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
+        Some("html") | Some("htm") | Some("xhtml") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("ico") => "image/x-icon",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("txt") => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
+fn write_response(stream: &mut TcpStream, status: &str, content_type: &str, body: &[u8]) {
+    let header = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let _ = stream.write_all(header.as_bytes());
+    let _ = stream.write_all(body);
+}
+
+/// Builds the poll-and-reload script embedded into every served HTML page.
+/// `generation` is the value current *at serve time* — starting the poll from
+/// 0 unconditionally would race a reload that already happened between the
+/// previous serve and this one, reloading the page in an endless loop.
+fn reload_script(token: &str, path: &str, generation: u64) -> String {
+    format!(
+        "<script>(function(){{\
+var gen={generation},token={},path={};\
+function poll(){{\
+fetch('/'+token+'/wait?path='+encodeURIComponent(path)+'&gen='+gen,{{cache:'no-store'}})\
+.then(function(r){{return r.text();}})\
+.then(function(g){{var n=parseInt(g,10);if(n!==gen){{location.reload();}}else{{poll();}}}})\
+.catch(function(){{setTimeout(poll,1000);}});\
+}}\
+poll();\
+}})();</script>",
+        serde_json::to_string(token).unwrap_or_else(|_| "\"\"".into()),
+        serde_json::to_string(path).unwrap_or_else(|_| "\"\"".into()),
+    )
+}
+
+fn inject_reload_script(html: &[u8], token: &str, path: &str, generation: u64) -> Vec<u8> {
+    let script = reload_script(token, path, generation);
+    let text = String::from_utf8_lossy(html);
+    let lower = text.to_ascii_lowercase();
+    if let Some(index) = lower.rfind("</body>") {
+        let mut out = String::with_capacity(text.len() + script.len());
+        out.push_str(&text[..index]);
+        out.push_str(&script);
+        out.push_str(&text[index..]);
+        out.into_bytes()
+    } else {
+        let mut out = text.into_owned();
+        out.push_str(&script);
+        out.into_bytes()
+    }
+}
+
+/// Serves one request. Best-effort: a malformed request just gets its
+/// connection dropped rather than a response, which is fine for a preview
+/// server whose only clients are the browser tabs this app itself opened.
+fn handle_preview_connection(app: &tauri::AppHandle, mut stream: TcpStream, port: u16) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let mut request_line = String::new();
+    let mut reader = std::io::BufReader::new(&stream);
+    if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
+        return;
+    }
+    let mut headers = HashMap::new();
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).unwrap_or(0) == 0 {
+            return;
+        }
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() {
+            break;
+        }
+        if let Some((name, value)) = trimmed.split_once(':') {
+            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+        }
+    }
+    drop(reader);
+
+    let mut parts = request_line.trim_end().split(' ');
+    let (Some(method), Some(target)) = (parts.next(), parts.next()) else { return };
+    if method != "GET" {
+        write_response(&mut stream, "405 Method Not Allowed", "text/plain", b"");
+        return;
+    }
+    if headers.get("host").map(String::as_str) != Some(format!("127.0.0.1:{port}").as_str()) {
+        write_response(&mut stream, "403 Forbidden", "text/plain", b"bad host");
+        return;
+    }
+
+    let (target_path, query) = target.split_once('?').unwrap_or((target, ""));
+    let query = parse_query(query);
+
+    let server = app.state::<PreviewServer>();
+    let prefix = format!("/{}/", server.token);
+    let Some(route) = target_path.strip_prefix(&prefix) else {
+        write_response(&mut stream, "404 Not Found", "text/plain", b"");
+        return;
+    };
+
+    let Some(raw_path) = query.get("path") else {
+        write_response(&mut stream, "400 Bad Request", "text/plain", b"missing path");
+        return;
+    };
+    let requested = PathBuf::from(raw_path);
+    let Ok(canonical) = fs::canonicalize(&requested) else {
+        write_response(&mut stream, "404 Not Found", "text/plain", b"");
+        return;
+    };
+    let allowed = server.registry().roots.iter().any(|root| canonical.starts_with(root));
+    if !allowed || !canonical.is_file() {
+        write_response(&mut stream, "403 Forbidden", "text/plain", b"outside preview root");
+        return;
+    }
+
+    match route {
+        "file" => {
+            let Ok(bytes) = fs::read(&canonical) else {
+                write_response(&mut stream, "404 Not Found", "text/plain", b"");
+                return;
+            };
+            let ctype = content_type(&canonical);
+            if ctype.starts_with("text/html") {
+                let generation = {
+                    let mut registry = server.registry();
+                    registry
+                        .entries
+                        .entry(canonical.clone())
+                        .or_insert_with(|| PreviewEntry {
+                            generation: 0,
+                            last_seen: Instant::now() - Duration::from_secs(999),
+                        })
+                        .generation
+                };
+                let path_str = canonical.to_string_lossy();
+                let body = inject_reload_script(&bytes, &server.token, &path_str, generation);
+                write_response(&mut stream, "200 OK", ctype, &body);
+            } else {
+                write_response(&mut stream, "200 OK", ctype, &bytes);
+            }
+        }
+        "wait" => {
+            let requested_gen: u64 = query.get("gen").and_then(|g| g.parse().ok()).unwrap_or(0);
+            let start = Instant::now();
+            loop {
+                let current = {
+                    let mut registry = server.registry();
+                    let entry = registry.entries.entry(canonical.clone()).or_insert_with(|| {
+                        PreviewEntry { generation: requested_gen, last_seen: Instant::now() }
+                    });
+                    entry.last_seen = Instant::now();
+                    entry.generation
+                };
+                if current != requested_gen || start.elapsed() > Duration::from_secs(30) {
+                    write_response(&mut stream, "200 OK", "text/plain", current.to_string().as_bytes());
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(400));
+            }
+        }
+        _ => write_response(&mut stream, "404 Not Found", "text/plain", b""),
+    }
+}
+
+/// Starts the preview server on first use and returns its port, reusing it
+/// on every later call for the lifetime of the app.
+fn ensure_preview_server(app: &tauri::AppHandle) -> Result<u16, String> {
+    let server = app.state::<PreviewServer>();
+    let mut port = server.port.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(port) = *port {
+        return Ok(port);
+    }
+    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("{e}"))?;
+    let bound = listener.local_addr().map_err(|e| format!("{e}"))?.port();
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let handle = handle.clone();
+            std::thread::spawn(move || handle_preview_connection(&handle, stream, bound));
+        }
+    });
+    *port = Some(bound);
+    Ok(bound)
+}
+
+/// Shows an HTML file in the default browser, by way of the loopback preview
+/// server: the first `Run` for a given file opens a new tab, exactly like
+/// handing the file straight to the OS shell did before. A later `Run` of the
+/// *same* file, while that tab is still open and polling, instead just tells
+/// the page to reload — no second tab. If the tab was closed, this falls back
+/// to opening a new one, same as the first time.
 #[tauri::command(async)]
 fn open_in_browser(app: tauri::AppHandle, path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
@@ -102,25 +413,40 @@ fn open_in_browser(app: tauri::AppHandle, path: String) -> Result<(), String> {
     // `preview.html` symlink pointing at `payload.exe` passes the check and the
     // shell then opens — that is, runs — the resolved target.
     let canonical = fs::canonicalize(&path).unwrap_or(path);
-    let ext = canonical
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase);
-    if !matches!(ext.as_deref(), Some("html") | Some("htm") | Some("xhtml")) {
-        return Err(format!(
-            "Only HTML files can be opened in the browser: {}",
-            canonical.display()
-        ));
+    require_html_extension(&canonical)?;
+
+    let port = ensure_preview_server(&app)?;
+    let server = app.state::<PreviewServer>();
+    let live = {
+        let mut registry = server.registry();
+        if let Some(parent) = canonical.parent() {
+            registry.roots.insert(parent.to_path_buf());
+        }
+        match registry.entries.get_mut(&canonical) {
+            Some(entry) if entry.last_seen.elapsed() < Duration::from_secs(2) => {
+                entry.generation = entry.generation.wrapping_add(1);
+                true
+            }
+            _ => {
+                registry.entries.insert(
+                    canonical.clone(),
+                    PreviewEntry { generation: 0, last_seen: Instant::now() - Duration::from_secs(999) },
+                );
+                false
+            }
+        }
+    };
+    if live {
+        return Ok(());
     }
-    // Windows canonicalization yields a verbatim prefix browsers reject: turn
-    // \\?\UNC\server\share into \\server\share, and \\?\C:\… into C:\….
-    let target = canonical
-        .to_string_lossy()
-        .replace(r"\\?\UNC\", r"\\")
-        .replace(r"\\?\", "");
-    app.opener()
-        .open_path(target, None::<&str>)
-        .map_err(|e| format!("{e}"))
+
+    let target = strip_verbatim_prefix(&canonical);
+    let url = format!(
+        "http://127.0.0.1:{port}/{}/file?path={}",
+        server.token,
+        percent_encode(&target)
+    );
+    app.opener().open_url(url, None::<&str>).map_err(|e| format!("{e}"))
 }
 
 /// Opens a web URL in the default browser. Restricted to web schemes so a
@@ -235,13 +561,58 @@ fn run_script(path: String, kind: String) -> Result<(), String> {
     }
 }
 
-/// Picks the file paths out of a command line, ignoring flags and anything that
-/// is not actually a file on disk.
-fn files_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<String> {
+/// A file to open, plus where in it to put the caret — from a command-line
+/// argument of the form `path`, `path:line` or `path:line:column` (1-based),
+/// the convention VS Code, Zed and Cursor all also accept.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+struct FileTarget {
+    path: String,
+    line: Option<u32>,
+    column: Option<u32>,
+}
+
+/// Tries to peel a trailing `:line` or `:line:column` off `arg` and confirms
+/// what is left really is a file. Order matters: `:line:column` is tried
+/// first since it is more specific, and a plain path is tried before either —
+/// a Windows path's drive-letter colon (`C:\...`) must never be mistaken for
+/// one of these, which checking real existence at each step guarantees: the
+/// stripped candidate wins only if `PathBuf::is_file()` agrees.
+fn split_line_column(arg: &str) -> FileTarget {
+    if PathBuf::from(arg).is_file() {
+        return FileTarget { path: arg.to_string(), line: None, column: None };
+    }
+    if let Some((head, col)) = arg.rsplit_once(':') {
+        if let Ok(column) = col.parse::<u32>() {
+            if let Some((path, line)) = head.rsplit_once(':') {
+                if let Ok(line) = line.parse::<u32>() {
+                    if PathBuf::from(path).is_file() {
+                        return FileTarget {
+                            path: path.to_string(),
+                            line: Some(line),
+                            column: Some(column),
+                        };
+                    }
+                }
+            }
+        }
+        if let Ok(line) = col.parse::<u32>() {
+            if PathBuf::from(head).is_file() {
+                return FileTarget { path: head.to_string(), line: Some(line), column: None };
+            }
+        }
+    }
+    FileTarget { path: arg.to_string(), line: None, column: None }
+}
+
+/// Picks the file paths out of a command line, ignoring flags and anything
+/// that is not — once a trailing `:line[:column]` is accounted for —
+/// actually a file on disk.
+fn files_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<FileTarget> {
     args.into_iter()
         .skip(1)
         .filter(|arg| !arg.starts_with('-'))
-        .filter(|arg| PathBuf::from(arg).is_file())
+        .map(|arg| split_line_column(&arg))
+        .filter(|target| PathBuf::from(&target.path).is_file())
         .collect()
 }
 
@@ -249,7 +620,7 @@ fn files_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<String> {
 /// document once the extensions are associated with the app. Uses `args_os` so a
 /// path that is not valid Unicode is decoded lossily rather than panicking.
 #[tauri::command]
-fn startup_files() -> Vec<String> {
+fn startup_files() -> Vec<FileTarget> {
     files_from_args(std::env::args_os().map(|arg| arg.to_string_lossy().into_owned()))
 }
 
@@ -1077,6 +1448,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(boot_clock)
         .manage(Terminals::default())
+        .manage(PreviewServer::default())
         .setup(|app| {
             // The window starts hidden so the first thing shown is the painted
             // editor rather than an empty white frame. The frontend reveals it
@@ -1088,6 +1460,33 @@ pub fn run() {
                     reveal(&window);
                 }
             });
+
+            // Puts JustCode in Explorer's "Open with" list — and Settings ▸
+            // Default apps — for every extension it understands, the same way
+            // VS Code, Zed and Cursor register themselves on install. This used
+            // to happen only the first time a user opened File Associations…
+            // and clicked Apply, so a file type nobody had explicitly ticked
+            // never got JustCode as an offered choice, even though nothing
+            // here makes it anyone's default. Cheap and idempotent — a handful
+            // of registry writes of the same values on every launch — so no
+            // "only do this once" bookkeeping is worth the complexity.
+            #[cfg(windows)]
+            {
+                let extensions: Vec<String> = app
+                    .config()
+                    .bundle
+                    .file_associations
+                    .iter()
+                    .flatten()
+                    .flat_map(|association| association.ext.iter().map(|ext| ext.0.clone()))
+                    .collect();
+                std::thread::spawn(move || {
+                    if associations::register_application(&extensions).is_ok() {
+                        associations::notify_shell();
+                    }
+                });
+            }
+
             Ok(())
         })
         // Must be registered first: a second launch (Explorer opening another
@@ -1303,7 +1702,11 @@ mod terminal_tests {
 
 #[cfg(test)]
 mod startup_arg_tests {
-    use super::files_from_args;
+    use super::{files_from_args, split_line_column, FileTarget};
+
+    fn target(path: &str) -> FileTarget {
+        FileTarget { path: path.to_string(), line: None, column: None }
+    }
 
     /// Explorer launches the registered command as `justcode.exe "C:\path\x.ps1"`,
     /// so argv[0] is the executable and the file is argv[1]. The same shape is
@@ -1315,7 +1718,7 @@ mod startup_arg_tests {
         let path = script.to_string_lossy().into_owned();
 
         let argv = vec![r"C:\Program Files\JustCode\justcode.exe".to_string(), path.clone()];
-        assert_eq!(files_from_args(argv), vec![path.clone()]);
+        assert_eq!(files_from_args(argv), vec![target(&path)]);
 
         // Flags are ignored, and several files may arrive at once.
         let argv = vec![
@@ -1325,13 +1728,47 @@ mod startup_arg_tests {
             r"C:\does
 ot\exist.ps1".to_string(),
         ];
-        assert_eq!(files_from_args(argv), vec![path.clone()]);
+        assert_eq!(files_from_args(argv), vec![target(&path)]);
 
         // The executable itself is never treated as a file to open.
         let exe = std::env::current_exe().unwrap().to_string_lossy().into_owned();
         assert!(files_from_args(vec![exe]).is_empty());
 
         let _ = std::fs::remove_file(&script);
+    }
+
+    /// The `path:line` / `path:line:column` convention VS Code, Zed and Cursor
+    /// all accept on their own command lines.
+    #[test]
+    fn splits_a_trailing_line_and_column_off_a_real_file() {
+        let script = std::env::temp_dir().join("justcode-lc-test.ps1");
+        std::fs::write(&script, "Write-Host 'hi'").expect("write temp script");
+        let path = script.to_string_lossy().into_owned();
+
+        assert_eq!(
+            split_line_column(&format!("{path}:42")),
+            FileTarget { path: path.clone(), line: Some(42), column: None }
+        );
+        assert_eq!(
+            split_line_column(&format!("{path}:42:7")),
+            FileTarget { path: path.clone(), line: Some(42), column: Some(7) }
+        );
+        // No file at that path once the suffix is stripped — not a match, the
+        // whole string is kept as a (nonexistent) path instead.
+        assert_eq!(split_line_column("C:\\nope\\nope.rs:42"), target("C:\\nope\\nope.rs:42"));
+
+        let _ = std::fs::remove_file(&script);
+    }
+
+    /// A Windows absolute path's drive-letter colon must never be mistaken for
+    /// a `path:line` separator.
+    #[test]
+    fn drive_letter_colon_is_not_treated_as_a_line_number() {
+        let script = std::env::temp_dir().join("justcode-drive-test.ps1");
+        std::fs::write(&script, "Write-Host 'hi'").expect("write temp script");
+        let path = script.to_string_lossy().into_owned();
+
+        assert_eq!(split_line_column(&path), target(&path));
     }
 }
 
@@ -1431,5 +1868,60 @@ mod launch_safety_tests {
             .collect();
         assert!(leftovers.is_empty(), "temp file left behind");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod preview_server_tests {
+    use super::*;
+
+    #[test]
+    fn percent_round_trips_reserved_and_unicode_characters() {
+        let original = "C:\\Users\\a b\\café & friends?.html";
+        assert_eq!(percent_decode(&percent_encode(original)), original);
+    }
+
+    #[test]
+    fn query_values_are_percent_decoded() {
+        let parsed = parse_query("path=C%3A%5Cfoo%20bar.html&gen=3");
+        assert_eq!(parsed.get("path").map(String::as_str), Some(r"C:\foo bar.html"));
+        assert_eq!(parsed.get("gen").map(String::as_str), Some("3"));
+    }
+
+    // A page served with its poll starting from a stale generation would see a
+    // mismatch on its very first `/wait` and reload immediately, which reloads
+    // again, forever. The starting generation embedded in the page must match
+    // whatever the registry holds *right now*, not always start at 0.
+    #[test]
+    fn injected_script_polls_from_the_current_generation_not_zero() {
+        let html = inject_reload_script(b"<html><body>hi</body></html>", "tok", "/a.html", 7);
+        let text = String::from_utf8(html).unwrap();
+        assert!(text.contains("var gen=7"), "expected gen=7 in: {text}");
+        // Injected before the closing tag, not appended after the document.
+        assert!(text.trim_end().ends_with("</html>"));
+    }
+
+    #[test]
+    fn injected_script_is_appended_when_there_is_no_body_tag() {
+        let html = inject_reload_script(b"<html>no body here", "tok", "/a.html", 0);
+        let text = String::from_utf8(html).unwrap();
+        assert!(text.starts_with("<html>no body here"));
+        assert!(text.contains("var gen=0"));
+    }
+
+    #[test]
+    fn content_type_recognizes_common_web_asset_extensions() {
+        assert_eq!(content_type(Path::new("a.html")), "text/html; charset=utf-8");
+        assert_eq!(content_type(Path::new("a.css")), "text/css; charset=utf-8");
+        assert_eq!(content_type(Path::new("a.js")), "text/javascript; charset=utf-8");
+        assert_eq!(content_type(Path::new("a.unknownext")), "application/octet-stream");
+    }
+
+    #[test]
+    fn require_html_extension_rejects_non_web_files() {
+        assert!(require_html_extension(Path::new("a.html")).is_ok());
+        assert!(require_html_extension(Path::new("a.htm")).is_ok());
+        assert!(require_html_extension(Path::new("a.exe")).is_err());
+        assert!(require_html_extension(Path::new("a.bat")).is_err());
     }
 }

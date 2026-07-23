@@ -127,6 +127,7 @@ export const TRANSLATIONS = {
     "about.tagline": "محرر شيفرة صغير وسريع.",
     "about.builtWith": "مبني على Tauri 2 و CodeMirror 6.",
     "about.version": "الإصدار {version}",
+    "sc.g.menus": "القوائم",
     "sc.g.file": "ملف",
     "sc.g.editing": "التحرير",
     "sc.g.bookmarks": "الإشارات المرجعية",
@@ -152,6 +153,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+نقر على رابط",
     "sc.k.clickPath": "انقر المسار في شريط الحالة",
     "sc.k.clickLanguage": "انقر اللغة في شريط الحالة",
+    "sc.openFileMenu": "فتح قائمة ملف",
+    "sc.openEditMenu": "فتح قائمة تحرير",
+    "sc.openViewMenu": "فتح قائمة عرض",
+    "sc.openHelpMenu": "فتح قائمة مساعدة",
     "sc.newFile": "ملف جديد",
     "sc.openFile": "فتح ملف",
     "sc.save": "حفظ",
@@ -225,6 +230,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "فتح الرابط عند المؤشر",
     "sc.copyFullPath": "نسخ المسار الكامل",
     "sc.changeMode": "تغيير وضع اللغة",
+
+    "view.autismTheme": "مظهر التوحد",
+    "view.autismThemeHint": "ألوان خافتة ومنخفضة التباين للحساسية الحسية",
+    "view.bionicReading": "القراءة الحيوية",
+    "help.autismTheme": "مظهر التوحد",
+    "help.bionicReading": "القراءة الحيوية",
+    "toolbar.switchToTheme": "التبديل إلى {theme}",
+
+    "autismHelp.intro":
+      "مظهر بألوان خافتة ومنخفضة الإثارة للمستخدمين الحساسين حسيًا — التوحد وفرط الحركة ونقص الانتباه والصداع النصفي وحالات الإجهاد البصري الأخرى. يبقي المحرر هادئًا للنظر إليه لفترات طويلة، دون التضحية بسهولة القراءة.",
+    "autismHelp.point1":
+      "لا أسود خالص ولا أبيض خالص. خلفية رمادية داكنة دافئة ولون أمامي كريمي ناعم يتجنبان وهج الشاشة وتأثير الهالة الذي يسببه التباين الحاد بين الأسود والأبيض.",
+    "autismHelp.point2":
+      "لا أحمر ولا أصفر في أي مكان — اللونان الأكثر شيوعًا في التسبب بالإثارة المفرطة. تستخدم الأخطاء لونًا طينيًا خافتًا وتستخدم نتائج البحث ذهبيًا خافتًا بدلًا من الأحمر الصارخ والأصفر الساطع المعتادين.",
+    "autismHelp.point3":
+      "كل لون مخفف التشبع بشكل كبير مقارنة بما تستخدمه المظاهر الداكنة والفاتحة، بحيث لا يبدو شيء \"مهتزًا\" بجانب جاره رغم بقاء التباين مع الخلفية كما هو.",
+    "autismHelp.point4":
+      "الألوان المهدئة تتصدر في كل مكان: أزرق ترابي وأخضر مريمية لمعظم تمييز الصياغة، وبنفسجي خافت وبني فاتح لما تبقى.",
+    "autismHelp.footer":
+      "يمكنك التبديل إليه في أي وقت من عرض ▸ مظهر التوحد، أو بالزر أدناه، أو بالضغط على Ctrl+Shift+T للتنقل بين داكن ▸ فاتح ▸ توحد.",
+    "autismHelp.switch": "التبديل إلى مظهر التوحد",
+    "autismHelp.active": "هذا مظهرك الحالي.",
+
+    "bionicHelp.intro":
+      "أسلوب طباعي يجعل الجزء الأول من كل كلمة بخط عريض، بحيث يحتاج العين إلى نقاط تثبيت أقل وأقصر في كل سطر. يُسوَّق كوسيلة مساعدة للقراءة لفرط الحركة ونقص الانتباه وعسر القراءة وأحيانًا التوحد.",
+    "bionicHelp.point1":
+      "يُجعل نحو أول 40% من كل كلمة بخط عريض ويبقى الباقي بالخط العادي — والفكرة أن الدماغ يتعرف على الكلمة من بدايتها ويكمل نهايتها من السياق.",
+    "bionicHelp.point2":
+      "الأدلة متضاربة. لم تجد عدة دراسات مضبوطة أي تحسن ملموس في سرعة القراءة أو الفهم مقارنة بالنص العادي، ووجد بعض القراء أنها أكثر تشتيتًا لا أقل. جربها بدلًا من افتراض أنها ستساعد.",
+    "bionicHelp.point3":
+      "تُطبَّق على أي مستند معروض على الشاشة، تمامًا مثل التفاف النص — وهي ليست مقتصرة على النثر، فتفعيلها أثناء تحرير الشيفرة يجعل بداية المعرّفات والكلمات المفتاحية بخط عريض أيضًا.",
+    "bionicHelp.footer":
+      "يمكنك تفعيلها في أي وقت من عرض ▸ القراءة الحيوية، أو بالزر أدناه، أو بالضغط على Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "تفعيل القراءة الحيوية",
+    "bionicHelp.turnOff": "إيقاف القراءة الحيوية",
+
+    "help.center": "المساعدة والإرشادات",
+    "modal.helpCenterTitle": "المساعدة والإرشادات",
+    "help.searchPlaceholder": "البحث في المساعدة…",
+    "help.noResults": "لا توجد مواضيع مطابقة",
+
+    "help.overviewTitle": "نظرة عامة",
+    "help.overviewIntro":
+      "JustCode محرر صغير وسريع لملفات HTML وCSS وJavaScript والنصوص والشيفرات العامة — صُمم ليُفتح بسرعة ويبقى بعيدًا عن الطريق، لا ليحل محل بيئة تطوير متكاملة.",
+    "help.overviewPoint1":
+      "تُفتح الملفات كعلامات تبويب في نافذة واحدة؛ لا يوجد مشروع أو مساحة عمل يجب إعدادها أولًا.",
+    "help.overviewPoint2": "اضغط F1 في أي وقت لعرض المرجع الكامل لاختصارات لوحة المفاتيح.",
+
+    "help.filesTitle": "الملفات",
+    "help.filesIntro": "تُفتح الملفات كعلامات تبويب؛ ليس لدى JustCode مفهوم مشروع أو مساحة عمل.",
+    "help.filesPoint1":
+      "ملف جديد (Ctrl+N) يقدّم قوالب بداية للعديد من اللغات، أو مستندًا فارغًا؛ فتح… (Ctrl+O) يقبل عدة ملفات دفعة واحدة.",
+    "help.filesPoint2":
+      "حفظ (Ctrl+S) وحفظ باسم (Ctrl+Shift+S) يكتبان مباشرة على القرص؛ حفظ الكل (Ctrl+Alt+S) يشمل كل علامة تبويب تم تعديلها دفعة واحدة.",
+    "help.filesPoint3": "ملف ▸ الملفات الأخيرة يتذكر آخر 15 ملفًا عبر إعادة التشغيل.",
+    "help.filesPoint4":
+      "ملف ▸ ارتباطات الملفات… يسجّل JustCode لدى ويندوز بحيث يظهر كخيار \"فتح باستخدام\" — أو كالتطبيق الافتراضي — لأنواع الملفات التي يفهمها.",
+
+    "help.editingTitle": "التحرير",
+    "help.editingIntro": "تحرير قياسي، بالإضافة إلى بعض الإضافات إلى جانب القص والنسخ واللصق والتراجع والإعادة.",
+    "help.editingPoint1":
+      "Ctrl+/ يبدّل تعليقًا باستخدام صياغة اللغة الحالية — تعليقات سطرية لسطر واحد، وتعليقات كتلية عبر التحديد.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L يغيّران حالة أحرف التحديد؛ Ctrl+Alt+G يدرج معرّفًا فريدًا جديدًا (GUID).",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ ينقل السطر الحالي؛ Alt+Shift+↑ / Alt+Shift+↓ يكرره لأعلى أو لأسفل.",
+    "help.editingPoint4": "Ctrl+نقر يضيف مؤشرًا آخر؛ Alt+سحب يُنشئ تحديدًا مستطيلًا (عموديًا).",
+
+    "help.searchTitle": "البحث",
+    "help.searchIntro": "البحث والاستبدال داخل الملف الحالي، أو الانتقال مباشرة إلى تعريف ما.",
+    "help.searchPoint1":
+      "Ctrl+F يفتح البحث؛ Ctrl+H يفتح البحث والاستبدال. F3 / Shift+F3 يكرران آخر بحث للأمام أو للخلف.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G يفتح الانتقال إلى الرمز — قائمة قابلة للتصفية للدوال والفئات والتعريفات الأخرى في الملف الحالي.",
+
+    "help.bookmarksTitle": "الإشارات المرجعية",
+    "help.bookmarksIntro":
+      "ثلاث خانات إشارات مرجعية مرقّمة لكل مستند، للتنقل في ملف كبير دون التمرير للعثور على مكانك.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 يضبط أو يمسح إشارة مرجعية عند السطر الحالي؛ Ctrl+1 / 2 / 3 يقفز إليها مباشرة.",
+
+    "help.splitTabsTitle": "تقسيم العرض وعلامات التبويب",
+    "help.splitTabsIntro": "يمكن ترتيب علامات التبويب في ما يصل إلى أربع لوحات.",
+    "help.splitTabsPoint1":
+      "Ctrl+K ثم مفتاح سهم يقسّم اللوحة النشطة في ذلك الاتجاه؛ سحب علامة تبويب إلى حافة الشاشة يفعل الشيء نفسه.",
+    "help.splitTabsPoint2":
+      "سحب علامة تبويب إلى شريط تبويب لوحة أخرى ينقلها إليها؛ سحب آخر علامة تبويب خارج لوحة يلغي التقسيم.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab يتنقلان بين علامات التبويب؛ النقر بالزر الأوسط يغلق علامة تبويب.",
+
+    "help.foldingTitle": "طي الشيفرة",
+    "help.foldingIntro": "يمكن طي أي كتلة لإبعادها عن الطريق.",
+    "help.foldingPoint1":
+      "انقر السهم في الهامش، أو اضغط Ctrl+Shift+[ / ] لطي أو فتح الكتلة عند المؤشر.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] يطوي أو يفتح كل شيء في الملف دفعة واحدة.",
+
+    "help.terminalTitle": "الطرفية",
+    "help.terminalIntro": "لوحة طرفية مدمجة، وليست نافذة منفصلة.",
+    "help.terminalPoint1":
+      "Ctrl+` يظهرها أو يخفيها؛ Ctrl+Shift+` يفتح طرفية جديدة بجانب أي طرفية تعمل بالفعل.",
+    "help.terminalPoint2": "تبدأ الطرفية الجديدة في مجلد الملف الذي يُحرَّر حاليًا.",
+    "help.terminalPoint3":
+      "ملف ▸ تشغيل في الطرفية (Ctrl+F5) يشغّل النص الحالي ويترك الصدفة مفتوحة عند موجه الأوامر بعد ذلك، بحيث يمكن فحص أي فشل في مكانه.",
+
+    "help.runTitle": "تشغيل",
+    "help.runIntro": "F5 يعرض الملف الحالي كما سيبدو أو يتصرف فعليًا، بدلًا من عرضه كنص مصدري.",
+    "help.runPoint1":
+      "HTML: يُفتح في المتصفح الافتراضي. تشغيل الملف نفسه مرة أخرى يحدّث تلك العلامة بدلًا من فتح واحدة جديدة، طالما أنها لا تزال مفتوحة.",
+    "help.runPoint2": "Markdown: يُحوَّل أولًا إلى مستند HTML منسّق، ثم يُعرض بالطريقة نفسها.",
+    "help.runPoint3":
+      "نصوص PowerShell وBatch وShell: تعمل في نافذة طرفية خاصة بها، تبقى مفتوحة بعد انتهاء النص.",
+
+    "help.wordWrapIntro":
+      "معطل افتراضيًا. الالتفاف يُبقي الأسطر الطويلة على الشاشة دون تمرير أفقي، لكنه يكسر التطابق بين الهامش وأرقام الأسطر الفعلية.",
+    "help.wordWrapPoint1":
+      "بدّله من عرض ▸ التفاف النص أو Alt+Z. يُطبَّق على أي مستند معروض على الشاشة حاليًا.",
+
+    "help.spellCheckIntro": "معطل افتراضيًا — معظم المعرّفات في الشيفرة المصدرية \"مكتوبة خطأ\" بالتعريف.",
+    "help.spellCheckPoint1":
+      "يعمل كأداة تدقيق على النص الفعلي بدلًا من المدقق المدمج في المتصفح، لذا تُحسب الأخطاء الإملائية ضمن إجمالي المشكلات وتأتي مع تصحيحات مقترحة.",
+    "help.spellCheckPoint2": "بدّله من عرض ▸ التدقيق الإملائي.",
+
+    "help.languageTitle": "لغة الواجهة",
+    "help.languageIntro":
+      "لغة قوائم JustCode وحواراته الخاصة — مستقلة عن محتوى أي ملف أو لغة البرمجة المستخدمة فيه.",
+    "help.languagePoint1":
+      "عرض ▸ اللغة… يسرد كل ترجمة باسمها الخاص بدلًا من اسمها بالإنجليزية، لأن \"German\" لا تفيد من لا يقرأ إلا الألمانية.",
+    "help.languagePoint2": "الإنجليزية مدمجة؛ أي لغة أخرى تُنزَّل عند اختيارها لأول مرة.",
+
+    "sc.toolbar": "تبديل شريط الأدوات",
+    "sc.statusBar": "تبديل شريط الحالة",
+    "sc.spellCheck": "تبديل التدقيق الإملائي",
+    "sc.bionicReading": "تبديل القراءة الحيوية",
+    "sc.cycleTheme": "التنقل بين المظاهر (داكن ▸ فاتح ▸ توحد)",
   },
   bg: {
     "menu.file": "Файл",
@@ -343,6 +481,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Малък и бърз редактор на код.",
     "about.builtWith": "Създаден с Tauri 2 и CodeMirror 6.",
     "about.version": "Версия {version}",
+    "sc.g.menus": "Менюта",
     "sc.g.file": "Файл",
     "sc.g.editing": "Редактиране",
     "sc.g.bookmarks": "Отметки",
@@ -368,6 +507,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+щракване върху URL",
     "sc.k.clickPath": "Щракване върху пътя в лентата на състоянието",
     "sc.k.clickLanguage": "Щракване върху езика в лентата на състоянието",
+    "sc.openFileMenu": "Отваряне на менюто Файл",
+    "sc.openEditMenu": "Отваряне на менюто Редактиране",
+    "sc.openViewMenu": "Отваряне на менюто Изглед",
+    "sc.openHelpMenu": "Отваряне на менюто Помощ",
     "sc.newFile": "Нов файл",
     "sc.openFile": "Отвори файл",
     "sc.save": "Запиши",
@@ -441,6 +584,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Отвори връзката под курсора",
     "sc.copyFullPath": "Копирай пълния път",
     "sc.changeMode": "Смени езиковия режим",
+
+    "view.autismTheme": "Тема за аутизъм",
+    "view.autismThemeHint": "Приглушени, нискоконтрастни цветове за сетивна чувствителност",
+    "view.bionicReading": "Бионично четене",
+    "help.autismTheme": "Тема за аутизъм",
+    "help.bionicReading": "Бионично четене",
+    "toolbar.switchToTheme": "Превключване към {theme}",
+
+    "autismHelp.intro":
+      "Приглушена тема с ниско възбуждащи цветове за сетивно чувствителни потребители — аутизъм, ADHD, мигрена и други състояния на визуален стрес. Поддържа редактора спокоен за гледане за дълги периоди, без да жертва четимостта.",
+    "autismHelp.point1":
+      "Без чисто черно или чисто бяло. Топъл тъмносив фон и мек кремав текст избягват както отблясъка на екрана, така и ефекта на ореол, причинен от рязък черно-бял контраст.",
+    "autismHelp.point2":
+      "Никъде няма червено или жълто — двата нюанса, най-често посочвани като свръхстимулиращи. Грешките използват приглушена теракота, а маркирането при търсене — приглушено злато, вместо обичайното аларменочервено и ярко жълто.",
+    "autismHelp.point3":
+      "Всеки цвят е с наситеност, значително понижена спрямо тъмната и светлата тема, така че нищо не „вибрира“ спрямо съседите си, макар контрастът спрямо фона да остава същият.",
+    "autismHelp.point4":
+      "Успокояващи нюанси навсякъде: прашно синьо и градинско зелено за повечето синтактично оцветяване, приглушено лавандулово и бежово за останалото.",
+    "autismHelp.footer":
+      "Превключете към нея по всяко време от Изглед ▸ Тема за аутизъм, с бутона по-долу, или като натиснете Ctrl+Shift+T, за да превключвате Тъмна ▸ Светла ▸ Аутизъм.",
+    "autismHelp.switch": "Превключване към тема за аутизъм",
+    "autismHelp.active": "Това е текущата ви тема.",
+
+    "bionicHelp.intro":
+      "Типографски трик, който удебелява началната част на всяка дума, така че окото има по-малко и по-къси точки за фиксиране на ред. Рекламира се като помощно средство за четене при ADHD, дислексия и понякога аутизъм.",
+    "bionicHelp.point1":
+      "Удебеляват се приблизително първите 40% от всяка дума, а остатъкът остава с нормална дебелина — идеята е, че мозъкът разпознава дума по началото ѝ и допълва края от контекста.",
+    "bionicHelp.point2":
+      "Доказателствата са противоречиви. Няколко контролирани изследвания не откриват измеримо подобрение в скоростта на четене или разбирането спрямо обикновен текст, а някои читатели го намират по-разсейващо, не по-малко. Опитайте го, вместо да предполагате, че ще помогне.",
+    "bionicHelp.point3":
+      "Прилага се към който и да е документ на екрана, също като Пренасяне на редове — не се ограничава до проза, така че включването му при редактиране на код удебелява и началото на идентификатори и ключови думи.",
+    "bionicHelp.footer":
+      "Включете го по всяко време от Изглед ▸ Бионично четене, с бутона по-долу, или като натиснете Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Включване на бионично четене",
+    "bionicHelp.turnOff": "Изключване на бионично четене",
+
+    "help.center": "Помощ и упътвания",
+    "modal.helpCenterTitle": "Помощ и упътвания",
+    "help.searchPlaceholder": "Търсене в помощта…",
+    "help.noResults": "Няма съвпадащи теми",
+
+    "help.overviewTitle": "Общ преглед",
+    "help.overviewIntro":
+      "JustCode е малък, бърз редактор за HTML, CSS, JavaScript и общ текст или код — създаден да се отваря бързо и да не пречи, а не да замества пълноценна среда за разработка.",
+    "help.overviewPoint1":
+      "Файловете се отварят като раздели в един прозорец; няма проект или работно пространство за първоначално настройване.",
+    "help.overviewPoint2": "Натиснете F1 по всяко време за пълния справочник с клавишни комбинации.",
+
+    "help.filesTitle": "Файлове",
+    "help.filesIntro": "Файловете се отварят като раздели; JustCode няма концепция за проект или работно пространство.",
+    "help.filesPoint1":
+      "Нов файл (Ctrl+N) предлага начални шаблони за много езици или празен документ; Отваряне… (Ctrl+O) приема няколко файла наведнъж.",
+    "help.filesPoint2":
+      "Запазване (Ctrl+S) и Запазване като (Ctrl+Shift+S) записват направо на диска; Запазване на всички (Ctrl+Alt+S) обхваща всички променени раздели наведнъж.",
+    "help.filesPoint3": "Файл ▸ Скорошни файлове помни последните 15 файла между рестартирания.",
+    "help.filesPoint4":
+      "Файл ▸ Файлови асоциации… регистрира JustCode в Windows, за да се появява като опция „Отваряне с“ — или като по подразбиране — за типовете файлове, които разпознава.",
+
+    "help.editingTitle": "Редактиране",
+    "help.editingIntro": "Стандартно редактиране плюс няколко екстри освен изрязване, копиране, поставяне, отмяна и повторение.",
+    "help.editingPoint1":
+      "Ctrl+/ превключва коментар със синтаксиса на текущия език — коментари на ред за един ред, блокови коментари за селекция.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L променят регистъра на селекцията; Ctrl+Alt+G вмъква нов GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ премества текущия ред; Alt+Shift+↑ / Alt+Shift+↓ го дублира нагоре или надолу.",
+    "help.editingPoint4": "Ctrl+клик добавя друг курсор; Alt+плъзгане прави правоъгълна (колонна) селекция.",
+
+    "help.searchTitle": "Търсене",
+    "help.searchIntro": "Търсене и замяна в текущия файл или директен преход към дефиниция.",
+    "help.searchPoint1":
+      "Ctrl+F отваря Търсене; Ctrl+H отваря Търсене и замяна. F3 / Shift+F3 повтарят последното търсене напред или назад.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G отваря Преход към символ — филтрируем списък с функциите, класовете и другите декларации в текущия файл.",
+
+    "help.bookmarksTitle": "Отметки",
+    "help.bookmarksIntro":
+      "Три номерирани позиции за отметки на документ, за придвижване в голям файл без превъртане за намиране на мястото ви.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 поставя или изчиства отметка на текущия ред; Ctrl+1 / 2 / 3 преминава директно към нея.",
+
+    "help.splitTabsTitle": "Разделен изглед и раздели",
+    "help.splitTabsIntro": "Разделите могат да се подредят в до четири панела.",
+    "help.splitTabsPoint1":
+      "Ctrl+K, последвано от стрелка, разделя активния панел в тази посока; плъзгането на раздел до ръба на екрана прави същото.",
+    "help.splitTabsPoint2":
+      "Плъзгането на раздел върху лентата с раздели на друг панел го премества там; плъзгането на последния раздел обратно извън панела отменя разделянето.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab превключват между разделите; среден клик върху раздел го затваря.",
+
+    "help.foldingTitle": "Сгъване на код",
+    "help.foldingIntro": "Всеки блок може да бъде сгънат, за да не пречи.",
+    "help.foldingPoint1":
+      "Кликнете стрелката в жлеба или натиснете Ctrl+Shift+[ / ], за да сгънете или разгънете блока при курсора.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] сгъва или разгъва всичко във файла наведнъж.",
+
+    "help.terminalTitle": "Терминал",
+    "help.terminalIntro": "Вграден терминален панел, не отделен прозорец.",
+    "help.terminalPoint1":
+      "Ctrl+` го показва или скрива; Ctrl+Shift+` отваря нов, редом с всеки вече работещ.",
+    "help.terminalPoint2": "Нов терминал стартира в папката на файла, който се редактира в момента.",
+    "help.terminalPoint3":
+      "Файл ▸ Изпълнение в терминал (Ctrl+F5) изпълнява текущия скрипт и оставя обвивката отворена на промпт след това, така че евентуален отказ може да се провери на място.",
+
+    "help.runTitle": "Изпълнение",
+    "help.runIntro": "F5 показва текущия файл така, както действително ще изглежда или се държи, вместо като изходен текст.",
+    "help.runPoint1":
+      "HTML: отваря се в браузъра по подразбиране. Повторното изпълнение на същия файл опреснява този раздел, вместо да отваря нов, докато той остава отворен.",
+    "help.runPoint2": "Markdown: първо се преобразува в оформен HTML документ, след което се преглежда по същия начин.",
+    "help.runPoint3":
+      "Скриптове на PowerShell, Batch и Shell: изпълняват се в собствен конзолен прозорец, който остава отворен след приключване на скрипта.",
+
+    "help.wordWrapIntro":
+      "Изключено по подразбиране. Пренасянето задържа дългите редове на екрана без хоризонтално превъртане, но нарушава съответствието ред по ред между жлеба и действителните номера на редовете.",
+    "help.wordWrapPoint1":
+      "Превключете от Изглед ▸ Пренасяне на редове или Alt+Z. Прилага се към документа, показан в момента на екрана.",
+
+    "help.spellCheckIntro": "Изключено по подразбиране — повечето идентификатори в изходния код са „сгрешени“ по дефиниция.",
+    "help.spellCheckPoint1":
+      "Работи като линтер върху реалния текст, а не вградената проверка на браузъра, така че правописните грешки се броят в общия брой проблеми и идват с предложени поправки.",
+    "help.spellCheckPoint2": "Превключете от Изглед ▸ Правописна проверка.",
+
+    "help.languageTitle": "Език на интерфейса",
+    "help.languageIntro":
+      "Езикът на собствените менюта и диалози на JustCode — независим от съдържанието или езика за програмиране на който и да е файл.",
+    "help.languagePoint1":
+      "Изглед ▸ Език… изброява всеки превод с неговото собствено име, а не английското му име, тъй като „German“ не помага на някого, който чете само немски.",
+    "help.languagePoint2": "Английският е вграден; всеки друг език се изтегля при първото си избиране.",
+
+    "sc.toolbar": "Превключване на лентата с инструменти",
+    "sc.statusBar": "Превключване на лентата на състоянието",
+    "sc.spellCheck": "Превключване на правописната проверка",
+    "sc.bionicReading": "Превключване на бионично четене",
+    "sc.cycleTheme": "Смяна на темите (Тъмна ▸ Светла ▸ Аутизъм)",
   },
   "zh-CN": {
     "menu.file": "文件",
@@ -559,6 +835,7 @@ export const TRANSLATIONS = {
     "about.tagline": "小巧快速的代码编辑器。",
     "about.builtWith": "基于 Tauri 2 与 CodeMirror 6 构建。",
     "about.version": "版本 {version}",
+    "sc.g.menus": "菜单",
     "sc.g.file": "文件",
     "sc.g.editing": "编辑",
     "sc.g.bookmarks": "书签",
@@ -584,6 +861,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+单击网址",
     "sc.k.clickPath": "单击状态栏中的路径",
     "sc.k.clickLanguage": "单击状态栏中的语言",
+    "sc.openFileMenu": "打开文件菜单",
+    "sc.openEditMenu": "打开编辑菜单",
+    "sc.openViewMenu": "打开视图菜单",
+    "sc.openHelpMenu": "打开帮助菜单",
     "sc.newFile": "新建文件",
     "sc.openFile": "打开文件",
     "sc.save": "保存",
@@ -657,6 +938,119 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "打开光标处的链接",
     "sc.copyFullPath": "复制完整路径",
     "sc.changeMode": "更改语言模式",
+
+    "view.autismTheme": "自闭症主题",
+    "view.autismThemeHint": "柔和、低对比度的配色，适合感官敏感人群",
+    "view.bionicReading": "仿生阅读",
+    "help.autismTheme": "自闭症主题",
+    "help.bionicReading": "仿生阅读",
+    "toolbar.switchToTheme": "切换到{theme}",
+
+    "autismHelp.intro":
+      "为感官敏感用户设计的柔和、低唤醒配色主题——适用于自闭症、多动症、偏头痛及其他视觉压力状况。它让编辑器长时间看起来都很平静，同时不牺牲可读性。",
+    "autismHelp.point1":
+      "没有纯黑或纯白。温暖的深炭灰色背景和柔和的米白色文字，既能避免屏幕眩光，也能避免强烈黑白对比造成的光晕效应。",
+    "autismHelp.point2":
+      "完全不使用红色或黄色——这两种色调最常被认为会造成过度刺激。错误提示使用柔和的赤陶色，搜索高亮使用柔和的金色，而非常见的警示红和亮黄。",
+    "autismHelp.point3":
+      "每种颜色的饱和度都远低于深色和浅色主题，因此相邻颜色之间不会产生\"跳动\"感，但与背景的对比度保持不变。",
+    "autismHelp.point4":
+      "全程以柔和色调为主：大部分语法高亮使用暗淡蓝和鼠尾草绿，其余部分使用柔和薰衣草紫和棕褐色。",
+    "autismHelp.footer":
+      "可随时通过“查看 ▸ 自闭症主题”、下方按钮，或按 Ctrl+Shift+T 在深色 ▸ 浅色 ▸ 自闭症之间切换来启用。",
+    "autismHelp.switch": "切换到自闭症主题",
+    "autismHelp.active": "这是您当前使用的主题。",
+
+    "bionicHelp.intro":
+      "一种排版技巧，将每个单词的开头部分加粗，让眼睛在每行只需更少、更短的注视点。它被宣传为对多动症、阅读障碍、有时也包括自闭症有帮助的阅读辅助方式。",
+    "bionicHelp.point1":
+      "每个单词大约前 40% 会被加粗，其余部分保持正常字重——其理念是大脑能从单词开头识别出该词，并根据上下文补全结尾。",
+    "bionicHelp.point2":
+      "证据并不一致。多项对照研究并未发现其在阅读速度或理解力上比普通文本有可测量的提升，一些读者反而觉得它更分散注意力。请亲自尝试，而不要想当然地认为它会有帮助。",
+    "bionicHelp.point3":
+      "适用于屏幕上显示的任意文档，与自动换行一样——它并不局限于散文，因此在编辑代码时启用它，也会把标识符和关键字的开头加粗。",
+    "bionicHelp.footer": "可随时通过“查看 ▸ 仿生阅读”、下方按钮，或按 Ctrl+Shift+B 启用。",
+    "bionicHelp.turnOn": "开启仿生阅读",
+    "bionicHelp.turnOff": "关闭仿生阅读",
+
+    "help.center": "帮助与操作指南",
+    "modal.helpCenterTitle": "帮助与操作指南",
+    "help.searchPlaceholder": "搜索帮助…",
+    "help.noResults": "没有匹配的主题",
+
+    "help.overviewTitle": "概览",
+    "help.overviewIntro":
+      "JustCode 是一款小巧快速的编辑器，适用于 HTML、CSS、JavaScript 以及一般文本或代码——它旨在快速打开、不碍事，而非取代完整的 IDE。",
+    "help.overviewPoint1": "文件以标签页形式在单一窗口中打开；无需先设置项目或工作区。",
+    "help.overviewPoint2": "随时按 F1 可查看完整的键盘快捷键参考。",
+
+    "help.filesTitle": "文件",
+    "help.filesIntro": "文件以标签页形式打开；JustCode 没有项目或工作区的概念。",
+    "help.filesPoint1":
+      "“新建文件”（Ctrl+N）为多种语言提供起始模板，或创建空白文档；“打开…”（Ctrl+O）可一次接受多个文件。",
+    "help.filesPoint2":
+      "“保存”（Ctrl+S）和“另存为”（Ctrl+Shift+S）会直接写入磁盘；“全部保存”（Ctrl+Alt+S）一次性覆盖所有已修改的标签页。",
+    "help.filesPoint3": "“文件 ▸ 最近文件”会记住重启后最近打开的 15 个文件。",
+    "help.filesPoint4": "“文件 ▸ 文件关联…”会向 Windows 注册 JustCode，使其在其支持的文件类型中作为“打开方式”选项——或作为默认程序——出现。",
+
+    "help.editingTitle": "编辑",
+    "help.editingIntro": "标准编辑功能，外加剪切、复制、粘贴、撤销、重做之外的一些附加功能。",
+    "help.editingPoint1": "Ctrl+/ 会根据当前语言的语法切换注释——单行使用行注释，选区跨多行时使用块注释。",
+    "help.editingPoint2": "Ctrl+Shift+U / Ctrl+Shift+L 更改选区的大小写；Ctrl+Alt+G 插入一个新的 GUID。",
+    "help.editingPoint3": "Alt+↑ / Alt+↓ 移动当前行；Alt+Shift+↑ / Alt+Shift+↓ 将其向上或向下复制一份。",
+    "help.editingPoint4": "Ctrl+点击 添加另一个光标；Alt+拖动 创建矩形（按列）选区。",
+
+    "help.searchTitle": "搜索",
+    "help.searchIntro": "在当前文件内查找和替换，或直接跳转到某个定义处。",
+    "help.searchPoint1": "Ctrl+F 打开查找；Ctrl+H 打开查找和替换。F3 / Shift+F3 向前或向后重复上一次搜索。",
+    "help.searchPoint2": "Ctrl+Shift+G 打开“跳转到符号”——可筛选当前文件中的函数、类及其他声明的列表。",
+
+    "help.bookmarksTitle": "书签",
+    "help.bookmarksIntro": "每个文档提供三个编号书签位，便于在大文件中跳转而无需滚动查找位置。",
+    "help.bookmarksPoint1": "Ctrl+Shift+1 / 2 / 3 在当前行设置或清除书签；Ctrl+1 / 2 / 3 直接跳转到该书签。",
+
+    "help.splitTabsTitle": "拆分视图和标签页",
+    "help.splitTabsIntro": "标签页最多可排列为四个窗格。",
+    "help.splitTabsPoint1": "按 Ctrl+K 后再按方向键，可沿该方向拆分当前窗格；将标签页拖到屏幕边缘效果相同。",
+    "help.splitTabsPoint2": "将标签页拖到另一窗格的标签栏上会把它移动到那里；将窗格中最后一个标签页拖出会撤销拆分。",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab 在标签页之间循环切换；鼠标中键点击标签页可将其关闭。",
+
+    "help.foldingTitle": "代码折叠",
+    "help.foldingIntro": "任何代码块都可以折叠起来，避免碍眼。",
+    "help.foldingPoint1": "点击装订线中的箭头，或按 Ctrl+Shift+[ / ] 折叠或展开光标所在的代码块。",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] 一次性折叠或展开文件中的所有内容。",
+
+    "help.terminalTitle": "终端",
+    "help.terminalIntro": "一个集成的终端面板，而非独立窗口。",
+    "help.terminalPoint1": "Ctrl+` 用于显示或隐藏它；Ctrl+Shift+` 会在已运行的终端旁新建一个。",
+    "help.terminalPoint2": "新终端会在当前正在编辑的文件所在的文件夹中启动。",
+    "help.terminalPoint3":
+      "“文件 ▸ 在终端中运行”（Ctrl+F5）会运行当前脚本，并在结束后让 shell 保持在提示符处，以便当场排查失败原因。",
+
+    "help.runTitle": "运行",
+    "help.runIntro": "F5 会按文件实际的外观或行为来展示当前文件，而不是以源文本形式展示。",
+    "help.runPoint1": "HTML：在默认浏览器中打开。只要该标签页仍处于打开状态，再次运行同一文件会刷新该标签页，而不是新开一个。",
+    "help.runPoint2": "Markdown：会先渲染为带样式的 HTML 文档，然后以同样的方式预览。",
+    "help.runPoint3": "PowerShell、批处理和 Shell 脚本：会在各自的控制台窗口中运行，脚本结束后该窗口保持打开。",
+
+    "help.wordWrapIntro":
+      "默认关闭。自动换行可让长行不必横向滚动即可显示在屏幕上，但会打破装订线与实际行号之间一行对一行的对应关系。",
+    "help.wordWrapPoint1": "可通过“查看 ▸ 自动换行”或 Alt+Z 切换。它作用于当前屏幕上显示的文档。",
+
+    "help.spellCheckIntro": "默认关闭——源代码中的大多数标识符按定义来说都是“拼写错误”的。",
+    "help.spellCheckPoint1": "以针对实际文本运行 lint 检查的方式实现，而非依赖网页视图内置的拼写检查器，因此拼写错误会计入问题总数，并附带建议的更正。",
+    "help.spellCheckPoint2": "可通过“查看 ▸ 拼写检查”切换。",
+
+    "help.languageTitle": "界面语言",
+    "help.languageIntro": "JustCode 自身菜单和对话框所使用的语言——与任何文件的内容或所用编程语言无关。",
+    "help.languagePoint1": "“查看 ▸ 语言…”会以每种语言自身的名称列出翻译，而非其英文名称，因为对只会读中文的人来说，“German”毫无帮助。",
+    "help.languagePoint2": "内置英语；其他语言会在首次选择时下载。",
+
+    "sc.toolbar": "切换工具栏",
+    "sc.statusBar": "切换状态栏",
+    "sc.spellCheck": "切换拼写检查",
+    "sc.bionicReading": "切换仿生阅读",
+    "sc.cycleTheme": "切换主题（深色 ▸ 浅色 ▸ 自闭症）",
   },
   "zh-TW": {
     "menu.file": "檔案",
@@ -775,6 +1169,7 @@ export const TRANSLATIONS = {
     "about.tagline": "小巧快速的程式碼編輯器。",
     "about.builtWith": "以 Tauri 2 與 CodeMirror 6 建構。",
     "about.version": "版本 {version}",
+    "sc.g.menus": "選單",
     "sc.g.file": "檔案",
     "sc.g.editing": "編輯",
     "sc.g.bookmarks": "書籤",
@@ -800,6 +1195,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+按一下網址",
     "sc.k.clickPath": "按一下狀態列中的路徑",
     "sc.k.clickLanguage": "按一下狀態列中的語言",
+    "sc.openFileMenu": "開啟檔案選單",
+    "sc.openEditMenu": "開啟編輯選單",
+    "sc.openViewMenu": "開啟檢視選單",
+    "sc.openHelpMenu": "開啟說明選單",
     "sc.newFile": "新增檔案",
     "sc.openFile": "開啟檔案",
     "sc.save": "儲存",
@@ -873,6 +1272,119 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "開啟游標處的連結",
     "sc.copyFullPath": "複製完整路徑",
     "sc.changeMode": "變更語言模式",
+
+    "view.autismTheme": "自閉症主題",
+    "view.autismThemeHint": "柔和、低對比度的配色，適合感官敏感人士",
+    "view.bionicReading": "仿生閱讀",
+    "help.autismTheme": "自閉症主題",
+    "help.bionicReading": "仿生閱讀",
+    "toolbar.switchToTheme": "切換至{theme}",
+
+    "autismHelp.intro":
+      "為感官敏感使用者設計的柔和、低喚醒配色主題——適用於自閉症、過動症、偏頭痛及其他視覺壓力狀況。它讓編輯器長時間看起來都很平靜，同時不犧牲可讀性。",
+    "autismHelp.point1":
+      "沒有純黑或純白。溫暖的深炭灰色背景與柔和的米白色文字，既能避免螢幕眩光，也能避免強烈黑白對比造成的暈光效應。",
+    "autismHelp.point2":
+      "完全不使用紅色或黃色——這兩種色調最常被認為會造成過度刺激。錯誤提示使用柔和的赤陶色，搜尋標示使用柔和的金色，而非常見的警示紅與亮黃。",
+    "autismHelp.point3":
+      "每種顏色的飽和度都遠低於深色與淺色主題，因此相鄰顏色之間不會產生「跳動」感，但與背景的對比度維持不變。",
+    "autismHelp.point4":
+      "全程以柔和色調為主：大部分語法標示使用暗淡藍與鼠尾草綠，其餘部分使用柔和薰衣草紫與棕褐色。",
+    "autismHelp.footer":
+      "可隨時透過「檢視 ▸ 自閉症主題」、下方按鈕，或按 Ctrl+Shift+T 在深色 ▸ 淺色 ▸ 自閉症之間切換來啟用。",
+    "autismHelp.switch": "切換至自閉症主題",
+    "autismHelp.active": "這是您目前使用的主題。",
+
+    "bionicHelp.intro":
+      "一種排版技巧，將每個單字的開頭部分加粗，讓眼睛在每行只需更少、更短的注視點。它被宣傳為對過動症、閱讀障礙，有時也包括自閉症有幫助的閱讀輔助方式。",
+    "bionicHelp.point1":
+      "每個單字大約前 40% 會被加粗，其餘部分維持正常字重——其理念是大腦能從單字開頭辨識出該詞，並依上下文補完結尾。",
+    "bionicHelp.point2":
+      "證據並不一致。多項對照研究並未發現其在閱讀速度或理解力上比一般文字有可測量的提升，部分讀者反而覺得它更分散注意力。請親自嘗試，而非想當然耳地認為它會有幫助。",
+    "bionicHelp.point3":
+      "適用於螢幕上顯示的任何文件，與自動換行一樣——並不侷限於散文，因此在編輯程式碼時啟用它，也會把識別碼與關鍵字的開頭加粗。",
+    "bionicHelp.footer": "可隨時透過「檢視 ▸ 仿生閱讀」、下方按鈕，或按 Ctrl+Shift+B 啟用。",
+    "bionicHelp.turnOn": "開啟仿生閱讀",
+    "bionicHelp.turnOff": "關閉仿生閱讀",
+
+    "help.center": "說明與操作指南",
+    "modal.helpCenterTitle": "說明與操作指南",
+    "help.searchPlaceholder": "搜尋說明…",
+    "help.noResults": "沒有符合的主題",
+
+    "help.overviewTitle": "總覽",
+    "help.overviewIntro":
+      "JustCode 是一款小巧快速的編輯器，適用於 HTML、CSS、JavaScript 以及一般文字或程式碼——旨在快速開啟、不擋路，而非取代完整的 IDE。",
+    "help.overviewPoint1": "檔案以標籤頁形式在單一視窗中開啟；無需先設定專案或工作區。",
+    "help.overviewPoint2": "隨時按 F1 可檢視完整的鍵盤快速鍵參考。",
+
+    "help.filesTitle": "檔案",
+    "help.filesIntro": "檔案以標籤頁形式開啟；JustCode 沒有專案或工作區的概念。",
+    "help.filesPoint1":
+      "「新增檔案」（Ctrl+N）提供多種語言的起始範本，或建立空白文件；「開啟…」（Ctrl+O）可一次接受多個檔案。",
+    "help.filesPoint2":
+      "「儲存」（Ctrl+S）與「另存新檔」（Ctrl+Shift+S）會直接寫入磁碟；「全部儲存」（Ctrl+Alt+S）一次涵蓋所有已變更的標籤頁。",
+    "help.filesPoint3": "「檔案 ▸ 最近使用的檔案」會在重新啟動後記住最近的 15 個檔案。",
+    "help.filesPoint4": "「檔案 ▸ 檔案關聯…」會向 Windows 註冊 JustCode，使其在支援的檔案類型中作為「開啟方式」選項——或作為預設程式——出現。",
+
+    "help.editingTitle": "編輯",
+    "help.editingIntro": "標準編輯功能，外加剪下、複製、貼上、復原、重做之外的幾項附加功能。",
+    "help.editingPoint1": "Ctrl+/ 會依當前語言的語法切換註解——單行使用行註解，選取範圍跨多行時使用區塊註解。",
+    "help.editingPoint2": "Ctrl+Shift+U / Ctrl+Shift+L 變更選取範圍的大小寫；Ctrl+Alt+G 插入一個新的 GUID。",
+    "help.editingPoint3": "Alt+↑ / Alt+↓ 移動目前的行；Alt+Shift+↑ / Alt+Shift+↓ 將其向上或向下複製一份。",
+    "help.editingPoint4": "Ctrl+點按 新增另一個游標；Alt+拖曳 建立矩形（欄）選取範圍。",
+
+    "help.searchTitle": "搜尋",
+    "help.searchIntro": "在目前檔案內尋找與取代，或直接跳到某個定義處。",
+    "help.searchPoint1": "Ctrl+F 開啟尋找；Ctrl+H 開啟尋找與取代。F3 / Shift+F3 向前或向後重複上一次搜尋。",
+    "help.searchPoint2": "Ctrl+Shift+G 開啟「跳到符號」——可篩選目前檔案中函式、類別及其他宣告的清單。",
+
+    "help.bookmarksTitle": "書籤",
+    "help.bookmarksIntro": "每份文件提供三個編號書籤位置，便於在大型檔案中跳轉，而不必捲動尋找位置。",
+    "help.bookmarksPoint1": "Ctrl+Shift+1 / 2 / 3 於目前行設定或清除書籤；Ctrl+1 / 2 / 3 直接跳至該書籤。",
+
+    "help.splitTabsTitle": "分割檢視與標籤頁",
+    "help.splitTabsIntro": "標籤頁最多可排列成四個窗格。",
+    "help.splitTabsPoint1": "按 Ctrl+K 後再按方向鍵，可沿該方向分割目前窗格；將標籤頁拖曳到螢幕邊緣效果相同。",
+    "help.splitTabsPoint2": "將標籤頁拖曳到另一窗格的標籤列上會將其移動過去；將窗格中最後一個標籤頁拖出會取消分割。",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab 於標籤頁間循環切換；按滑鼠中鍵可關閉標籤頁。",
+
+    "help.foldingTitle": "程式碼摺疊",
+    "help.foldingIntro": "任何區塊都可以摺疊起來，避免擋路。",
+    "help.foldingPoint1": "點按邊界列中的箭頭，或按 Ctrl+Shift+[ / ] 摺疊或展開游標所在的區塊。",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] 一次摺疊或展開檔案中的所有內容。",
+
+    "help.terminalTitle": "終端機",
+    "help.terminalIntro": "內建的終端機面板，而非獨立視窗。",
+    "help.terminalPoint1": "Ctrl+` 用於顯示或隱藏它；Ctrl+Shift+` 會在已執行的終端機旁開啟新的一個。",
+    "help.terminalPoint2": "新終端機會在目前正在編輯的檔案所在的資料夾中啟動。",
+    "help.terminalPoint3":
+      "「檔案 ▸ 在終端機中執行」（Ctrl+F5）會執行目前的指令碼，並在結束後讓殼層保持在提示字元處，以便當場檢視失敗原因。",
+
+    "help.runTitle": "執行",
+    "help.runIntro": "F5 會依檔案實際的外觀或行為顯示目前的檔案，而非以原始文字形式顯示。",
+    "help.runPoint1": "HTML：在預設瀏覽器中開啟。只要該標籤頁仍為開啟狀態，再次執行同一檔案會重新整理該標籤頁，而非開啟新的。",
+    "help.runPoint2": "Markdown：會先轉換為套用樣式的 HTML 文件，然後以同樣方式預覽。",
+    "help.runPoint3": "PowerShell、批次檔與殼層指令碼：會在各自的主控台視窗中執行，指令碼結束後該視窗保持開啟。",
+
+    "help.wordWrapIntro":
+      "預設關閉。自動換行可讓長行不必水平捲動即可顯示在螢幕上，但會打破邊界列與實際行號之間逐行對應的關係。",
+    "help.wordWrapPoint1": "可透過「檢視 ▸ 自動換行」或 Alt+Z 切換。它作用於目前螢幕上顯示的文件。",
+
+    "help.spellCheckIntro": "預設關閉——原始碼中大多數的識別碼依定義來說都是「拼字錯誤」的。",
+    "help.spellCheckPoint1": "以針對實際文字執行檢查的方式運作，而非依賴網頁檢視內建的拼字檢查器，因此拼字錯誤會計入問題總數，並附帶建議的修正。",
+    "help.spellCheckPoint2": "可透過「檢視 ▸ 拼字檢查」切換。",
+
+    "help.languageTitle": "介面語言",
+    "help.languageIntro": "JustCode 本身選單與對話方塊所使用的語言——與任何檔案的內容或所用的程式語言無關。",
+    "help.languagePoint1": "「檢視 ▸ 語言…」會以每種語言自己的名稱列出翻譯，而非其英文名稱，因為對只看得懂中文的人來說，「German」毫無幫助。",
+    "help.languagePoint2": "英文為內建語言；其他語言會在首次選用時下載。",
+
+    "sc.toolbar": "切換工具列",
+    "sc.statusBar": "切換狀態列",
+    "sc.spellCheck": "切換拼字檢查",
+    "sc.bionicReading": "切換仿生閱讀",
+    "sc.cycleTheme": "切換主題（深色 ▸ 淺色 ▸ 自閉症）",
   },
   hr: {
     "menu.file": "Datoteka",
@@ -991,6 +1503,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Mali i brzi uređivač koda.",
     "about.builtWith": "Izrađeno s Tauri 2 i CodeMirror 6.",
     "about.version": "Verzija {version}",
+    "sc.g.menus": "Izbornici",
     "sc.g.file": "Datoteka",
     "sc.g.editing": "Uređivanje",
     "sc.g.bookmarks": "Oznake",
@@ -1016,6 +1529,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+klik na URL",
     "sc.k.clickPath": "Klik na putanju u statusnoj traci",
     "sc.k.clickLanguage": "Klik na jezik u statusnoj traci",
+    "sc.openFileMenu": "Otvori izbornik Datoteka",
+    "sc.openEditMenu": "Otvori izbornik Uredi",
+    "sc.openViewMenu": "Otvori izbornik Prikaz",
+    "sc.openHelpMenu": "Otvori izbornik Pomoć",
     "sc.newFile": "Nova datoteka",
     "sc.openFile": "Otvori datoteku",
     "sc.save": "Spremi",
@@ -1089,6 +1606,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Otvori vezu ispod pokazivača",
     "sc.copyFullPath": "Kopiraj punu putanju",
     "sc.changeMode": "Promijeni jezični način",
+
+    "view.autismTheme": "Tema za autizam",
+    "view.autismThemeHint": "Prigušene boje niskog kontrasta za senzornu osjetljivost",
+    "view.bionicReading": "Bioničko čitanje",
+    "help.autismTheme": "Tema za autizam",
+    "help.bionicReading": "Bioničko čitanje",
+    "toolbar.switchToTheme": "Prijeđi na {theme}",
+
+    "autismHelp.intro":
+      "Prigušena tema niske pobude za senzorno osjetljive korisnike — autizam, ADHD, migrenu i druga stanja vizualnog stresa. Uređivač ostaje smiren za dugotrajno gledanje, bez žrtvovanja čitljivosti.",
+    "autismHelp.point1":
+      "Bez čiste crne ili bijele. Topla tamnosiva pozadina i meki krem tekst izbjegavaju i odsjaj zaslona i efekt oreola koji uzrokuje oštar crno-bijeli kontrast.",
+    "autismHelp.point2":
+      "Nigdje nema crvene ni žute — dviju nijansi koje se najdosljednije navode kao previše stimulirajuće. Pogreške koriste prigušenu terakotu, a istaknuti rezultati pretraživanja prigušeno zlato umjesto uobičajene alarmantne crvene i jarke žute.",
+    "autismHelp.point3":
+      "Svaka boja ima znatno smanjenu zasićenost u odnosu na tamnu i svijetlu temu, tako da ništa ne \"vibrira\" pored susjednih elemenata, iako kontrast prema pozadini ostaje isti.",
+    "autismHelp.point4":
+      "Smirujuće nijanse dominiraju posvuda: prašnjavo plava i kadulja zelena za većinu isticanja sintakse, prigušena lavanda i bež za ostalo.",
+    "autismHelp.footer":
+      "Prijeđite na nju u bilo kojem trenutku putem Prikaz ▸ Tema za autizam, gumbom ispod, ili pritiskom Ctrl+Shift+T za kruženje kroz Tamna ▸ Svijetla ▸ Autizam.",
+    "autismHelp.switch": "Prijeđi na temu za autizam",
+    "autismHelp.active": "Ovo je vaša trenutna tema.",
+
+    "bionicHelp.intro":
+      "Tipografski trik koji podebljava početni dio svake riječi, tako da oko ima manje i kraćih točaka fiksacije po retku. Reklamira se kao pomoć pri čitanju za ADHD, disleksiju, a ponekad i autizam.",
+    "bionicHelp.point1":
+      "Podebljava se otprilike prvih 40% svake riječi, a ostatak ostaje normalne debljine — ideja je da mozak prepoznaje riječ po početku i dopunjuje kraj iz konteksta.",
+    "bionicHelp.point2":
+      "Dokazi su proturječni. Nekoliko kontroliranih studija nije pronašlo mjerljivo poboljšanje brzine čitanja ili razumijevanja u odnosu na običan tekst, a neki čitatelji smatraju da više ometa, a ne manje. Isprobajte umjesto pretpostavke da će pomoći.",
+    "bionicHelp.point3":
+      "Primjenjuje se na bilo koji dokument na zaslonu, isto kao prelamanje teksta — nije ograničeno na prozu, pa uključivanjem tijekom uređivanja koda podebljava i početak identifikatora i ključnih riječi.",
+    "bionicHelp.footer":
+      "Uključite ga u bilo kojem trenutku putem Prikaz ▸ Bioničko čitanje, gumbom ispod, ili pritiskom Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Uključi bioničko čitanje",
+    "bionicHelp.turnOff": "Isključi bioničko čitanje",
+
+    "help.center": "Pomoć i upute",
+    "modal.helpCenterTitle": "Pomoć i upute",
+    "help.searchPlaceholder": "Pretraži pomoć…",
+    "help.noResults": "Nema podudarajućih tema",
+
+    "help.overviewTitle": "Pregled",
+    "help.overviewIntro":
+      "JustCode je mali, brzi uređivač za HTML, CSS, JavaScript i općenit tekst ili kod — izrađen da se brzo otvara i ne smeta, a ne da zamijeni potpuni IDE.",
+    "help.overviewPoint1":
+      "Datoteke se otvaraju kao kartice u jednom prozoru; ne postoji projekt ili radni prostor koji treba prvo postaviti.",
+    "help.overviewPoint2": "Pritisnite F1 u bilo kojem trenutku za potpuni popis tipkovničkih prečaca.",
+
+    "help.filesTitle": "Datoteke",
+    "help.filesIntro": "Datoteke se otvaraju kao kartice; JustCode nema koncept projekta ili radnog prostora.",
+    "help.filesPoint1":
+      "Nova datoteka (Ctrl+N) nudi početne predloške za mnoge jezike ili prazan dokument; Otvori… (Ctrl+O) prihvaća nekoliko datoteka odjednom.",
+    "help.filesPoint2":
+      "Spremi (Ctrl+S) i Spremi kao (Ctrl+Shift+S) pišu izravno na disk; Spremi sve (Ctrl+Alt+S) obuhvaća sve promijenjene kartice odjednom.",
+    "help.filesPoint3": "Datoteka ▸ Nedavne datoteke pamti posljednjih 15 datoteka između ponovnih pokretanja.",
+    "help.filesPoint4":
+      "Datoteka ▸ Povezivanja datoteka… registrira JustCode kod Windowsa tako da se pojavljuje kao opcija \"Otvori pomoću\" — ili zadana — za vrste datoteka koje razumije.",
+
+    "help.editingTitle": "Uređivanje",
+    "help.editingIntro": "Standardno uređivanje, plus nekoliko dodataka uz izrezivanje, kopiranje, lijepljenje, poništavanje i ponavljanje.",
+    "help.editingPoint1":
+      "Ctrl+/ uključuje/isključuje komentar koristeći sintaksu trenutnog jezika — komentare retka za jedan redak, blok-komentare za odabir.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L mijenjaju veličinu slova odabira; Ctrl+Alt+G umeće novi GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ pomiče trenutni redak; Alt+Shift+↑ / Alt+Shift+↓ ga duplicira gore ili dolje.",
+    "help.editingPoint4": "Ctrl+klik dodaje još jedan kursor; Alt+povlačenje stvara pravokutni (stupčasti) odabir.",
+
+    "help.searchTitle": "Pretraživanje",
+    "help.searchIntro": "Pronalaženje i zamjena unutar trenutne datoteke, ili izravan skok na definiciju.",
+    "help.searchPoint1":
+      "Ctrl+F otvara Pronađi; Ctrl+H otvara Pronađi i zamijeni. F3 / Shift+F3 ponavljaju posljednje pretraživanje unaprijed ili unatrag.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G otvara Idi na simbol — popis funkcija, klasa i drugih deklaracija u trenutnoj datoteci koji se može filtrirati.",
+
+    "help.bookmarksTitle": "Oznake",
+    "help.bookmarksIntro":
+      "Tri numerirana mjesta za oznake po dokumentu, za kretanje po velikoj datoteci bez pomicanja radi pronalaska mjesta.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 postavlja ili briše oznaku na trenutnom retku; Ctrl+1 / 2 / 3 skače izravno na nju.",
+
+    "help.splitTabsTitle": "Podijeljeni prikaz i kartice",
+    "help.splitTabsIntro": "Kartice se mogu rasporediti u do četiri okna.",
+    "help.splitTabsPoint1":
+      "Ctrl+K, a zatim strelica dijeli aktivno okno u tom smjeru; povlačenje kartice do ruba zaslona radi isto.",
+    "help.splitTabsPoint2":
+      "Povlačenje kartice na traku kartica drugog okna premješta je onamo; povlačenje posljednje kartice izvan okna poništava podjelu.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab kruže kroz kartice; klik srednjom tipkom zatvara karticu.",
+
+    "help.foldingTitle": "Sažimanje koda",
+    "help.foldingIntro": "Svaki se blok može sažeti kako ne bi smetao.",
+    "help.foldingPoint1":
+      "Kliknite kvačicu u žlijebu ili pritisnite Ctrl+Shift+[ / ] za sažimanje ili razvijanje bloka na kursoru.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] sažima ili razvija sve u datoteci odjednom.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Ugrađena ploča terminala, a ne zaseban prozor.",
+    "help.terminalPoint1":
+      "Ctrl+` prikazuje ili skriva ga; Ctrl+Shift+` otvara novi uz bilo koji koji već radi.",
+    "help.terminalPoint2": "Novi terminal počinje u mapi datoteke koja se trenutno uređuje.",
+    "help.terminalPoint3":
+      "Datoteka ▸ Pokreni u terminalu (Ctrl+F5) pokreće trenutnu skriptu i ostavlja ljusku otvorenu na naredbenom retku nakon toga, tako da se neuspjeh može odmah istražiti.",
+
+    "help.runTitle": "Pokreni",
+    "help.runIntro": "F5 prikazuje trenutnu datoteku onako kako će stvarno izgledati ili se ponašati, umjesto kao izvorni tekst.",
+    "help.runPoint1":
+      "HTML: otvara se u zadanom pregledniku. Ponovno pokretanje iste datoteke osvježava tu karticu umjesto otvaranja druge, dok god je još otvorena.",
+    "help.runPoint2": "Markdown: prvo se prikazuje kao oblikovan HTML dokument, a zatim pregledava na isti način.",
+    "help.runPoint3":
+      "PowerShell, Batch i Shell skripte: pokreću se u vlastitom konzolnom prozoru koji ostaje otvoren nakon završetka skripte.",
+
+    "help.wordWrapIntro":
+      "Isključeno prema zadanim postavkama. Prelamanje zadržava duge retke na zaslonu bez vodoravnog pomicanja, ali narušava odgovaranje retka po retku između žlijeba i stvarnih brojeva redaka.",
+    "help.wordWrapPoint1":
+      "Uključite/isključite putem Prikaz ▸ Prelamanje teksta ili Alt+Z. Primjenjuje se na dokument koji je trenutno na zaslonu.",
+
+    "help.spellCheckIntro": "Isključeno prema zadanim postavkama — većina identifikatora u izvornom kodu je \"pogrešno napisana\" po definiciji.",
+    "help.spellCheckPoint1":
+      "Radi kao linter nad stvarnim tekstom, a ne ugrađena provjera preglednika, pa se pravopisne pogreške broje u ukupnom broju problema i dolaze s predloženim ispravcima.",
+    "help.spellCheckPoint2": "Uključite/isključite putem Prikaz ▸ Provjera pravopisa.",
+
+    "help.languageTitle": "Jezik sučelja",
+    "help.languageIntro":
+      "Jezik vlastitih izbornika i dijaloga JustCodea — neovisan o sadržaju ili programskom jeziku bilo koje datoteke.",
+    "help.languagePoint1":
+      "Prikaz ▸ Jezik… navodi svaki prijevod pod vlastitim imenom, a ne engleskim imenom, jer \"German\" ne pomaže nekome tko čita samo hrvatski.",
+    "help.languagePoint2": "Engleski je ugrađen; svaki drugi jezik preuzima se prilikom prvog odabira.",
+
+    "sc.toolbar": "Uključi/isključi alatnu traku",
+    "sc.statusBar": "Uključi/isključi traku stanja",
+    "sc.spellCheck": "Uključi/isključi provjeru pravopisa",
+    "sc.bionicReading": "Uključi/isključi bioničko čitanje",
+    "sc.cycleTheme": "Kruženje kroz teme (Tamna ▸ Svijetla ▸ Autizam)",
   },
   cs: {
     "menu.file": "Soubor",
@@ -1207,6 +1857,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Malý a rychlý editor kódu.",
     "about.builtWith": "Postaveno na Tauri 2 a CodeMirror 6.",
     "about.version": "Verze {version}",
+    "sc.g.menus": "Nabídky",
     "sc.g.file": "Soubor",
     "sc.g.editing": "Úpravy",
     "sc.g.bookmarks": "Záložky",
@@ -1232,6 +1883,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+kliknutí na URL",
     "sc.k.clickPath": "Klikněte na cestu ve stavovém řádku",
     "sc.k.clickLanguage": "Klikněte na jazyk ve stavovém řádku",
+    "sc.openFileMenu": "Otevřít nabídku Soubor",
+    "sc.openEditMenu": "Otevřít nabídku Úpravy",
+    "sc.openViewMenu": "Otevřít nabídku Zobrazit",
+    "sc.openHelpMenu": "Otevřít nabídku Nápověda",
     "sc.newFile": "Nový soubor",
     "sc.openFile": "Otevřít soubor",
     "sc.save": "Uložit",
@@ -1305,6 +1960,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Otevřít odkaz pod kurzorem",
     "sc.copyFullPath": "Kopírovat úplnou cestu",
     "sc.changeMode": "Změnit jazykový režim",
+
+    "view.autismTheme": "Motiv pro autisty",
+    "view.autismThemeHint": "Tlumené barvy s nízkým kontrastem pro smyslovou citlivost",
+    "view.bionicReading": "Bionické čtení",
+    "help.autismTheme": "Motiv pro autisty",
+    "help.bionicReading": "Bionické čtení",
+    "toolbar.switchToTheme": "Přepnout na {theme}",
+
+    "autismHelp.intro":
+      "Tlumený motiv s nízkou mírou stimulace pro smyslově citlivé uživatele — autismus, ADHD, migrénu a další stavy vizuálního stresu. Udržuje editor klidný na pohled i při dlouhém používání, aniž by obětoval čitelnost.",
+    "autismHelp.point1":
+      "Žádná čistá černá ani bílá. Teplé tmavě šedé pozadí a jemný krémový text se vyhýbají jak oslnění obrazovky, tak halo efektu způsobenému ostrým černobílým kontrastem.",
+    "autismHelp.point2":
+      "Nikde žádná červená ani žlutá — dva odstíny nejčastěji uváděné jako přestimulující. Chyby používají tlumenou terakotu a zvýraznění hledání tlumené zlaté místo obvyklé poplašné červené a jasně žluté.",
+    "autismHelp.point3":
+      "Každá barva má sytost výrazně sníženou oproti tmavému a světlému motivu, takže nic \"nevibruje\" vedle sousedních prvků, i když kontrast vůči pozadí zůstává stejný.",
+    "autismHelp.point4":
+      "Uklidňující odstíny dominují všude: prašně modrá a šalvějová zelená pro většinu zvýraznění syntaxe, tlumená levandulová a béžová pro zbytek.",
+    "autismHelp.footer":
+      "Přepněte na něj kdykoli přes Zobrazit ▸ Motiv pro autisty, tlačítkem níže, nebo stisknutím Ctrl+Shift+T pro cyklení Tmavý ▸ Světlý ▸ Autismus.",
+    "autismHelp.switch": "Přepnout na motiv pro autisty",
+    "autismHelp.active": "Toto je váš aktuální motiv.",
+
+    "bionicHelp.intro":
+      "Typografický trik, který ztuční počáteční část každého slova, takže oko potřebuje méně a kratších fixačních bodů na řádek. Prodává se jako pomůcka pro čtení při ADHD, dyslexii a někdy i autismu.",
+    "bionicHelp.point1":
+      "Ztuční se přibližně prvních 40 % každého slova, zbytek zůstává normální tloušťky — myšlenka je, že mozek rozpozná slovo podle začátku a konec doplní z kontextu.",
+    "bionicHelp.point2":
+      "Důkazy jsou nejednoznačné. Několik kontrolovaných studií nezjistilo měřitelné zlepšení rychlosti čtení ani porozumění oproti běžnému textu a někteří čtenáři jej považují spíše za rušivější. Vyzkoušejte ho, místo abyste předpokládali, že pomůže.",
+    "bionicHelp.point3":
+      "Vztahuje se na jakýkoli dokument na obrazovce, stejně jako zalamování řádků — není omezeno na prózu, takže zapnutí při úpravě kódu ztuční i začátek identifikátorů a klíčových slov.",
+    "bionicHelp.footer":
+      "Zapněte ho kdykoli přes Zobrazit ▸ Bionické čtení, tlačítkem níže, nebo stisknutím Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Zapnout bionické čtení",
+    "bionicHelp.turnOff": "Vypnout bionické čtení",
+
+    "help.center": "Nápověda a návody",
+    "modal.helpCenterTitle": "Nápověda a návody",
+    "help.searchPlaceholder": "Hledat v nápovědě…",
+    "help.noResults": "Žádná odpovídající témata",
+
+    "help.overviewTitle": "Přehled",
+    "help.overviewIntro":
+      "JustCode je malý, rychlý editor pro HTML, CSS, JavaScript a obecný text nebo kód — vytvořený tak, aby se rychle otevíral a nepřekážel, ne aby nahradil plnohodnotné IDE.",
+    "help.overviewPoint1":
+      "Soubory se otevírají jako karty v jednom okně; neexistuje projekt ani pracovní prostor, který by bylo nutné nejprve nastavit.",
+    "help.overviewPoint2": "Kdykoli stiskněte F1 pro úplný přehled klávesových zkratek.",
+
+    "help.filesTitle": "Soubory",
+    "help.filesIntro": "Soubory se otevírají jako karty; JustCode nemá koncept projektu ani pracovního prostoru.",
+    "help.filesPoint1":
+      "Nový soubor (Ctrl+N) nabízí počáteční šablony pro mnoho jazyků nebo prázdný dokument; Otevřít… (Ctrl+O) přijímá více souborů najednou.",
+    "help.filesPoint2":
+      "Uložit (Ctrl+S) a Uložit jako (Ctrl+Shift+S) zapisují přímo na disk; Uložit vše (Ctrl+Alt+S) pokryje všechny změněné karty najednou.",
+    "help.filesPoint3": "Soubor ▸ Poslední soubory si pamatuje posledních 15 souborů napříč restarty.",
+    "help.filesPoint4":
+      "Soubor ▸ Přidružení souborů… zaregistruje JustCode ve Windows, takže se objeví jako volba \"Otevřít pomocí\" — nebo jako výchozí — pro typy souborů, kterým rozumí.",
+
+    "help.editingTitle": "Úpravy",
+    "help.editingIntro": "Standardní úpravy plus pár extra funkcí navíc k vyjmutí, kopírování, vložení, zpět a znovu.",
+    "help.editingPoint1":
+      "Ctrl+/ přepíná komentář pomocí syntaxe aktuálního jazyka — řádkové komentáře pro jeden řádek, blokové komentáře přes výběr.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L mění velikost písmen výběru; Ctrl+Alt+G vloží nový GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ přesune aktuální řádek; Alt+Shift+↑ / Alt+Shift+↓ jej zdvojí nahoru nebo dolů.",
+    "help.editingPoint4": "Ctrl+klik přidá další kurzor; Alt+tažení vytvoří obdélníkový (sloupcový) výběr.",
+
+    "help.searchTitle": "Hledání",
+    "help.searchIntro": "Hledání a nahrazování uvnitř aktuálního souboru, nebo skok přímo na definici.",
+    "help.searchPoint1":
+      "Ctrl+F otevře Hledat; Ctrl+H otevře Hledat a nahradit. F3 / Shift+F3 opakují poslední hledání vpřed nebo vzad.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G otevře Přejít na symbol — filtrovatelný seznam funkcí, tříd a dalších deklarací v aktuálním souboru.",
+
+    "help.bookmarksTitle": "Záložky",
+    "help.bookmarksIntro":
+      "Tři číslované sloty záložek na dokument pro pohyb po velkém souboru bez posouvání za účelem nalezení místa.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 nastaví nebo zruší záložku na aktuálním řádku; Ctrl+1 / 2 / 3 na ni přímo skočí.",
+
+    "help.splitTabsTitle": "Rozdělené zobrazení a karty",
+    "help.splitTabsIntro": "Karty lze uspořádat až do čtyř panelů.",
+    "help.splitTabsPoint1":
+      "Ctrl+K a poté šipka rozdělí aktivní panel tím směrem; přetažení karty k okraji obrazovky udělá totéž.",
+    "help.splitTabsPoint2":
+      "Přetažení karty na lištu karet jiného panelu ji tam přesune; přetažení poslední karty ven z panelu zruší rozdělení.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab cyklují mezi kartami; kliknutí prostředním tlačítkem kartu zavře.",
+
+    "help.foldingTitle": "Skládání kódu",
+    "help.foldingIntro": "Jakýkoli blok lze sbalit, aby nepřekážel.",
+    "help.foldingPoint1":
+      "Klikněte na šipku v postranním pruhu, nebo stiskněte Ctrl+Shift+[ / ] pro sbalení nebo rozbalení bloku u kurzoru.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] sbalí nebo rozbalí vše v souboru najednou.",
+
+    "help.terminalTitle": "Terminál",
+    "help.terminalIntro": "Integrovaný panel terminálu, nikoli samostatné okno.",
+    "help.terminalPoint1":
+      "Ctrl+` jej zobrazí nebo skryje; Ctrl+Shift+` otevře nový vedle jakéhokoli již běžícího.",
+    "help.terminalPoint2": "Nový terminál se spustí ve složce právě upravovaného souboru.",
+    "help.terminalPoint3":
+      "Soubor ▸ Spustit v terminálu (Ctrl+F5) spustí aktuální skript a poté nechá shell otevřený na příkazovém řádku, takže lze selhání ihned prozkoumat.",
+
+    "help.runTitle": "Spustit",
+    "help.runIntro": "F5 zobrazí aktuální soubor tak, jak bude skutečně vypadat nebo se chovat, místo jako zdrojový text.",
+    "help.runPoint1":
+      "HTML: otevře se ve výchozím prohlížeči. Opětovné spuštění stejného souboru obnoví danou kartu místo otevření další, pokud je stále otevřená.",
+    "help.runPoint2": "Markdown: nejprve se vykreslí jako stylovaný dokument HTML a poté se stejným způsobem zobrazí náhled.",
+    "help.runPoint3":
+      "Skripty PowerShell, Batch a Shell: běží ve vlastním okně konzole, které zůstane otevřené i po dokončení skriptu.",
+
+    "help.wordWrapIntro":
+      "Ve výchozím nastavení vypnuto. Zalamování udrží dlouhé řádky na obrazovce bez posouvání do stran, ale naruší shodu řádku po řádku mezi postranním pruhem a skutečnými čísly řádků.",
+    "help.wordWrapPoint1":
+      "Přepněte přes Zobrazit ▸ Zalamování řádků nebo Alt+Z. Vztahuje se na dokument aktuálně zobrazený na obrazovce.",
+
+    "help.spellCheckIntro": "Ve výchozím nastavení vypnuto — většina identifikátorů ve zdrojovém kódu je z definice \"překlepem\".",
+    "help.spellCheckPoint1":
+      "Běží jako linter nad skutečným textem, nikoli vestavěná kontrola webového zobrazení, takže se překlepy počítají do celkového počtu problémů a přicházejí s navrhovanými opravami.",
+    "help.spellCheckPoint2": "Přepněte přes Zobrazit ▸ Kontrola pravopisu.",
+
+    "help.languageTitle": "Jazyk rozhraní",
+    "help.languageIntro":
+      "Jazyk vlastních nabídek a dialogů JustCode — nezávislý na obsahu nebo programovacím jazyce jakéhokoli souboru.",
+    "help.languagePoint1":
+      "Zobrazit ▸ Jazyk… uvádí každý překlad pod jeho vlastním názvem, nikoli anglickým, protože \"German\" nepomůže někomu, kdo čte pouze česky.",
+    "help.languagePoint2": "Angličtina je vestavěná; každý jiný jazyk se stáhne při prvním výběru.",
+
+    "sc.toolbar": "Přepnout panel nástrojů",
+    "sc.statusBar": "Přepnout stavový řádek",
+    "sc.spellCheck": "Přepnout kontrolu pravopisu",
+    "sc.bionicReading": "Přepnout bionické čtení",
+    "sc.cycleTheme": "Cyklit motivy (Tmavý ▸ Světlý ▸ Autismus)",
   },
   da: {
     "menu.file": "Fil",
@@ -1423,6 +2211,7 @@ export const TRANSLATIONS = {
     "about.tagline": "En lille, hurtig kodeeditor.",
     "about.builtWith": "Bygget med Tauri 2 og CodeMirror 6.",
     "about.version": "Version {version}",
+    "sc.g.menus": "Menuer",
     "sc.g.file": "Fil",
     "sc.g.editing": "Redigering",
     "sc.g.bookmarks": "Bogmærker",
@@ -1448,6 +2237,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+klik på en URL",
     "sc.k.clickPath": "Klik på stien i statuslinjen",
     "sc.k.clickLanguage": "Klik på sproget i statuslinjen",
+    "sc.openFileMenu": "Åbn menuen Fil",
+    "sc.openEditMenu": "Åbn menuen Rediger",
+    "sc.openViewMenu": "Åbn menuen Vis",
+    "sc.openHelpMenu": "Åbn menuen Hjælp",
     "sc.newFile": "Ny fil",
     "sc.openFile": "Åbn fil",
     "sc.save": "Gem",
@@ -1521,6 +2314,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Åbn linket ved markøren",
     "sc.copyFullPath": "Kopiér den fulde sti",
     "sc.changeMode": "Skift sprogtilstand",
+
+    "view.autismTheme": "Autisme-tema",
+    "view.autismThemeHint": "Dæmpede, lavkontrastfarver til sensorisk følsomhed",
+    "view.bionicReading": "Bionisk læsning",
+    "help.autismTheme": "Autisme-tema",
+    "help.bionicReading": "Bionisk læsning",
+    "toolbar.switchToTheme": "Skift til {theme}",
+
+    "autismHelp.intro":
+      "Et dæmpet tema med lav stimulering til sensorisk følsomme brugere — autisme, ADHD, migræne og andre former for visuel stress. Det holder editoren rolig at se på i lange perioder uden at gå på kompromis med læsbarheden.",
+    "autismHelp.point1":
+      "Ingen ren sort eller ren hvid. En varm, mørk kulgrå baggrund og en blød cremefarvet forgrund undgår både skærmblænding og den haloeffekt, som skarp sort-hvid-kontrast forårsager.",
+    "autismHelp.point2":
+      "Ingen rød eller gul nogen steder — de to nuancer, der oftest nævnes som overstimulerende. Fejl bruger en dæmpet terrakotta, og søgemarkeringer en dæmpet guldfarve i stedet for den sædvanlige alarmrøde og skarpe gule.",
+    "autismHelp.point3":
+      "Alle farver har en mætning, der er langt lavere end i det mørke og lyse tema, så intet \"vibrerer\" mod sine naboer, selvom kontrasten mod baggrunden er den samme.",
+    "autismHelp.point4":
+      "Beroligende nuancer dominerer overalt: støvet blå og salvie-grøn til det meste af syntaksfremhævningen, dæmpet lavendel og gråbrun til resten.",
+    "autismHelp.footer":
+      "Skift til det når som helst fra Vis ▸ Autisme-tema, med knappen nedenfor, eller ved at trykke Ctrl+Shift+T for at rotere Mørk ▸ Lys ▸ Autisme.",
+    "autismHelp.switch": "Skift til autisme-tema",
+    "autismHelp.active": "Dette er dit nuværende tema.",
+
+    "bionicHelp.intro":
+      "Et typografisk trick, der gør den forreste del af hvert ord fed, så øjet har færre og kortere fikseringspunkter pr. linje. Det markedsføres som en læsehjælp til ADHD, ordblindhed og nogle gange autisme.",
+    "bionicHelp.point1":
+      "Cirka de første 40 % af hvert ord gøres fed, og resten forbliver normal vægt — tanken er, at hjernen genkender et ord fra begyndelsen og udfylder slutningen ud fra sammenhængen.",
+    "bionicHelp.point2":
+      "Beviserne er blandede. Flere kontrollerede undersøgelser fandt ingen målbar forbedring i læsehastighed eller forståelse i forhold til almindelig tekst, og nogle læsere finder det mere forstyrrende, ikke mindre. Prøv det i stedet for at antage, at det vil hjælpe.",
+    "bionicHelp.point3":
+      "Gælder for ethvert dokument på skærmen, ligesom tekstombrydning — det er ikke begrænset til løbende tekst, så hvis det slås til under redigering af kode, gøres begyndelsen af identifikatorer og nøgleord også fed.",
+    "bionicHelp.footer":
+      "Slå det til når som helst fra Vis ▸ Bionisk læsning, med knappen nedenfor, eller ved at trykke Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Slå bionisk læsning til",
+    "bionicHelp.turnOff": "Slå bionisk læsning fra",
+
+    "help.center": "Hjælp og vejledning",
+    "modal.helpCenterTitle": "Hjælp og vejledning",
+    "help.searchPlaceholder": "Søg i hjælp…",
+    "help.noResults": "Ingen matchende emner",
+
+    "help.overviewTitle": "Oversigt",
+    "help.overviewIntro":
+      "JustCode er en lille, hurtig editor til HTML, CSS, JavaScript og generel tekst eller kode — bygget til at åbne hurtigt og holde sig ude af vejen, ikke til at erstatte et fuldt IDE.",
+    "help.overviewPoint1":
+      "Filer åbnes som faner i ét vindue; der er ikke noget projekt eller arbejdsområde, der skal opsættes først.",
+    "help.overviewPoint2": "Tryk på F1 når som helst for den fulde tastaturgenvejsoversigt.",
+
+    "help.filesTitle": "Filer",
+    "help.filesIntro": "Filer åbnes som faner; JustCode har ikke noget projekt- eller arbejdsområdebegreb.",
+    "help.filesPoint1":
+      "Ny fil (Ctrl+N) tilbyder startskabeloner til mange sprog, eller et tomt dokument; Åbn… (Ctrl+O) accepterer flere filer på én gang.",
+    "help.filesPoint2":
+      "Gem (Ctrl+S) og Gem som (Ctrl+Shift+S) skriver direkte til disk; Gem alle (Ctrl+Alt+S) dækker alle ændrede faner på én gang.",
+    "help.filesPoint3": "Fil ▸ Seneste filer husker de sidste 15 filer på tværs af genstarter.",
+    "help.filesPoint4":
+      "Fil ▸ Filtilknytninger… registrerer JustCode hos Windows, så det vises som en \"Åbn med\"-mulighed — eller standarden — for de filtyper, det forstår.",
+
+    "help.editingTitle": "Redigering",
+    "help.editingIntro": "Standardredigering plus nogle ekstra funktioner ud over klip, kopiér, indsæt, fortryd og gentag.",
+    "help.editingPoint1":
+      "Ctrl+/ skifter en kommentar med den syntaks, det aktuelle sprog har — linjekommentarer for én linje, blokkommentarer på tværs af en markering.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L ændrer markeringens bogstavstørrelse; Ctrl+Alt+G indsætter et nyt GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ flytter den aktuelle linje; Alt+Shift+↑ / Alt+Shift+↓ duplikerer den op eller ned.",
+    "help.editingPoint4": "Ctrl+klik tilføjer en ekstra markør; Alt+træk laver en rektangulær (kolonne-) markering.",
+
+    "help.searchTitle": "Søgning",
+    "help.searchIntro": "Find og erstat i den aktuelle fil, eller hop direkte til en definition.",
+    "help.searchPoint1":
+      "Ctrl+F åbner Find; Ctrl+H åbner Find og erstat. F3 / Shift+F3 gentager sidste søgning fremad eller bagud.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G åbner Gå til symbol — en filtrerbar liste over funktioner, klasser og andre erklæringer i den aktuelle fil.",
+
+    "help.bookmarksTitle": "Bogmærker",
+    "help.bookmarksIntro":
+      "Tre nummererede bogmærkepladser pr. dokument til at hoppe rundt i en stor fil uden at skulle scrolle for at finde sit sted.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 sætter eller fjerner et bogmærke på den aktuelle linje; Ctrl+1 / 2 / 3 hopper direkte til det.",
+
+    "help.splitTabsTitle": "Delt visning og faner",
+    "help.splitTabsIntro": "Faner kan arrangeres i op til fire ruder.",
+    "help.splitTabsPoint1":
+      "Ctrl+K efterfulgt af en piletast deler den aktive rude i den retning; at trække en fane til en skærmkant gør det samme.",
+    "help.splitTabsPoint2":
+      "At trække en fane til en anden rudes fanebjælke flytter den derhen; at trække den sidste fane ud af en rude ophæver opdelingen.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab bladrer gennem faner; midterklik på en fane lukker den.",
+
+    "help.foldingTitle": "Kodesammenfoldning",
+    "help.foldingIntro": "Enhver blok kan foldes sammen for at komme ud af vejen.",
+    "help.foldingPoint1":
+      "Klik på pilen i venstre margen, eller tryk Ctrl+Shift+[ / ] for at folde eller udfolde blokken ved markøren.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] folder eller udfolder alt i filen på én gang.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Et integreret terminalpanel, ikke et separat vindue.",
+    "help.terminalPoint1":
+      "Ctrl+` viser eller skjuler det; Ctrl+Shift+` åbner et nyt ved siden af ethvert allerede kørende.",
+    "help.terminalPoint2": "En ny terminal starter i mappen for den fil, der redigeres i øjeblikket.",
+    "help.terminalPoint3":
+      "Fil ▸ Kør i terminal (Ctrl+F5) kører det aktuelle script og lader skallen stå åben ved en prompt bagefter, så en fejl kan undersøges på stedet.",
+
+    "help.runTitle": "Kør",
+    "help.runIntro": "F5 viser den aktuelle fil, som den faktisk vil se ud eller opføre sig, i stedet for som kildetekst.",
+    "help.runPoint1":
+      "HTML: åbner i standardbrowseren. At køre den samme fil igen genopfrisker den fane i stedet for at åbne en ny, så længe den stadig er åben.",
+    "help.runPoint2": "Markdown: gengives først til et formateret HTML-dokument og forhåndsvises derefter på samme måde.",
+    "help.runPoint3":
+      "PowerShell-, Batch- og Shell-scripts: kører i deres eget konsolvindue, som forbliver åbent, efter scriptet er færdigt.",
+
+    "help.wordWrapIntro":
+      "Slået fra som standard. Ombrydning holder lange linjer på skærmen uden vandret scroll, men den bryder overensstemmelsen mellem venstre margen og de faktiske linjenumre.",
+    "help.wordWrapPoint1":
+      "Slå det til/fra fra Vis ▸ Tekstombrydning eller Alt+Z. Det gælder for det dokument, der aktuelt er på skærmen.",
+
+    "help.spellCheckIntro": "Slået fra som standard — de fleste identifikatorer i kildekode er per definition \"stavet forkert\".",
+    "help.spellCheckPoint1":
+      "Kører som en linter over den faktiske tekst i stedet for webvisningens indbyggede kontrol, så stavefejl tælles med i det samlede problemantal og kommer med foreslåede rettelser.",
+    "help.spellCheckPoint2": "Slå det til/fra fra Vis ▸ Stavekontrol.",
+
+    "help.languageTitle": "Grænsefladesprog",
+    "help.languageIntro":
+      "Sproget for JustCodes egne menuer og dialogbokse — uafhængigt af indholdet eller programmeringssproget i en given fil.",
+    "help.languagePoint1":
+      "Vis ▸ Sprog… viser hver oversættelse under dens eget navn i stedet for det engelske navn, da \"German\" ikke hjælper nogen, der kun læser dansk.",
+    "help.languagePoint2": "Engelsk er indbygget; ethvert andet sprog downloades, første gang det vælges.",
+
+    "sc.toolbar": "Slå værktøjslinjen til/fra",
+    "sc.statusBar": "Slå statuslinjen til/fra",
+    "sc.spellCheck": "Slå stavekontrol til/fra",
+    "sc.bionicReading": "Slå bionisk læsning til/fra",
+    "sc.cycleTheme": "Skift mellem temaer (Mørk ▸ Lys ▸ Autisme)",
   },
   nl: {
     "menu.file": "Bestand",
@@ -1639,6 +2565,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Een kleine, snelle code-editor.",
     "about.builtWith": "Gebouwd met Tauri 2 en CodeMirror 6.",
     "about.version": "Versie {version}",
+    "sc.g.menus": "Menu's",
     "sc.g.file": "Bestand",
     "sc.g.editing": "Bewerken",
     "sc.g.bookmarks": "Bladwijzers",
@@ -1664,6 +2591,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+klik op een URL",
     "sc.k.clickPath": "Klik op het pad in de statusbalk",
     "sc.k.clickLanguage": "Klik op de taal in de statusbalk",
+    "sc.openFileMenu": "Open het menu Bestand",
+    "sc.openEditMenu": "Open het menu Bewerken",
+    "sc.openViewMenu": "Open het menu Beeld",
+    "sc.openHelpMenu": "Open het menu Help",
     "sc.newFile": "Nieuw bestand",
     "sc.openFile": "Bestand openen",
     "sc.save": "Opslaan",
@@ -1737,6 +2668,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Koppeling onder de cursor openen",
     "sc.copyFullPath": "Volledig pad kopiëren",
     "sc.changeMode": "Taalmodus wijzigen",
+
+    "view.autismTheme": "Autismethema",
+    "view.autismThemeHint": "Gedempte kleuren met laag contrast voor sensorische gevoeligheid",
+    "view.bionicReading": "Bionisch lezen",
+    "help.autismTheme": "Autismethema",
+    "help.bionicReading": "Bionisch lezen",
+    "toolbar.switchToTheme": "Overschakelen naar {theme}",
+
+    "autismHelp.intro":
+      "Een gedempt thema met lage prikkeling voor sensorisch gevoelige gebruikers — autisme, ADHD, migraine en andere vormen van visuele stress. Het houdt de editor rustig om lange tijd naar te kijken, zonder in te leveren op leesbaarheid.",
+    "autismHelp.point1":
+      "Geen zuiver zwart of wit. Een warme, donkere houtskoolgrijze achtergrond en een zachte crèmekleurige voorgrond vermijden zowel schermschittering als het halo-effect dat scherp zwart-witcontrast veroorzaakt.",
+    "autismHelp.point2":
+      "Nergens rood of geel — de twee tinten die het vaakst als overprikkelend worden genoemd. Fouten gebruiken een gedempte terracotta en zoekmarkeringen een gedempt goud in plaats van het gebruikelijke alarmrood en felgeel.",
+    "autismHelp.point3":
+      "Elke kleur heeft een verzadiging die ver onder die van het donkere en lichte thema ligt, zodat niets \"trilt\" naast de buren, terwijl het contrast met de achtergrond gelijk blijft.",
+    "autismHelp.point4":
+      "Kalmerende tinten voeren overal de boventoon: stoffig blauw en salieGroen voor de meeste syntaxismarkering, gedempt lavendel en beige voor de rest.",
+    "autismHelp.footer":
+      "Schakel er op elk moment naar over via Beeld ▸ Autismethema, met de knop hieronder, of door Ctrl+Shift+T te drukken om te wisselen tussen Donker ▸ Licht ▸ Autisme.",
+    "autismHelp.switch": "Overschakelen naar autismethema",
+    "autismHelp.active": "Dit is je huidige thema.",
+
+    "bionicHelp.intro":
+      "Een typografische truc die het beginstuk van elk woord vet maakt, zodat het oog minder en kortere fixatiepunten per regel nodig heeft. Het wordt aangeprezen als leeshulpmiddel bij ADHD, dyslexie en soms autisme.",
+    "bionicHelp.point1":
+      "Ongeveer de eerste 40% van elk woord wordt vet, de rest blijft normaal — het idee is dat de hersenen een woord herkennen aan het begin en het einde aanvullen vanuit de context.",
+    "bionicHelp.point2":
+      "Het bewijs is gemengd. Meerdere gecontroleerde studies vonden geen meetbare verbetering in leessnelheid of begrip ten opzichte van gewone tekst, en sommige lezers vinden het juist afleidender. Probeer het uit in plaats van aan te nemen dat het zal helpen.",
+    "bionicHelp.point3":
+      "Geldt voor elk document dat op het scherm staat, net als tekstterugloop — het is niet beperkt tot lopende tekst, dus als je het inschakelt tijdens het bewerken van code, wordt ook het begin van identifiers en trefwoorden vet.",
+    "bionicHelp.footer":
+      "Schakel het op elk moment in via Beeld ▸ Bionisch lezen, met de knop hieronder, of door Ctrl+Shift+B te drukken.",
+    "bionicHelp.turnOn": "Bionisch lezen inschakelen",
+    "bionicHelp.turnOff": "Bionisch lezen uitschakelen",
+
+    "help.center": "Help en handleidingen",
+    "modal.helpCenterTitle": "Help en handleidingen",
+    "help.searchPlaceholder": "Help doorzoeken…",
+    "help.noResults": "Geen overeenkomende onderwerpen",
+
+    "help.overviewTitle": "Overzicht",
+    "help.overviewIntro":
+      "JustCode is een kleine, snelle editor voor HTML, CSS, JavaScript en algemene tekst of code — gebouwd om snel te openen en niet in de weg te zitten, niet om een volledige IDE te vervangen.",
+    "help.overviewPoint1":
+      "Bestanden openen als tabbladen in één venster; er is geen project of werkruimte die eerst moet worden ingesteld.",
+    "help.overviewPoint2": "Druk op elk moment op F1 voor het volledige overzicht van sneltoetsen.",
+
+    "help.filesTitle": "Bestanden",
+    "help.filesIntro": "Bestanden openen als tabbladen; JustCode kent geen project- of werkruimteconcept.",
+    "help.filesPoint1":
+      "Nieuw bestand (Ctrl+N) biedt startsjablonen voor veel talen, of een leeg document; Openen… (Ctrl+O) accepteert meerdere bestanden tegelijk.",
+    "help.filesPoint2":
+      "Opslaan (Ctrl+S) en Opslaan als (Ctrl+Shift+S) schrijven direct naar schijf; Alles opslaan (Ctrl+Alt+S) dekt alle gewijzigde tabbladen in één keer.",
+    "help.filesPoint3": "Bestand ▸ Recente bestanden onthoudt de laatste 15 bestanden tussen herstarts.",
+    "help.filesPoint4":
+      "Bestand ▸ Bestandskoppelingen… registreert JustCode bij Windows, zodat het verschijnt als optie \"Openen met\" — of als standaard — voor de bestandstypen die het begrijpt.",
+
+    "help.editingTitle": "Bewerken",
+    "help.editingIntro": "Standaard bewerken plus wat extra's naast knippen, kopiëren, plakken, ongedaan maken en opnieuw.",
+    "help.editingPoint1":
+      "Ctrl+/ schakelt commentaar in of uit met de syntaxis van de huidige taal — regelcommentaar voor één regel, blokcommentaar over een selectie.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L wijzigen het hoofdlettergebruik van de selectie; Ctrl+Alt+G voegt een nieuwe GUID in.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ verplaatst de huidige regel; Alt+Shift+↑ / Alt+Shift+↓ dupliceert deze omhoog of omlaag.",
+    "help.editingPoint4": "Ctrl+klik voegt nog een cursor toe; Alt+slepen maakt een rechthoekige (kolom-)selectie.",
+
+    "help.searchTitle": "Zoeken",
+    "help.searchIntro": "Zoeken en vervangen binnen het huidige bestand, of direct naar een definitie springen.",
+    "help.searchPoint1":
+      "Ctrl+F opent Zoeken; Ctrl+H opent Zoeken en vervangen. F3 / Shift+F3 herhalen de laatste zoekactie voor- of achteruit.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G opent Ga naar symbool — een filterbare lijst met functies, klassen en andere declaraties in het huidige bestand.",
+
+    "help.bookmarksTitle": "Bladwijzers",
+    "help.bookmarksIntro":
+      "Drie genummerde bladwijzerplekken per document, om door een groot bestand te springen zonder te hoeven scrollen om je plek terug te vinden.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 zet of wist een bladwijzer op de huidige regel; Ctrl+1 / 2 / 3 springt er direct naartoe.",
+
+    "help.splitTabsTitle": "Gesplitste weergave en tabbladen",
+    "help.splitTabsIntro": "Tabbladen kunnen worden ingedeeld in maximaal vier deelvensters.",
+    "help.splitTabsPoint1":
+      "Ctrl+K gevolgd door een pijltoets splitst het actieve deelvenster in die richting; een tabblad naar een schermrand slepen doet hetzelfde.",
+    "help.splitTabsPoint2":
+      "Een tabblad naar de tabbalk van een ander deelvenster slepen verplaatst het daarheen; het laatste tabblad uit een deelvenster slepen maakt de splitsing ongedaan.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab doorlopen tabbladen; middelklikken op een tabblad sluit het.",
+
+    "help.foldingTitle": "Code invouwen",
+    "help.foldingIntro": "Elk blok kan worden ingevouwen om het uit de weg te krijgen.",
+    "help.foldingPoint1":
+      "Klik op het pijltje in de marge, of druk op Ctrl+Shift+[ / ] om het blok bij de cursor in of uit te vouwen.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] vouwt alles in het bestand in één keer in of uit.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Een geïntegreerd terminalpaneel, geen apart venster.",
+    "help.terminalPoint1":
+      "Ctrl+` toont of verbergt het; Ctrl+Shift+` opent een nieuwe naast elke al draaiende terminal.",
+    "help.terminalPoint2": "Een nieuwe terminal start in de map van het bestand dat op dat moment wordt bewerkt.",
+    "help.terminalPoint3":
+      "Bestand ▸ Uitvoeren in terminal (Ctrl+F5) voert het huidige script uit en laat de shell daarna open staan bij een prompt, zodat een fout meteen kan worden onderzocht.",
+
+    "help.runTitle": "Uitvoeren",
+    "help.runIntro": "F5 toont het huidige bestand zoals het er daadwerkelijk uit zal zien of zich zal gedragen, in plaats van als brontekst.",
+    "help.runPoint1":
+      "HTML: opent in de standaardbrowser. Hetzelfde bestand opnieuw uitvoeren ververst dat tabblad in plaats van een tweede te openen, zolang het nog open is.",
+    "help.runPoint2": "Markdown: wordt eerst weergegeven als een opgemaakt HTML-document en daarna op dezelfde manier bekeken.",
+    "help.runPoint3":
+      "PowerShell-, Batch- en Shell-scripts: draaien in een eigen consolevenster, dat open blijft nadat het script is afgerond.",
+
+    "help.wordWrapIntro":
+      "Standaard uitgeschakeld. Terugloop houdt lange regels op het scherm zonder horizontaal scrollen, maar verbreekt de een-op-eenrelatie tussen de marge en de werkelijke regelnummers.",
+    "help.wordWrapPoint1":
+      "Schakel het in of uit via Beeld ▸ Regelterugloop of Alt+Z. Het geldt voor het document dat momenteel op het scherm staat.",
+
+    "help.spellCheckIntro": "Standaard uitgeschakeld — de meeste identifiers in broncode zijn per definitie \"verkeerd gespeld\".",
+    "help.spellCheckPoint1":
+      "Draait als linter over de echte tekst in plaats van de ingebouwde controle van de webweergave, zodat spelfouten worden meegeteld in het totale aantal problemen en met voorgestelde correcties komen.",
+    "help.spellCheckPoint2": "Schakel het in of uit via Beeld ▸ Spellingcontrole.",
+
+    "help.languageTitle": "Interfacetaal",
+    "help.languageIntro":
+      "De taal van JustCodes eigen menu's en dialoogvensters — onafhankelijk van de inhoud of programmeertaal van een bestand.",
+    "help.languagePoint1":
+      "Beeld ▸ Taal… toont elke vertaling onder haar eigen naam in plaats van de Engelse naam, want \"German\" helpt niemand die alleen Nederlands leest.",
+    "help.languagePoint2": "Engels is ingebouwd; elke andere taal wordt gedownload bij de eerste keuze.",
+
+    "sc.toolbar": "Werkbalk in-/uitschakelen",
+    "sc.statusBar": "Statusbalk in-/uitschakelen",
+    "sc.spellCheck": "Spellingcontrole in-/uitschakelen",
+    "sc.bionicReading": "Bionisch lezen in-/uitschakelen",
+    "sc.cycleTheme": "Wisselen tussen thema's (Donker ▸ Licht ▸ Autisme)",
   },
   fi: {
     "menu.file": "Tiedosto",
@@ -1855,6 +2919,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Pieni ja nopea koodieditori.",
     "about.builtWith": "Rakennettu Tauri 2:lla ja CodeMirror 6:lla.",
     "about.version": "Versio {version}",
+    "sc.g.menus": "Valikot",
     "sc.g.file": "Tiedosto",
     "sc.g.editing": "Muokkaus",
     "sc.g.bookmarks": "Kirjanmerkit",
@@ -1880,6 +2945,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+napsauta URL-osoitetta",
     "sc.k.clickPath": "Napsauta polkua tilarivillä",
     "sc.k.clickLanguage": "Napsauta kieltä tilarivillä",
+    "sc.openFileMenu": "Avaa Tiedosto-valikko",
+    "sc.openEditMenu": "Avaa Muokkaa-valikko",
+    "sc.openViewMenu": "Avaa Näytä-valikko",
+    "sc.openHelpMenu": "Avaa Ohje-valikko",
     "sc.newFile": "Uusi tiedosto",
     "sc.openFile": "Avaa tiedosto",
     "sc.save": "Tallenna",
@@ -1953,6 +3022,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Avaa linkki kohdistimen kohdalla",
     "sc.copyFullPath": "Kopioi koko polku",
     "sc.changeMode": "Vaihda kielitila",
+
+    "view.autismTheme": "Autismiteema",
+    "view.autismThemeHint": "Vaimeat, matalakontrastiset värit aistiherkkyyteen",
+    "view.bionicReading": "Bioninen lukeminen",
+    "help.autismTheme": "Autismiteema",
+    "help.bionicReading": "Bioninen lukeminen",
+    "toolbar.switchToTheme": "Vaihda teemaan {theme}",
+
+    "autismHelp.intro":
+      "Vaimea, matalasti kiihdyttävä väriteema aistiherkille käyttäjille — autismi, ADHD, migreeni ja muut visuaalisen stressin tilat. Se pitää editorin rauhallisena katsottavana pitkiäkin aikoja luopumatta luettavuudesta.",
+    "autismHelp.point1":
+      "Ei täysin mustaa eikä täysin valkoista. Lämmin, tumma hiilenharmaa tausta ja pehmeä kermanvärinen teksti välttävät sekä näytön häikäisyn että terävän mustavalkoisen kontrastin aiheuttaman halo-ilmiön.",
+    "autismHelp.point2":
+      "Ei punaista eikä keltaista missään — kaksi sävyä, joita useimmin pidetään yliärsyttävinä. Virheet käyttävät vaimeaa terrakottaa ja hakukorostukset vaimeaa kultaa tavanomaisen hälytyspunaisen ja kirkkaan keltaisen sijaan.",
+    "autismHelp.point3":
+      "Jokaisen värin kylläisyys on selvästi pienempi kuin tumman ja vaalean teeman väreissä, joten mikään ei \"värähtele\" naapureitaan vasten, vaikka kontrasti taustaa vasten pysyy samana.",
+    "autismHelp.point4":
+      "Rauhoittavat sävyt hallitsevat kaikkialla: pölyinen sininen ja salvianvihreä suurimmalle osalle syntaksikorostusta, vaimea laventeli ja beige lopulle.",
+    "autismHelp.footer":
+      "Vaihda siihen milloin tahansa kohdasta Näytä ▸ Autismiteema, alla olevalla painikkeella tai painamalla Ctrl+Shift+T, joka kiertää Tumma ▸ Vaalea ▸ Autismi.",
+    "autismHelp.switch": "Vaihda autismiteemaan",
+    "autismHelp.active": "Tämä on nykyinen teemasi.",
+
+    "bionicHelp.intro":
+      "Typografinen temppu, joka lihavoi jokaisen sanan alkuosan, jolloin silmä tarvitsee vähemmän ja lyhyempiä kiintopisteitä riviä kohti. Sitä markkinoidaan lukemisen apuvälineenä ADHD:hen, lukivaikeuteen ja joskus autismiin.",
+    "bionicHelp.point1":
+      "Noin ensimmäiset 40 % kustakin sanasta lihavoidaan, ja loppuosa pysyy normaalilla painolla — ajatuksena on, että aivot tunnistavat sanan sen alusta ja täydentävät lopun asiayhteydestä.",
+    "bionicHelp.point2":
+      "Näyttö on ristiriitainen. Useat kontrolloidut tutkimukset eivät löytäneet mitattavaa parannusta lukunopeudessa tai ymmärtämisessä tavalliseen tekstiin verrattuna, ja jotkut lukijat pitävät sitä häiritsevämpänä, ei vähemmän. Kokeile sitä sen sijaan, että oletat sen auttavan.",
+    "bionicHelp.point3":
+      "Koskee mitä tahansa näytöllä olevaa asiakirjaa, samoin kuin rivitys — se ei rajoitu proosaan, joten sen käyttäminen koodia muokattaessa lihavoi myös tunnisteiden ja avainsanojen alun.",
+    "bionicHelp.footer":
+      "Kytke se milloin tahansa kohdasta Näytä ▸ Bioninen lukeminen, alla olevalla painikkeella tai painamalla Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Ota bioninen lukeminen käyttöön",
+    "bionicHelp.turnOff": "Poista bioninen lukeminen käytöstä",
+
+    "help.center": "Ohje ja oppaat",
+    "modal.helpCenterTitle": "Ohje ja oppaat",
+    "help.searchPlaceholder": "Hae ohjeesta…",
+    "help.noResults": "Ei vastaavia aiheita",
+
+    "help.overviewTitle": "Yleiskatsaus",
+    "help.overviewIntro":
+      "JustCode on pieni, nopea editori HTML-, CSS-, JavaScript- ja yleisille teksti- tai koodiedostoille — suunniteltu avautumaan nopeasti ja pysymään tieltä pois, ei korvaamaan täysimittaista kehitysympäristöä.",
+    "help.overviewPoint1":
+      "Tiedostot avautuvat välilehtinä yhdessä ikkunassa; ei ole projektia tai työtilaa, joka pitäisi asettaa ensin.",
+    "help.overviewPoint2": "Paina F1 milloin tahansa nähdäksesi koko pikanäppäinluettelon.",
+
+    "help.filesTitle": "Tiedostot",
+    "help.filesIntro": "Tiedostot avautuvat välilehtinä; JustCodessa ei ole projekti- tai työtilakäsitettä.",
+    "help.filesPoint1":
+      "Uusi tiedosto (Ctrl+N) tarjoaa aloitusmalleja monille kielille tai tyhjän asiakirjan; Avaa… (Ctrl+O) hyväksyy useita tiedostoja kerralla.",
+    "help.filesPoint2":
+      "Tallenna (Ctrl+S) ja Tallenna nimellä (Ctrl+Shift+S) kirjoittavat suoraan levylle; Tallenna kaikki (Ctrl+Alt+S) kattaa kaikki muutetut välilehdet kerralla.",
+    "help.filesPoint3": "Tiedosto ▸ Viimeisimmät tiedostot muistaa 15 viimeisintä tiedostoa uudelleenkäynnistysten yli.",
+    "help.filesPoint4":
+      "Tiedosto ▸ Tiedostoliitokset… rekisteröi JustCoden Windowsiin, jolloin se näkyy \"Avaa sovelluksella\" -vaihtoehtona — tai oletuksena — tuntemilleen tiedostotyypeille.",
+
+    "help.editingTitle": "Muokkaus",
+    "help.editingIntro": "Tavallinen muokkaus sekä muutama lisäominaisuus leikkaamisen, kopioinnin, liittämisen, kumoamisen ja uudelleentekemisen lisäksi.",
+    "help.editingPoint1":
+      "Ctrl+/ vaihtaa kommentin nykyisen kielen syntaksilla — rivikommentit yhdelle riville, lohkokommentit valinnan yli.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L muuttavat valinnan kirjainkokoa; Ctrl+Alt+G lisää uuden GUID:n.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ siirtää nykyistä riviä; Alt+Shift+↑ / Alt+Shift+↓ kahdentaa sen ylös- tai alaspäin.",
+    "help.editingPoint4": "Ctrl+napsautus lisää toisen kohdistimen; Alt+veto tekee suorakulmaisen (sarake-) valinnan.",
+
+    "help.searchTitle": "Haku",
+    "help.searchIntro": "Etsi ja korvaa nykyisestä tiedostosta, tai hyppää suoraan määrittelyyn.",
+    "help.searchPoint1":
+      "Ctrl+F avaa Etsi; Ctrl+H avaa Etsi ja korvaa. F3 / Shift+F3 toistavat viimeisimmän haun eteen- tai taaksepäin.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G avaa Siirry symboliin — suodatettavan luettelon nykyisen tiedoston funktioista, luokista ja muista määrittelyistä.",
+
+    "help.bookmarksTitle": "Kirjanmerkit",
+    "help.bookmarksIntro":
+      "Kolme numeroitua kirjanmerkkipaikkaa asiakirjaa kohti, joiden avulla voi liikkua suuressa tiedostossa vierittämättä paikkaa etsiäkseen.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 asettaa tai poistaa kirjanmerkin nykyiseltä riviltä; Ctrl+1 / 2 / 3 hyppää suoraan siihen.",
+
+    "help.splitTabsTitle": "Jaettu näkymä ja välilehdet",
+    "help.splitTabsIntro": "Välilehdet voidaan järjestää enintään neljään ruutuun.",
+    "help.splitTabsPoint1":
+      "Ctrl+K ja sen jälkeen nuolinäppäin jakaa aktiivisen ruudun siihen suuntaan; välilehden vetäminen näytön reunaan tekee saman.",
+    "help.splitTabsPoint2":
+      "Välilehden vetäminen toisen ruudun välilehtipalkkiin siirtää sen sinne; viimeisen välilehden vetäminen pois ruudusta peruu jaon.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab kiertävät välilehtiä; keskiklikkaus välilehdellä sulkee sen.",
+
+    "help.foldingTitle": "Koodin taittaminen",
+    "help.foldingIntro": "Minkä tahansa lohkon voi taittaa kokoon pois tieltä.",
+    "help.foldingPoint1":
+      "Napsauta nuolta marginaalissa tai paina Ctrl+Shift+[ / ] taittaaksesi tai avataksesi kohdistimen kohdalla olevan lohkon.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] taittaa tai avaa kaiken tiedostossa kerralla.",
+
+    "help.terminalTitle": "Pääte",
+    "help.terminalIntro": "Sisäänrakennettu päätepaneeli, ei erillinen ikkuna.",
+    "help.terminalPoint1":
+      "Ctrl+` näyttää tai piilottaa sen; Ctrl+Shift+` avaa uuden minkä tahansa jo käynnissä olevan rinnalle.",
+    "help.terminalPoint2": "Uusi pääte käynnistyy sen tiedoston kansiossa, jota parhaillaan muokataan.",
+    "help.terminalPoint3":
+      "Tiedosto ▸ Suorita päätteessä (Ctrl+F5) suorittaa nykyisen komentosarjan ja jättää komentotulkin auki kehotteeseen sen jälkeen, jotta virhettä voi tutkia paikan päällä.",
+
+    "help.runTitle": "Suorita",
+    "help.runIntro": "F5 näyttää nykyisen tiedoston sellaisena kuin se todella näyttää tai käyttäytyy, ei lähdetekstinä.",
+    "help.runPoint1":
+      "HTML: avautuu oletusselaimessa. Saman tiedoston suorittaminen uudelleen päivittää kyseisen välilehden sen sijaan, että avaisi toisen, kunhan se on yhä auki.",
+    "help.runPoint2": "Markdown: hahmonnetaan ensin tyylitellyksi HTML-asiakirjaksi ja esikatsellaan sitten samalla tavalla.",
+    "help.runPoint3":
+      "PowerShell-, Batch- ja Shell-komentosarjat: suoritetaan omassa konsoli-ikkunassaan, joka jää auki komentosarjan päätyttyä.",
+
+    "help.wordWrapIntro":
+      "Pois päältä oletuksena. Rivitys pitää pitkät rivit näytöllä ilman vaakavieritystä, mutta se rikkoo marginaalin ja todellisten rivinumeroiden yksi riviä kohti -vastaavuuden.",
+    "help.wordWrapPoint1":
+      "Kytke se kohdasta Näytä ▸ Rivitys tai Alt+Z. Se koskee sitä asiakirjaa, joka on parhaillaan näytöllä.",
+
+    "help.spellCheckIntro": "Pois päältä oletuksena — useimmat lähdekoodin tunnisteet ovat määritelmän mukaan \"väärin kirjoitettuja\".",
+    "help.spellCheckPoint1":
+      "Toimii lintterinä varsinaisen tekstin päällä eikä selainnäkymän sisäänrakennetun tarkistuksen avulla, joten kirjoitusvirheet lasketaan mukaan ongelmien kokonaismäärään ja niiden mukana tulee korjausehdotuksia.",
+    "help.spellCheckPoint2": "Kytke se kohdasta Näytä ▸ Oikoluku.",
+
+    "help.languageTitle": "Käyttöliittymän kieli",
+    "help.languageIntro":
+      "JustCoden omien valikkojen ja valintaikkunoiden kieli — riippumaton minkään tiedoston sisällöstä tai ohjelmointikielestä.",
+    "help.languagePoint1":
+      "Näytä ▸ Kieli… luettelee jokaisen käännöksen sen omalla nimellä eikä englanninkielisellä nimellä, sillä \"German\" ei auta ketään, joka lukee vain suomea.",
+    "help.languagePoint2": "Englanti on sisäänrakennettu; jokainen muu kieli ladataan, kun se valitaan ensimmäisen kerran.",
+
+    "sc.toolbar": "Työkalurivi päälle/pois",
+    "sc.statusBar": "Tilarivi päälle/pois",
+    "sc.spellCheck": "Oikoluku päälle/pois",
+    "sc.bionicReading": "Ota bioninen lukeminen käyttöön/pois",
+    "sc.cycleTheme": "Vaihda teemaa (Tumma ▸ Vaalea ▸ Autismi)",
   },
   fr: {
     "menu.file": "Fichier",
@@ -2071,6 +3273,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Un éditeur de code léger et rapide.",
     "about.builtWith": "Conçu avec Tauri 2 et CodeMirror 6.",
     "about.version": "Version {version}",
+    "sc.g.menus": "Menus",
     "sc.g.file": "Fichier",
     "sc.g.editing": "Édition",
     "sc.g.bookmarks": "Signets",
@@ -2096,6 +3299,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+clic sur une URL",
     "sc.k.clickPath": "Cliquer sur le chemin dans la barre d'état",
     "sc.k.clickLanguage": "Cliquer sur le langage dans la barre d'état",
+    "sc.openFileMenu": "Ouvrir le menu Fichier",
+    "sc.openEditMenu": "Ouvrir le menu Édition",
+    "sc.openViewMenu": "Ouvrir le menu Affichage",
+    "sc.openHelpMenu": "Ouvrir le menu Aide",
     "sc.newFile": "Nouveau fichier",
     "sc.openFile": "Ouvrir un fichier",
     "sc.save": "Enregistrer",
@@ -2169,6 +3376,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Ouvrir le lien sous le curseur",
     "sc.copyFullPath": "Copier le chemin complet",
     "sc.changeMode": "Changer le mode de langage",
+
+    "view.autismTheme": "Thème Autisme",
+    "view.autismThemeHint": "Couleurs sourdes et peu contrastées pour la sensibilité sensorielle",
+    "view.bionicReading": "Lecture bionique",
+    "help.autismTheme": "Thème Autisme",
+    "help.bionicReading": "Lecture bionique",
+    "toolbar.switchToTheme": "Passer au thème {theme}",
+
+    "autismHelp.intro":
+      "Un thème de couleurs sourdes et peu stimulantes pour les utilisateurs sensibles sur le plan sensoriel — autisme, TDAH, migraine et autres troubles de stress visuel. Il garde l'éditeur apaisant à regarder sur de longues périodes, sans sacrifier la lisibilité.",
+    "autismHelp.point1":
+      "Ni noir pur ni blanc pur. Un fond gris anthracite chaud et un texte crème doux évitent à la fois l'éblouissement de l'écran et l'effet de halo causé par un contraste noir-blanc marqué.",
+    "autismHelp.point2":
+      "Aucun rouge ni jaune nulle part — les deux teintes les plus souvent signalées comme surstimulantes. Les erreurs utilisent un terracotta sourd et les surlignages de recherche un or sourd, à la place du rouge d'alerte et du jaune vif habituels.",
+    "autismHelp.point3":
+      "Chaque couleur a une saturation bien inférieure à celle des thèmes Sombre et Clair, de sorte que rien ne \"vibre\" à côté de ses voisins, même si le contraste avec le fond reste le même.",
+    "autismHelp.point4":
+      "Des teintes apaisantes dominent partout : bleu poussiéreux et vert sauge pour la majeure partie de la coloration syntaxique, lavande sourd et beige pour le reste.",
+    "autismHelp.footer":
+      "Basculez vers lui à tout moment depuis Affichage ▸ Thème Autisme, avec le bouton ci-dessous, ou en appuyant sur Ctrl+Shift+T pour faire défiler Sombre ▸ Clair ▸ Autisme.",
+    "autismHelp.switch": "Passer au thème Autisme",
+    "autismHelp.active": "C'est votre thème actuel.",
+
+    "bionicHelp.intro":
+      "Une astuce typographique qui met en gras le début de chaque mot, afin que l'œil ait moins de points de fixation, et plus courts, par ligne. Elle est présentée comme une aide à la lecture pour le TDAH, la dyslexie et parfois l'autisme.",
+    "bionicHelp.point1":
+      "Environ les premiers 40 % de chaque mot sont mis en gras, le reste conservant une graisse normale — l'idée étant que le cerveau reconnaît un mot dès son début et complète la fin à partir du contexte.",
+    "bionicHelp.point2":
+      "Les preuves sont mitigées. Plusieurs études contrôlées n'ont trouvé aucun gain mesurable en vitesse de lecture ou en compréhension par rapport à un texte ordinaire, et certains lecteurs la trouvent plus distrayante, pas moins. Essayez-la plutôt que de supposer qu'elle aidera.",
+    "bionicHelp.point3":
+      "S'applique à tout document à l'écran, comme le retour à la ligne — elle ne se limite pas à la prose, donc l'activer en modifiant du code met aussi en gras le début des identifiants et des mots-clés.",
+    "bionicHelp.footer":
+      "Activez-la à tout moment depuis Affichage ▸ Lecture bionique, avec le bouton ci-dessous, ou en appuyant sur Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Activer la lecture bionique",
+    "bionicHelp.turnOff": "Désactiver la lecture bionique",
+
+    "help.center": "Aide et guides",
+    "modal.helpCenterTitle": "Aide et guides",
+    "help.searchPlaceholder": "Rechercher dans l'aide…",
+    "help.noResults": "Aucun sujet correspondant",
+
+    "help.overviewTitle": "Présentation",
+    "help.overviewIntro":
+      "JustCode est un petit éditeur rapide pour HTML, CSS, JavaScript et le texte ou code en général — conçu pour s'ouvrir rapidement et rester discret, pas pour remplacer un IDE complet.",
+    "help.overviewPoint1":
+      "Les fichiers s'ouvrent en onglets dans une seule fenêtre ; il n'y a pas de projet ou d'espace de travail à configurer au préalable.",
+    "help.overviewPoint2": "Appuyez sur F1 à tout moment pour la référence complète des raccourcis clavier.",
+
+    "help.filesTitle": "Fichiers",
+    "help.filesIntro": "Les fichiers s'ouvrent en onglets ; JustCode n'a pas de notion de projet ou d'espace de travail.",
+    "help.filesPoint1":
+      "Nouveau fichier (Ctrl+N) propose des modèles de départ pour de nombreux langages, ou un document vierge ; Ouvrir… (Ctrl+O) accepte plusieurs fichiers à la fois.",
+    "help.filesPoint2":
+      "Enregistrer (Ctrl+S) et Enregistrer sous (Ctrl+Shift+S) écrivent directement sur le disque ; Tout enregistrer (Ctrl+Alt+S) couvre tous les onglets modifiés en une fois.",
+    "help.filesPoint3": "Fichier ▸ Fichiers récents mémorise les 15 derniers fichiers entre les redémarrages.",
+    "help.filesPoint4":
+      "Fichier ▸ Associations de fichiers… enregistre JustCode auprès de Windows afin qu'il apparaisse comme option \"Ouvrir avec\" — ou comme application par défaut — pour les types de fichiers qu'il comprend.",
+
+    "help.editingTitle": "Édition",
+    "help.editingIntro": "Édition standard, plus quelques extras au-delà du couper, copier, coller, annuler et rétablir.",
+    "help.editingPoint1":
+      "Ctrl+/ bascule un commentaire selon la syntaxe du langage actuel — commentaires de ligne pour une seule ligne, commentaires de bloc sur une sélection.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L changent la casse de la sélection ; Ctrl+Alt+G insère un nouveau GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ déplace la ligne actuelle ; Alt+Shift+↑ / Alt+Shift+↓ la duplique vers le haut ou le bas.",
+    "help.editingPoint4": "Ctrl+clic ajoute un autre curseur ; Alt+glisser crée une sélection rectangulaire (en colonne).",
+
+    "help.searchTitle": "Recherche",
+    "help.searchIntro": "Rechercher et remplacer dans le fichier actuel, ou sauter directement à une définition.",
+    "help.searchPoint1":
+      "Ctrl+F ouvre Rechercher ; Ctrl+H ouvre Rechercher et remplacer. F3 / Maj+F3 répètent la dernière recherche en avant ou en arrière.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G ouvre Aller au symbole — une liste filtrable des fonctions, classes et autres déclarations du fichier actuel.",
+
+    "help.bookmarksTitle": "Signets",
+    "help.bookmarksIntro":
+      "Trois emplacements de signets numérotés par document, pour se déplacer dans un grand fichier sans défiler pour retrouver sa place.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 définit ou efface un signet à la ligne actuelle ; Ctrl+1 / 2 / 3 y saute directement.",
+
+    "help.splitTabsTitle": "Affichage divisé et onglets",
+    "help.splitTabsIntro": "Les onglets peuvent être organisés en jusqu'à quatre volets.",
+    "help.splitTabsPoint1":
+      "Ctrl+K puis une touche fléchée divise le volet actif dans cette direction ; faire glisser un onglet vers un bord de l'écran fait de même.",
+    "help.splitTabsPoint2":
+      "Faire glisser un onglet sur la barre d'onglets d'un autre volet l'y déplace ; faire glisser le dernier onglet hors d'un volet annule la division.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Maj+Tab font défiler les onglets ; un clic central sur un onglet le ferme.",
+
+    "help.foldingTitle": "Pliage du code",
+    "help.foldingIntro": "Tout bloc peut être replié pour ne plus gêner.",
+    "help.foldingPoint1":
+      "Cliquez sur le chevron dans la marge, ou appuyez sur Ctrl+Maj+[ / ] pour replier ou déplier le bloc au niveau du curseur.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] replie ou déplie tout le fichier en une fois.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Un panneau de terminal intégré, pas une fenêtre séparée.",
+    "help.terminalPoint1":
+      "Ctrl+` l'affiche ou le masque ; Ctrl+Maj+` en ouvre un nouveau à côté de tout terminal déjà en cours.",
+    "help.terminalPoint2": "Un nouveau terminal démarre dans le dossier du fichier en cours d'édition.",
+    "help.terminalPoint3":
+      "Fichier ▸ Exécuter dans le terminal (Ctrl+F5) exécute le script actuel et laisse ensuite le shell ouvert à une invite, afin qu'un échec puisse être examiné sur place.",
+
+    "help.runTitle": "Exécuter",
+    "help.runIntro": "F5 affiche le fichier actuel tel qu'il apparaîtra ou se comportera réellement, plutôt que comme texte source.",
+    "help.runPoint1":
+      "HTML : s'ouvre dans le navigateur par défaut. Exécuter à nouveau le même fichier actualise cet onglet au lieu d'en ouvrir un second, tant qu'il reste ouvert.",
+    "help.runPoint2": "Markdown : d'abord rendu en un document HTML stylisé, puis prévisualisé de la même manière.",
+    "help.runPoint3":
+      "Scripts PowerShell, Batch et Shell : s'exécutent dans leur propre fenêtre de console, qui reste ouverte une fois le script terminé.",
+
+    "help.wordWrapIntro":
+      "Désactivé par défaut. Le retour à la ligne garde les lignes longues à l'écran sans défilement horizontal, mais rompt la correspondance ligne par ligne entre la marge et les numéros de ligne réels.",
+    "help.wordWrapPoint1":
+      "Activez-le depuis Affichage ▸ Retour à la ligne ou Alt+Z. Il s'applique au document actuellement à l'écran.",
+
+    "help.spellCheckIntro": "Désactivée par défaut — la plupart des identifiants dans le code source sont \"mal orthographiés\" par définition.",
+    "help.spellCheckPoint1":
+      "Fonctionne comme un linter sur le texte réel plutôt que le correcteur intégré de la vue web, donc les fautes d'orthographe sont comptées dans le total des problèmes et accompagnées de corrections suggérées.",
+    "help.spellCheckPoint2": "Activez-la depuis Affichage ▸ Correction orthographique.",
+
+    "help.languageTitle": "Langue de l'interface",
+    "help.languageIntro":
+      "La langue des menus et boîtes de dialogue propres à JustCode — indépendante du contenu ou du langage de programmation d'un fichier.",
+    "help.languagePoint1":
+      "Affichage ▸ Langue… liste chaque traduction sous son propre nom plutôt que son nom anglais, car \"German\" n'aide personne qui ne lit que le français.",
+    "help.languagePoint2": "L'anglais est intégré ; toute autre langue est téléchargée lors de sa première sélection.",
+
+    "sc.toolbar": "Afficher/masquer la barre d'outils",
+    "sc.statusBar": "Afficher/masquer la barre d'état",
+    "sc.spellCheck": "Activer/désactiver la correction orthographique",
+    "sc.bionicReading": "Activer/désactiver la lecture bionique",
+    "sc.cycleTheme": "Changer de thème (Sombre ▸ Clair ▸ Autisme)",
   },
   de: {
     "menu.file": "Datei",
@@ -2287,6 +3627,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Ein kleiner, schneller Code-Editor.",
     "about.builtWith": "Erstellt mit Tauri 2 und CodeMirror 6.",
     "about.version": "Version {version}",
+    "sc.g.menus": "Menüs",
     "sc.g.file": "Datei",
     "sc.g.editing": "Bearbeiten",
     "sc.g.bookmarks": "Lesezeichen",
@@ -2312,6 +3653,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Strg+Klick auf eine URL",
     "sc.k.clickPath": "Auf den Pfad in der Statusleiste klicken",
     "sc.k.clickLanguage": "Auf die Sprache in der Statusleiste klicken",
+    "sc.openFileMenu": "Menü Datei öffnen",
+    "sc.openEditMenu": "Menü Bearbeiten öffnen",
+    "sc.openViewMenu": "Menü Ansicht öffnen",
+    "sc.openHelpMenu": "Menü Hilfe öffnen",
     "sc.newFile": "Neue Datei",
     "sc.openFile": "Datei öffnen",
     "sc.save": "Speichern",
@@ -2385,6 +3730,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Link unter der Einfügemarke öffnen",
     "sc.copyFullPath": "Vollständigen Pfad kopieren",
     "sc.changeMode": "Sprachmodus ändern",
+
+    "view.autismTheme": "Autismus-Design",
+    "view.autismThemeHint": "Gedämpfte, kontrastarme Farben für sensorische Empfindlichkeit",
+    "view.bionicReading": "Bionisches Lesen",
+    "help.autismTheme": "Autismus-Design",
+    "help.bionicReading": "Bionisches Lesen",
+    "toolbar.switchToTheme": "Zu {theme} wechseln",
+
+    "autismHelp.intro":
+      "Ein gedämpftes, wenig aufreizendes Farbdesign für sensorisch empfindliche Nutzer — Autismus, ADHS, Migräne und andere Formen visuellen Stresses. Es hält den Editor auch über lange Zeit angenehm anzusehen, ohne die Lesbarkeit zu opfern.",
+    "autismHelp.point1":
+      "Kein reines Schwarz oder Weiß. Ein warmer, dunkler Kohlegrau-Hintergrund und ein sanfter cremefarbener Vordergrund vermeiden sowohl Bildschirmblendung als auch den Halo-Effekt, den scharfer Schwarz-Weiß-Kontrast verursacht.",
+    "autismHelp.point2":
+      "Nirgendwo Rot oder Gelb — die zwei Farbtöne, die am häufigsten als überstimulierend genannt werden. Fehler verwenden ein gedämpftes Terrakotta und Suchmarkierungen ein gedämpftes Gold anstelle des üblichen Alarmrot und Signalgelb.",
+    "autismHelp.point3":
+      "Jede Farbe ist deutlich weniger gesättigt als in den Designs Dunkel und Hell, sodass nichts neben seinen Nachbarn \"vibriert\", während der Kontrast zum Hintergrund gleich bleibt.",
+    "autismHelp.point4":
+      "Beruhigende Farbtöne dominieren durchgehend: staubiges Blau und Salbeigrün für die meiste Syntaxhervorhebung, gedämpftes Lavendel und Beige für den Rest.",
+    "autismHelp.footer":
+      "Wechseln Sie jederzeit über Ansicht ▸ Autismus-Design, mit der Schaltfläche unten, oder mit Strg+Umschalt+T, um zwischen Dunkel ▸ Hell ▸ Autismus zu wechseln.",
+    "autismHelp.switch": "Zum Autismus-Design wechseln",
+    "autismHelp.active": "Dies ist Ihr aktuelles Design.",
+
+    "bionicHelp.intro":
+      "Ein typografischer Trick, der den Anfang jedes Wortes fett darstellt, sodass das Auge weniger und kürzere Fixierungspunkte pro Zeile benötigt. Es wird als Lesehilfe für ADHS, Legasthenie und manchmal Autismus beworben.",
+    "bionicHelp.point1":
+      "Etwa die ersten 40 % jedes Wortes werden fett dargestellt, der Rest bleibt normal — die Idee ist, dass das Gehirn ein Wort am Anfang erkennt und das Ende aus dem Kontext ergänzt.",
+    "bionicHelp.point2":
+      "Die Beweislage ist uneinheitlich. Mehrere kontrollierte Studien fanden keine messbare Verbesserung von Lesegeschwindigkeit oder Verständnis gegenüber normalem Text, und manche Leser empfinden es als ablenkender, nicht weniger. Probieren Sie es aus, statt anzunehmen, dass es hilft.",
+    "bionicHelp.point3":
+      "Gilt für jedes Dokument auf dem Bildschirm, genau wie der Zeilenumbruch — es ist nicht auf Fließtext beschränkt, sodass die Aktivierung beim Bearbeiten von Code auch den Anfang von Bezeichnern und Schlüsselwörtern fett darstellt.",
+    "bionicHelp.footer":
+      "Schalten Sie es jederzeit über Ansicht ▸ Bionisches Lesen ein, mit der Schaltfläche unten, oder mit Strg+Umschalt+B.",
+    "bionicHelp.turnOn": "Bionisches Lesen einschalten",
+    "bionicHelp.turnOff": "Bionisches Lesen ausschalten",
+
+    "help.center": "Hilfe & Anleitungen",
+    "modal.helpCenterTitle": "Hilfe & Anleitungen",
+    "help.searchPlaceholder": "Hilfe durchsuchen…",
+    "help.noResults": "Keine passenden Themen",
+
+    "help.overviewTitle": "Überblick",
+    "help.overviewIntro":
+      "JustCode ist ein kleiner, schneller Editor für HTML, CSS, JavaScript und allgemeinen Text oder Code — dafür gebaut, schnell zu öffnen und nicht im Weg zu stehen, nicht dafür, eine vollständige IDE zu ersetzen.",
+    "help.overviewPoint1":
+      "Dateien öffnen sich als Tabs in einem Fenster; es gibt kein Projekt oder Arbeitsbereich, das vorher eingerichtet werden müsste.",
+    "help.overviewPoint2": "Drücken Sie jederzeit F1 für die vollständige Tastenkürzel-Referenz.",
+
+    "help.filesTitle": "Dateien",
+    "help.filesIntro": "Dateien öffnen sich als Tabs; JustCode kennt kein Projekt- oder Arbeitsbereichskonzept.",
+    "help.filesPoint1":
+      "Neue Datei (Strg+N) bietet Startvorlagen für viele Sprachen oder ein leeres Dokument; Öffnen… (Strg+O) akzeptiert mehrere Dateien gleichzeitig.",
+    "help.filesPoint2":
+      "Speichern (Strg+S) und Speichern unter (Strg+Umschalt+S) schreiben direkt auf die Festplatte; Alle speichern (Strg+Alt+S) erfasst alle geänderten Tabs auf einmal.",
+    "help.filesPoint3": "Datei ▸ Zuletzt verwendete Dateien merkt sich die letzten 15 Dateien über Neustarts hinweg.",
+    "help.filesPoint4":
+      "Datei ▸ Dateizuordnungen… registriert JustCode bei Windows, sodass es als Option \"Öffnen mit\" — oder als Standard — für die Dateitypen erscheint, die es versteht.",
+
+    "help.editingTitle": "Bearbeiten",
+    "help.editingIntro": "Standardbearbeitung plus einige Extras neben Ausschneiden, Kopieren, Einfügen, Rückgängig und Wiederholen.",
+    "help.editingPoint1":
+      "Strg+/ schaltet einen Kommentar mit der Syntax der aktuellen Sprache um — Zeilenkommentare für eine einzelne Zeile, Blockkommentare über eine Auswahl hinweg.",
+    "help.editingPoint2":
+      "Strg+Umschalt+U / Strg+Umschalt+L ändern die Groß-/Kleinschreibung der Auswahl; Strg+Alt+G fügt eine neue GUID ein.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ verschiebt die aktuelle Zeile; Alt+Umschalt+↑ / Alt+Umschalt+↓ dupliziert sie nach oben oder unten.",
+    "help.editingPoint4": "Strg+Klick fügt einen weiteren Cursor hinzu; Alt+Ziehen erstellt eine rechteckige (Spalten-)Auswahl.",
+
+    "help.searchTitle": "Suche",
+    "help.searchIntro": "Suchen und Ersetzen innerhalb der aktuellen Datei, oder direkt zu einer Definition springen.",
+    "help.searchPoint1":
+      "Strg+F öffnet Suchen; Strg+H öffnet Suchen und Ersetzen. F3 / Umschalt+F3 wiederholen die letzte Suche vorwärts oder rückwärts.",
+    "help.searchPoint2":
+      "Strg+Umschalt+G öffnet Zu Symbol springen — eine filterbare Liste der Funktionen, Klassen und anderen Deklarationen in der aktuellen Datei.",
+
+    "help.bookmarksTitle": "Lesezeichen",
+    "help.bookmarksIntro":
+      "Drei nummerierte Lesezeichen-Plätze pro Dokument, um sich in einer großen Datei zu bewegen, ohne scrollen zu müssen, um die Stelle wiederzufinden.",
+    "help.bookmarksPoint1":
+      "Strg+Umschalt+1 / 2 / 3 setzt oder löscht ein Lesezeichen an der aktuellen Zeile; Strg+1 / 2 / 3 springt direkt dorthin.",
+
+    "help.splitTabsTitle": "Geteilte Ansicht & Tabs",
+    "help.splitTabsIntro": "Tabs können in bis zu vier Bereichen angeordnet werden.",
+    "help.splitTabsPoint1":
+      "Strg+K gefolgt von einer Pfeiltaste teilt den aktiven Bereich in diese Richtung; einen Tab an einen Bildschirmrand ziehen macht dasselbe.",
+    "help.splitTabsPoint2":
+      "Einen Tab auf die Tableiste eines anderen Bereichs ziehen verschiebt ihn dorthin; den letzten Tab aus einem Bereich herausziehen hebt die Teilung wieder auf.",
+    "help.splitTabsPoint3": "Strg+Tab / Strg+Umschalt+Tab wechseln zwischen Tabs; Mittelklick auf einen Tab schließt ihn.",
+
+    "help.foldingTitle": "Code-Faltung",
+    "help.foldingIntro": "Jeder Block kann eingeklappt werden, um nicht im Weg zu sein.",
+    "help.foldingPoint1":
+      "Klicken Sie auf den Pfeil im Rand, oder drücken Sie Strg+Umschalt+[ / ], um den Block am Cursor ein- oder auszuklappen.",
+    "help.foldingPoint2": "Strg+Alt+[ / ] klappt alles in der Datei auf einmal ein oder aus.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Ein integriertes Terminal-Panel, kein separates Fenster.",
+    "help.terminalPoint1":
+      "Strg+` zeigt es an oder blendet es aus; Strg+Umschalt+` öffnet ein neues neben jedem bereits laufenden.",
+    "help.terminalPoint2": "Ein neues Terminal startet im Ordner der gerade bearbeiteten Datei.",
+    "help.terminalPoint3":
+      "Datei ▸ Im Terminal ausführen (Strg+F5) führt das aktuelle Skript aus und lässt die Shell danach an einer Eingabeaufforderung geöffnet, sodass ein Fehler sofort untersucht werden kann.",
+
+    "help.runTitle": "Ausführen",
+    "help.runIntro": "F5 zeigt die aktuelle Datei so, wie sie tatsächlich aussehen oder sich verhalten wird, statt als Quelltext.",
+    "help.runPoint1":
+      "HTML: öffnet im Standardbrowser. Dieselbe Datei erneut auszuführen aktualisiert diesen Tab, statt einen zweiten zu öffnen, solange er noch geöffnet ist.",
+    "help.runPoint2": "Markdown: wird zunächst in ein gestyltes HTML-Dokument gerendert und dann auf dieselbe Weise angezeigt.",
+    "help.runPoint3":
+      "PowerShell-, Batch- und Shell-Skripte: laufen in einem eigenen Konsolenfenster, das nach Abschluss des Skripts geöffnet bleibt.",
+
+    "help.wordWrapIntro":
+      "Standardmäßig deaktiviert. Der Umbruch hält lange Zeilen ohne horizontales Scrollen auf dem Bildschirm, bricht aber die Zeile-für-Zeile-Übereinstimmung zwischen dem Rand und den tatsächlichen Zeilennummern.",
+    "help.wordWrapPoint1":
+      "Schalten Sie ihn über Ansicht ▸ Zeilenumbruch oder Alt+Z um. Er gilt für das Dokument, das gerade auf dem Bildschirm angezeigt wird.",
+
+    "help.spellCheckIntro": "Standardmäßig deaktiviert — die meisten Bezeichner im Quellcode sind per Definition \"falsch geschrieben\".",
+    "help.spellCheckPoint1":
+      "Läuft als Linter über den tatsächlichen Text statt über die eingebaute Prüfung der Webansicht, sodass Rechtschreibfehler in die Gesamtzahl der Probleme eingerechnet werden und mit Korrekturvorschlägen kommen.",
+    "help.spellCheckPoint2": "Schalten Sie ihn über Ansicht ▸ Rechtschreibprüfung um.",
+
+    "help.languageTitle": "Oberflächensprache",
+    "help.languageIntro":
+      "Die Sprache der eigenen Menüs und Dialoge von JustCode — unabhängig vom Inhalt oder der Programmiersprache einer Datei.",
+    "help.languagePoint1":
+      "Ansicht ▸ Sprache… listet jede Übersetzung unter ihrem eigenen Namen statt ihrem englischen Namen, denn \"German\" hilft niemandem, der nur Deutsch liest.",
+    "help.languagePoint2": "Englisch ist eingebaut; jede andere Sprache wird bei der ersten Auswahl heruntergeladen.",
+
+    "sc.toolbar": "Symbolleiste umschalten",
+    "sc.statusBar": "Statusleiste umschalten",
+    "sc.spellCheck": "Rechtschreibprüfung umschalten",
+    "sc.bionicReading": "Bionisches Lesen ein-/ausschalten",
+    "sc.cycleTheme": "Designs wechseln (Dunkel ▸ Hell ▸ Autismus)",
   },
   el: {
     "menu.file": "Αρχείο",
@@ -2503,6 +3981,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Ένας μικρός, γρήγορος επεξεργαστής κώδικα.",
     "about.builtWith": "Φτιαγμένο με Tauri 2 και CodeMirror 6.",
     "about.version": "Έκδοση {version}",
+    "sc.g.menus": "Μενού",
     "sc.g.file": "Αρχείο",
     "sc.g.editing": "Επεξεργασία",
     "sc.g.bookmarks": "Σελιδοδείκτες",
@@ -2528,6 +4007,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+κλικ σε URL",
     "sc.k.clickPath": "Κλικ στη διαδρομή στη γραμμή κατάστασης",
     "sc.k.clickLanguage": "Κλικ στη γλώσσα στη γραμμή κατάστασης",
+    "sc.openFileMenu": "Άνοιγμα μενού Αρχείο",
+    "sc.openEditMenu": "Άνοιγμα μενού Επεξεργασία",
+    "sc.openViewMenu": "Άνοιγμα μενού Προβολή",
+    "sc.openHelpMenu": "Άνοιγμα μενού Βοήθεια",
     "sc.newFile": "Νέο αρχείο",
     "sc.openFile": "Άνοιγμα αρχείου",
     "sc.save": "Αποθήκευση",
@@ -2601,6 +4084,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Άνοιγμα του συνδέσμου κάτω από τον δρομέα",
     "sc.copyFullPath": "Αντιγραφή πλήρους διαδρομής",
     "sc.changeMode": "Αλλαγή λειτουργίας γλώσσας",
+
+    "view.autismTheme": "Θέμα αυτισμού",
+    "view.autismThemeHint": "Απαλά χρώματα χαμηλής αντίθεσης για αισθητηριακή ευαισθησία",
+    "view.bionicReading": "Βιονική ανάγνωση",
+    "help.autismTheme": "Θέμα αυτισμού",
+    "help.bionicReading": "Βιονική ανάγνωση",
+    "toolbar.switchToTheme": "Εναλλαγή σε {theme}",
+
+    "autismHelp.intro":
+      "Ένα απαλό θέμα χαμηλής διέγερσης για χρήστες με αισθητηριακή ευαισθησία — αυτισμό, ΔΕΠΥ, ημικρανία και άλλες καταστάσεις οπτικού στρες. Διατηρεί τον επεξεργαστή ήρεμο στην όραση για μεγάλα διαστήματα, χωρίς να θυσιάζει την αναγνωσιμότητα.",
+    "autismHelp.point1":
+      "Χωρίς καθαρό μαύρο ή λευκό. Ένα ζεστό, σκούρο ανθρακί φόντο και μια απαλή κρεμ γραμματοσειρά αποφεύγουν τόσο τη θάμβωση της οθόνης όσο και το φαινόμενο φωτοστέφανου που προκαλεί η έντονη αντίθεση μαύρου-λευκού.",
+    "autismHelp.point2":
+      "Καμία κόκκινη ή κίτρινη απόχρωση πουθενά — οι δύο αποχρώσεις που αναφέρονται πιο συχνά ως υπερδιεγερτικές. Τα σφάλματα χρησιμοποιούν απαλή τερακότα και οι επισημάνσεις αναζήτησης απαλό χρυσό αντί για το συνηθισμένο έντονο κόκκινο και έντονο κίτρινο.",
+    "autismHelp.point3":
+      "Κάθε χρώμα έχει κορεσμό αισθητά χαμηλότερο από αυτόν των θεμάτων Σκούρο και Ανοιχτόχρωμο, ώστε τίποτα να μη \"δονείται\" δίπλα στα γειτονικά του, ενώ η αντίθεση με το φόντο παραμένει η ίδια.",
+    "autismHelp.point4":
+      "Ηρεμιστικές αποχρώσεις κυριαρχούν παντού: σκονισμένο μπλε και πράσινο φασκόμηλου για το μεγαλύτερο μέρος της επισήμανσης σύνταξης, απαλή λεβάντα και μπεζ για τα υπόλοιπα.",
+    "autismHelp.footer":
+      "Εναλλάξτε σε αυτό ανά πάσα στιγμή από το Προβολή ▸ Θέμα αυτισμού, με το κουμπί παρακάτω, ή πατώντας Ctrl+Shift+T για εναλλαγή Σκούρο ▸ Ανοιχτόχρωμο ▸ Αυτισμός.",
+    "autismHelp.switch": "Εναλλαγή σε θέμα αυτισμού",
+    "autismHelp.active": "Αυτό είναι το τρέχον θέμα σας.",
+
+    "bionicHelp.intro":
+      "Ένα τυπογραφικό κόλπο που κάνει έντονο το αρχικό τμήμα κάθε λέξης, ώστε το μάτι να χρειάζεται λιγότερα και πιο σύντομα σημεία εστίασης ανά γραμμή. Διαφημίζεται ως βοήθημα ανάγνωσης για ΔΕΠΥ, δυσλεξία και μερικές φορές αυτισμό.",
+    "bionicHelp.point1":
+      "Περίπου το πρώτο 40% κάθε λέξης γίνεται έντονο και το υπόλοιπο παραμένει κανονικό — η ιδέα είναι ότι ο εγκέφαλος αναγνωρίζει μια λέξη από την αρχή της και συμπληρώνει το τέλος από τα συμφραζόμενα.",
+    "bionicHelp.point2":
+      "Τα στοιχεία είναι αντικρουόμενα. Αρκετές ελεγχόμενες μελέτες δεν βρήκαν μετρήσιμη βελτίωση στην ταχύτητα ανάγνωσης ή την κατανόηση σε σύγκριση με το συνηθισμένο κείμενο, και ορισμένοι αναγνώστες το βρίσκουν πιο αποσπαστικό, όχι λιγότερο. Δοκιμάστε το αντί να υποθέτετε ότι θα βοηθήσει.",
+    "bionicHelp.point3":
+      "Ισχύει για οποιοδήποτε έγγραφο βρίσκεται στην οθόνη, όπως και η αναδίπλωση λέξεων — δεν περιορίζεται σε πεζό λόγο, οπότε η ενεργοποίησή του κατά την επεξεργασία κώδικα κάνει έντονη και την αρχή αναγνωριστικών και λέξεων-κλειδιών.",
+    "bionicHelp.footer":
+      "Ενεργοποιήστε το ανά πάσα στιγμή από το Προβολή ▸ Βιονική ανάγνωση, με το κουμπί παρακάτω, ή πατώντας Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Ενεργοποίηση βιονικής ανάγνωσης",
+    "bionicHelp.turnOff": "Απενεργοποίηση βιονικής ανάγνωσης",
+
+    "help.center": "Βοήθεια & οδηγοί",
+    "modal.helpCenterTitle": "Βοήθεια & οδηγοί",
+    "help.searchPlaceholder": "Αναζήτηση στη βοήθεια…",
+    "help.noResults": "Δεν υπάρχουν αντίστοιχα θέματα",
+
+    "help.overviewTitle": "Επισκόπηση",
+    "help.overviewIntro":
+      "Το JustCode είναι ένας μικρός, γρήγορος επεξεργαστής για HTML, CSS, JavaScript και γενικό κείμενο ή κώδικα — φτιαγμένος για να ανοίγει γρήγορα και να μην εμποδίζει, όχι για να αντικαταστήσει ένα πλήρες IDE.",
+    "help.overviewPoint1":
+      "Τα αρχεία ανοίγουν ως καρτέλες σε ένα παράθυρο· δεν υπάρχει έργο ή χώρος εργασίας που πρέπει να ρυθμιστεί πρώτα.",
+    "help.overviewPoint2": "Πατήστε F1 ανά πάσα στιγμή για την πλήρη αναφορά συντομεύσεων πληκτρολογίου.",
+
+    "help.filesTitle": "Αρχεία",
+    "help.filesIntro": "Τα αρχεία ανοίγουν ως καρτέλες· το JustCode δεν έχει έννοια έργου ή χώρου εργασίας.",
+    "help.filesPoint1":
+      "Το Νέο αρχείο (Ctrl+N) προσφέρει αρχικά πρότυπα για πολλές γλώσσες, ή ένα κενό έγγραφο· το Άνοιγμα… (Ctrl+O) δέχεται πολλά αρχεία ταυτόχρονα.",
+    "help.filesPoint2":
+      "Η Αποθήκευση (Ctrl+S) και η Αποθήκευση ως (Ctrl+Shift+S) γράφουν απευθείας στον δίσκο· η Αποθήκευση όλων (Ctrl+Alt+S) καλύπτει όλες τις τροποποιημένες καρτέλες με μία κίνηση.",
+    "help.filesPoint3": "Το Αρχείο ▸ Πρόσφατα αρχεία θυμάται τα τελευταία 15 αρχεία ανά επανεκκίνηση.",
+    "help.filesPoint4":
+      "Το Αρχείο ▸ Συσχετίσεις αρχείων… καταχωρεί το JustCode στα Windows ώστε να εμφανίζεται ως επιλογή \"Άνοιγμα με\" — ή ως προεπιλογή — για τους τύπους αρχείων που κατανοεί.",
+
+    "help.editingTitle": "Επεξεργασία",
+    "help.editingIntro": "Τυπική επεξεργασία, συν μερικά επιπλέον πέρα από αποκοπή, αντιγραφή, επικόλληση, αναίρεση και επανάληψη.",
+    "help.editingPoint1":
+      "Το Ctrl+/ εναλλάσσει ένα σχόλιο χρησιμοποιώντας τη σύνταξη της τρέχουσας γλώσσας — σχόλια γραμμής για μία γραμμή, σχόλια μπλοκ σε μια επιλογή.",
+    "help.editingPoint2":
+      "Τα Ctrl+Shift+U / Ctrl+Shift+L αλλάζουν τα κεφαλαία/πεζά της επιλογής· το Ctrl+Alt+G εισάγει ένα νέο GUID.",
+    "help.editingPoint3":
+      "Τα Alt+↑ / Alt+↓ μετακινούν την τρέχουσα γραμμή· τα Alt+Shift+↑ / Alt+Shift+↓ τη διπλασιάζουν προς τα πάνω ή κάτω.",
+    "help.editingPoint4": "Το Ctrl+κλικ προσθέτει άλλον έναν δρομέα· το Alt+σύρσιμο δημιουργεί ορθογώνια (κατά στήλη) επιλογή.",
+
+    "help.searchTitle": "Αναζήτηση",
+    "help.searchIntro": "Εύρεση και αντικατάσταση μέσα στο τρέχον αρχείο, ή απευθείας μετάβαση σε έναν ορισμό.",
+    "help.searchPoint1":
+      "Το Ctrl+F ανοίγει την Εύρεση· το Ctrl+H ανοίγει την Εύρεση και αντικατάσταση. Τα F3 / Shift+F3 επαναλαμβάνουν την τελευταία αναζήτηση προς τα εμπρός ή πίσω.",
+    "help.searchPoint2":
+      "Το Ctrl+Shift+G ανοίγει το Μετάβαση σε σύμβολο — μια φιλτραρίσιμη λίστα συναρτήσεων, κλάσεων και άλλων δηλώσεων στο τρέχον αρχείο.",
+
+    "help.bookmarksTitle": "Σελιδοδείκτες",
+    "help.bookmarksIntro":
+      "Τρεις αριθμημένες θέσεις σελιδοδεικτών ανά έγγραφο, για μετακίνηση σε ένα μεγάλο αρχείο χωρίς κύλιση για την εύρεση της θέσης σας.",
+    "help.bookmarksPoint1":
+      "Τα Ctrl+Shift+1 / 2 / 3 ορίζουν ή διαγράφουν έναν σελιδοδείκτη στην τρέχουσα γραμμή· τα Ctrl+1 / 2 / 3 μεταβαίνουν απευθείας σε αυτόν.",
+
+    "help.splitTabsTitle": "Διαχωρισμένη προβολή & καρτέλες",
+    "help.splitTabsIntro": "Οι καρτέλες μπορούν να διαταχθούν σε έως τέσσερα τμήματα.",
+    "help.splitTabsPoint1":
+      "Το Ctrl+K ακολουθούμενο από ένα πλήκτρο βέλους διαχωρίζει το ενεργό τμήμα προς αυτή την κατεύθυνση· το σύρσιμο μιας καρτέλας σε άκρη οθόνης κάνει το ίδιο.",
+    "help.splitTabsPoint2":
+      "Το σύρσιμο μιας καρτέλας στη γραμμή καρτελών άλλου τμήματος τη μετακινεί εκεί· το σύρσιμο της τελευταίας καρτέλας εκτός τμήματος αναιρεί τον διαχωρισμό.",
+    "help.splitTabsPoint3": "Τα Ctrl+Tab / Ctrl+Shift+Tab περιηγούνται στις καρτέλες· το μεσαίο κλικ σε μια καρτέλα την κλείνει.",
+
+    "help.foldingTitle": "Δίπλωση κώδικα",
+    "help.foldingIntro": "Οποιοδήποτε μπλοκ μπορεί να διπλωθεί ώστε να μην εμποδίζει.",
+    "help.foldingPoint1":
+      "Κάντε κλικ στο βέλος στο περιθώριο, ή πατήστε Ctrl+Shift+[ / ] για δίπλωση ή ξεδίπλωμα του μπλοκ στη θέση του δρομέα.",
+    "help.foldingPoint2": "Το Ctrl+Alt+[ / ] διπλώνει ή ξεδιπλώνει τα πάντα στο αρχείο ταυτόχρονα.",
+
+    "help.terminalTitle": "Τερματικό",
+    "help.terminalIntro": "Ένα ενσωματωμένο πλαίσιο τερματικού, όχι ξεχωριστό παράθυρο.",
+    "help.terminalPoint1":
+      "Το Ctrl+` το εμφανίζει ή το αποκρύπτει· το Ctrl+Shift+` ανοίγει ένα νέο δίπλα σε οποιοδήποτε ήδη εκτελείται.",
+    "help.terminalPoint2": "Ένα νέο τερματικό ξεκινά στον φάκελο του αρχείου που επεξεργάζεστε αυτή τη στιγμή.",
+    "help.terminalPoint3":
+      "Το Αρχείο ▸ Εκτέλεση σε τερματικό (Ctrl+F5) εκτελεί το τρέχον σενάριο και αφήνει το κέλυφος ανοιχτό σε μια προτροπή στη συνέχεια, ώστε μια αποτυχία να μπορεί να εξεταστεί επιτόπου.",
+
+    "help.runTitle": "Εκτέλεση",
+    "help.runIntro": "Το F5 εμφανίζει το τρέχον αρχείο όπως θα φαίνεται ή θα συμπεριφέρεται στην πραγματικότητα, αντί ως πηγαίο κείμενο.",
+    "help.runPoint1":
+      "HTML: ανοίγει στον προεπιλεγμένο περιηγητή. Η εκ νέου εκτέλεση του ίδιου αρχείου ανανεώνει αυτήν την καρτέλα αντί να ανοίγει δεύτερη, όσο αυτή παραμένει ανοιχτή.",
+    "help.runPoint2": "Markdown: αποδίδεται πρώτα σε ένα μορφοποιημένο έγγραφο HTML και μετά προεπισκοπείται με τον ίδιο τρόπο.",
+    "help.runPoint3":
+      "Σενάρια PowerShell, Batch και Shell: εκτελούνται στο δικό τους παράθυρο κονσόλας, το οποίο παραμένει ανοιχτό μετά την ολοκλήρωση του σεναρίου.",
+
+    "help.wordWrapIntro":
+      "Απενεργοποιημένο από προεπιλογή. Η αναδίπλωση κρατά τις μακριές γραμμές στην οθόνη χωρίς οριζόντια κύλιση, αλλά διακόπτει την αντιστοιχία γραμμής προς γραμμή μεταξύ του περιθωρίου και των πραγματικών αριθμών γραμμών.",
+    "help.wordWrapPoint1":
+      "Εναλλάξτε το από το Προβολή ▸ Αναδίπλωση λέξεων ή με Alt+Z. Ισχύει για το έγγραφο που βρίσκεται αυτή τη στιγμή στην οθόνη.",
+
+    "help.spellCheckIntro": "Απενεργοποιημένος από προεπιλογή — τα περισσότερα αναγνωριστικά στον πηγαίο κώδικα είναι \"ανορθόγραφα\" εξ ορισμού.",
+    "help.spellCheckPoint1":
+      "Λειτουργεί ως linter πάνω στο πραγματικό κείμενο αντί για τον ενσωματωμένο έλεγχο της προβολής ιστού, οπότε τα ορθογραφικά λάθη προσμετρώνται στο σύνολο των προβλημάτων και συνοδεύονται από προτεινόμενες διορθώσεις.",
+    "help.spellCheckPoint2": "Εναλλάξτε τον από το Προβολή ▸ Ορθογραφικός έλεγχος.",
+
+    "help.languageTitle": "Γλώσσα διεπαφής",
+    "help.languageIntro":
+      "Η γλώσσα των δικών του μενού και παραθύρων διαλόγου του JustCode — ανεξάρτητη από το περιεχόμενο ή τη γλώσσα προγραμματισμού οποιουδήποτε αρχείου.",
+    "help.languagePoint1":
+      "Το Προβολή ▸ Γλώσσα… παραθέτει κάθε μετάφραση με το δικό της όνομα αντί για το αγγλικό της όνομα, καθώς το \"German\" δεν βοηθά κάποιον που διαβάζει μόνο ελληνικά.",
+    "help.languagePoint2": "Τα Αγγλικά είναι ενσωματωμένα· κάθε άλλη γλώσσα κατεβαίνει με την πρώτη επιλογή της.",
+
+    "sc.toolbar": "Εναλλαγή γραμμής εργαλείων",
+    "sc.statusBar": "Εναλλαγή γραμμής κατάστασης",
+    "sc.spellCheck": "Εναλλαγή ορθογραφικού ελέγχου",
+    "sc.bionicReading": "Εναλλαγή βιονικής ανάγνωσης",
+    "sc.cycleTheme": "Εναλλαγή θεμάτων (Σκούρο ▸ Ανοιχτόχρωμο ▸ Αυτισμός)",
   },
   he: {
     "menu.file": "קובץ",
@@ -2719,6 +4335,7 @@ export const TRANSLATIONS = {
     "about.tagline": "עורך קוד קטן ומהיר.",
     "about.builtWith": "נבנה עם Tauri 2 ו-CodeMirror 6.",
     "about.version": "גרסה {version}",
+    "sc.g.menus": "תפריטים",
     "sc.g.file": "קובץ",
     "sc.g.editing": "עריכה",
     "sc.g.bookmarks": "סימניות",
@@ -2744,6 +4361,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+לחיצה על כתובת URL",
     "sc.k.clickPath": "לחץ על הנתיב בשורת המצב",
     "sc.k.clickLanguage": "לחץ על השפה בשורת המצב",
+    "sc.openFileMenu": "פתיחת תפריט קובץ",
+    "sc.openEditMenu": "פתיחת תפריט עריכה",
+    "sc.openViewMenu": "פתיחת תפריט תצוגה",
+    "sc.openHelpMenu": "פתיחת תפריט עזרה",
     "sc.newFile": "קובץ חדש",
     "sc.openFile": "פתיחת קובץ",
     "sc.save": "שמור",
@@ -2817,6 +4438,135 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "פתח את הקישור שמתחת לסמן",
     "sc.copyFullPath": "העתק את הנתיב המלא",
     "sc.changeMode": "שנה את מצב השפה",
+
+    "view.autismTheme": "ערכת אוטיזם",
+    "view.autismThemeHint": "צבעים עמומים ובעלי ניגודיות נמוכה לרגישות חושית",
+    "view.bionicReading": "קריאה ביונית",
+    "help.autismTheme": "ערכת אוטיזם",
+    "help.bionicReading": "קריאה ביונית",
+    "toolbar.switchToTheme": "עבור אל {theme}",
+
+    "autismHelp.intro":
+      "ערכת צבעים עמומה ורגועה למשתמשים רגישים חושית — אוטיזם, ADHD, מיגרנה ומצבי לחץ חזותי אחרים. היא שומרת על העורך רגוע למבט לאורך זמן רב, בלי לוותר על קריאוּת.",
+    "autismHelp.point1":
+      "אין שחור טהור או לבן טהור. רקע אפור-פחם חם ומעט טקסט קרם רך נמנעים גם מסינוור המסך וגם מאפקט ההילה שנגרם מניגודיות שחור-לבן חדה.",
+    "autismHelp.point2":
+      "אין אדום או צהוב בשום מקום — שני הגוונים שמדווחים עליהם לרוב כמעוררי גירוי יתר. שגיאות משתמשות בטרקוטה עמומה וסימוני חיפוש בזהב עמום במקום האדום המתריע והצהוב הבוהק הרגילים.",
+    "autismHelp.point3":
+      "לכל צבע רוויה נמוכה בהרבה מזו שבערכות הכהה והבהירה, כך שדבר לא \"רוטט\" ליד שכניו, בעוד הניגודיות מול הרקע נשארת זהה.",
+    "autismHelp.point4":
+      "גוונים מרגיעים שולטים בכול: כחול מאובק וירוק מרווה לרוב הדגשת התחביר, לבנדר עמום וחום בהיר לשאר.",
+    "autismHelp.footer":
+      "עברו אליה בכל עת דרך תצוגה ▸ ערכת אוטיזם, בעזרת הכפתור למטה, או בלחיצה על Ctrl+Shift+T למעבר בין כהה ▸ בהיר ▸ אוטיזם.",
+    "autismHelp.switch": "עבור לערכת אוטיזם",
+    "autismHelp.active": "זו הערכה הנוכחית שלך.",
+
+    "bionicHelp.intro":
+      "טריק טיפוגרפי שמדגיש את החלק הראשון של כל מילה, כך שלעין דרושות פחות נקודות פוקוס קצרות יותר בכל שורה. הוא משווק כאמצעי עזר לקריאה ל-ADHD, דיסלקציה ולעיתים אוטיזם.",
+    "bionicHelp.point1":
+      "כ-40% הראשונים של כל מילה מודגשים והשאר נשאר במשקל רגיל — הרעיון הוא שהמוח מזהה מילה מתחילתה ומשלים את סופה מההקשר.",
+    "bionicHelp.point2":
+      "העדויות סותרות. מספר מחקרים מבוקרים לא מצאו שיפור מדיד במהירות הקריאה או בהבנה לעומת טקסט רגיל, וחלק מהקוראים מוצאים אותו מסיח דעת יותר, לא פחות. נסו אותו במקום להניח שהוא יעזור.",
+    "bionicHelp.point3":
+      "חל על כל מסמך שעל המסך, בדיוק כמו גלישת שורות — הוא אינו מוגבל לפרוזה, כך שהפעלתו בזמן עריכת קוד תדגיש גם את תחילתם של מזהים ומילות מפתח.",
+    "bionicHelp.footer":
+      "הפעילו אותה בכל עת דרך תצוגה ▸ קריאה ביונית, בעזרת הכפתור למטה, או בלחיצה על Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "הפעל קריאה ביונית",
+    "bionicHelp.turnOff": "כבה קריאה ביונית",
+
+    "help.center": "עזרה והדרכה",
+    "modal.helpCenterTitle": "עזרה והדרכה",
+    "help.searchPlaceholder": "חיפוש בעזרה…",
+    "help.noResults": "לא נמצאו נושאים תואמים",
+
+    "help.overviewTitle": "סקירה כללית",
+    "help.overviewIntro":
+      "JustCode הוא עורך קטן ומהיר עבור HTML, CSS, JavaScript וטקסט או קוד כללי — נבנה כדי להיפתח מהר ולא להפריע, לא כדי להחליף סביבת פיתוח מלאה.",
+    "help.overviewPoint1": "קבצים נפתחים ככרטיסיות בחלון אחד; אין פרויקט או סביבת עבודה שצריך להגדיר קודם.",
+    "help.overviewPoint2": "לחצו F1 בכל עת לרשימת קיצורי המקלדת המלאה.",
+
+    "help.filesTitle": "קבצים",
+    "help.filesIntro": "קבצים נפתחים ככרטיסיות; ל-JustCode אין מושג של פרויקט או סביבת עבודה.",
+    "help.filesPoint1":
+      "קובץ חדש (Ctrl+N) מציע תבניות פתיחה לשפות רבות, או מסמך ריק; פתיחה… (Ctrl+O) מקבלת מספר קבצים בבת אחת.",
+    "help.filesPoint2":
+      "שמירה (Ctrl+S) ושמירה בשם (Ctrl+Shift+S) כותבות ישירות לדיסק; שמירת הכל (Ctrl+Alt+S) מכסה את כל הכרטיסיות שהשתנו בבת אחת.",
+    "help.filesPoint3": "קובץ ▸ קבצים אחרונים זוכר את 15 הקבצים האחרונים בין הפעלות.",
+    "help.filesPoint4":
+      "קובץ ▸ שיוכי קבצים… רושם את JustCode אצל Windows כך שיופיע כאפשרות \"פתח באמצעות\" — או כברירת המחדל — עבור סוגי הקבצים שהוא מבין.",
+
+    "help.editingTitle": "עריכה",
+    "help.editingIntro": "עריכה סטנדרטית, בתוספת כמה תוספות מעבר לגזירה, העתקה, הדבקה, ביטול וחזרה.",
+    "help.editingPoint1":
+      "Ctrl+/ מחליף הערה לפי התחביר של השפה הנוכחית — הערות שורה לשורה בודדת, הערות בלוק על פני בחירה.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L משנים את רישיות הבחירה; Ctrl+Alt+G מוסיף GUID חדש.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ מזיז את השורה הנוכחית; Alt+Shift+↑ / Alt+Shift+↓ משכפל אותה למעלה או למטה.",
+    "help.editingPoint4": "Ctrl+קליק מוסיף סמן נוסף; Alt+גרירה יוצרת בחירה מלבנית (טורית).",
+
+    "help.searchTitle": "חיפוש",
+    "help.searchIntro": "חיפוש והחלפה בתוך הקובץ הנוכחי, או קפיצה ישירות להגדרה.",
+    "help.searchPoint1":
+      "Ctrl+F פותח חיפוש; Ctrl+H פותח חיפוש והחלפה. F3 / Shift+F3 חוזרים על החיפוש האחרון קדימה או אחורה.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G פותח מעבר לסמל — רשימה הניתנת לסינון של פונקציות, מחלקות והצהרות אחרות בקובץ הנוכחי.",
+
+    "help.bookmarksTitle": "סימניות",
+    "help.bookmarksIntro": "שלושה משבצות סימניות ממוספרות לכל מסמך, לניווט בקובץ גדול בלי לגלול כדי למצוא את המקום שלכם.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 קובע או מנקה סימנייה בשורה הנוכחית; Ctrl+1 / 2 / 3 קופץ אליה ישירות.",
+
+    "help.splitTabsTitle": "תצוגה מפוצלת וכרטיסיות",
+    "help.splitTabsIntro": "ניתן לסדר כרטיסיות עד ארבעה חלונות.",
+    "help.splitTabsPoint1":
+      "Ctrl+K ולאחריו מקש חץ מפצל את החלונית הפעילה לכיוון הזה; גרירת כרטיסייה לקצה המסך עושה את אותו הדבר.",
+    "help.splitTabsPoint2":
+      "גרירת כרטיסייה לשורת הכרטיסיות של חלונית אחרת מעבירה אותה לשם; גרירת הכרטיסייה האחרונה החוצה מחלונית מבטלת את הפיצול.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab עוברים בין כרטיסיות; קליק אמצעי על כרטיסייה סוגר אותה.",
+
+    "help.foldingTitle": "קיפול קוד",
+    "help.foldingIntro": "כל בלוק ניתן לקיפול כדי להסיר אותו מהדרך.",
+    "help.foldingPoint1":
+      "לחצו על החץ בשוליים, או הקישו Ctrl+Shift+[ / ] כדי לקפל או לפתוח את הבלוק במיקום הסמן.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] מקפל או פותח הכל בקובץ בבת אחת.",
+
+    "help.terminalTitle": "מסוף",
+    "help.terminalIntro": "פאנל מסוף משולב, לא חלון נפרד.",
+    "help.terminalPoint1":
+      "Ctrl+` מציג או מסתיר אותו; Ctrl+Shift+` פותח מסוף חדש לצד כל מסוף שכבר פועל.",
+    "help.terminalPoint2": "מסוף חדש מתחיל בתיקייה של הקובץ שנערך כרגע.",
+    "help.terminalPoint3":
+      "קובץ ▸ הפעל במסוף (Ctrl+F5) מריץ את הסקריפט הנוכחי ומשאיר את המעטפת פתוחה בשורת פקודה לאחר מכן, כך שכשל אפשר לבדוק במקום.",
+
+    "help.runTitle": "הפעלה",
+    "help.runIntro": "F5 מציג את הקובץ הנוכחי כפי שהוא באמת ייראה או יתנהג, במקום כטקסט מקור.",
+    "help.runPoint1":
+      "HTML: נפתח בדפדפן ברירת המחדל. הפעלה חוזרת של אותו קובץ מרעננת את אותה כרטיסייה במקום לפתוח שנייה, כל עוד היא עדיין פתוחה.",
+    "help.runPoint2": "Markdown: מעובד תחילה למסמך HTML מעוצב, ולאחר מכן נצפה באותו אופן.",
+    "help.runPoint3":
+      "סקריפטים של PowerShell, Batch ו-Shell: פועלים בחלון מסוף משלהם, שנשאר פתוח לאחר סיום הסקריפט.",
+
+    "help.wordWrapIntro":
+      "כבוי כברירת מחדל. גלישה שומרת שורות ארוכות על המסך בלי גלילה אופקית, אך שוברת את ההתאמה שורה-לשורה בין השוליים למספרי השורות האמיתיים.",
+    "help.wordWrapPoint1": "הפעילו אותה מתוך תצוגה ▸ גלישת שורות או Alt+Z. היא חלה על המסמך המוצג כרגע על המסך.",
+
+    "help.spellCheckIntro": "כבוי כברירת מחדל — רוב המזהים בקוד המקור \"שגויים\" מבחינה איורתית מעצם הגדרתם.",
+    "help.spellCheckPoint1":
+      "פועל כבודק לינט על הטקסט האמיתי במקום הבודק המובנה של תצוגת האינטרנט, כך ששגיאות כתיב נספרות בסך הבעיות ומגיעות עם תיקונים מוצעים.",
+    "help.spellCheckPoint2": "הפעילו אותה מתוך תצוגה ▸ בדיקת איות.",
+
+    "help.languageTitle": "שפת הממשק",
+    "help.languageIntro": "שפת התפריטים ותיבות הדו-שיח של JustCode עצמו — בלתי תלויה בתוכן או בשפת התכנות של קובץ כלשהו.",
+    "help.languagePoint1":
+      "תצוגה ▸ שפה… מפרטת כל תרגום תחת שמו שלו ולא שמו האנגלי, כי \"German\" לא עוזר למי שקורא רק עברית.",
+    "help.languagePoint2": "אנגלית מובנית; כל שפה אחרת מורדת בעת הבחירה הראשונה שלה.",
+
+    "sc.toolbar": "הפעלה/כיבוי של סרגל הכלים",
+    "sc.statusBar": "הפעלה/כיבוי של שורת המצב",
+    "sc.spellCheck": "הפעלה/כיבוי של בדיקת איות",
+    "sc.bionicReading": "הפעל/כבה קריאה ביונית",
+    "sc.cycleTheme": "החלף בין ערכות (כהה ▸ בהיר ▸ אוטיזם)",
   },
   hi: {
     "menu.file": "फ़ाइल",
@@ -2935,6 +4685,7 @@ export const TRANSLATIONS = {
     "about.tagline": "एक छोटा, तेज़ कोड संपादक।",
     "about.builtWith": "Tauri 2 और CodeMirror 6 से निर्मित।",
     "about.version": "संस्करण {version}",
+    "sc.g.menus": "मेनू",
     "sc.g.file": "फ़ाइल",
     "sc.g.editing": "संपादन",
     "sc.g.bookmarks": "बुकमार्क",
@@ -2960,6 +4711,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "URL पर Ctrl+क्लिक",
     "sc.k.clickPath": "स्थिति पट्टी में पथ पर क्लिक करें",
     "sc.k.clickLanguage": "स्थिति पट्टी में भाषा पर क्लिक करें",
+    "sc.openFileMenu": "फ़ाइल मेनू खोलें",
+    "sc.openEditMenu": "संपादन मेनू खोलें",
+    "sc.openViewMenu": "दृश्य मेनू खोलें",
+    "sc.openHelpMenu": "सहायता मेनू खोलें",
     "sc.newFile": "नई फ़ाइल",
     "sc.openFile": "फ़ाइल खोलें",
     "sc.save": "सहेजें",
@@ -3033,6 +4788,135 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "कर्सर के नीचे का लिंक खोलें",
     "sc.copyFullPath": "पूरा पथ कॉपी करें",
     "sc.changeMode": "भाषा मोड बदलें",
+
+    "view.autismTheme": "ऑटिज़्म थीम",
+    "view.autismThemeHint": "संवेदी संवेदनशीलता के लिए हल्के, कम-कंट्रास्ट रंग",
+    "view.bionicReading": "बायोनिक रीडिंग",
+    "help.autismTheme": "ऑटिज़्म थीम",
+    "help.bionicReading": "बायोनिक रीडिंग",
+    "toolbar.switchToTheme": "{theme} पर स्विच करें",
+
+    "autismHelp.intro":
+      "संवेदी रूप से संवेदनशील उपयोगकर्ताओं — ऑटिज़्म, ADHD, माइग्रेन और अन्य दृश्य-तनाव स्थितियों — के लिए हल्की, कम-उत्तेजक रंग थीम। यह पठनीयता से समझौता किए बिना संपादक को लंबे समय तक देखने में शांत बनाए रखती है।",
+    "autismHelp.point1":
+      "न शुद्ध काला, न शुद्ध सफ़ेद। एक गर्म, गहरा चारकोल पृष्ठभूमि और एक हल्का क्रीम रंग का टेक्स्ट स्क्रीन की चमक और तीव्र काले-सफ़ेद कंट्रास्ट से होने वाले हेलो प्रभाव, दोनों से बचाते हैं।",
+    "autismHelp.point2":
+      "कहीं भी लाल या पीला नहीं — ये दो रंग सबसे अधिक अति-उत्तेजक बताए जाते हैं। त्रुटियों में सामान्य चेतावनी-लाल और चमकीले पीले के बजाय हल्का टेराकोटा और खोज हाइलाइट में हल्का सुनहरा रंग उपयोग होता है।",
+    "autismHelp.point3":
+      "हर रंग की संतृप्ति डार्क और लाइट थीम की तुलना में काफी कम रखी गई है, ताकि पृष्ठभूमि के विरुद्ध कंट्रास्ट वही रहते हुए भी कोई भी रंग अपने पड़ोसियों के सामने \"चमके\" नहीं।",
+    "autismHelp.point4":
+      "शांत करने वाले रंग हर जगह हावी हैं: अधिकांश सिंटैक्स हाइलाइटिंग के लिए धूमिल नीला और सेज हरा, बाकी के लिए हल्का लैवेंडर और टैन।",
+    "autismHelp.footer":
+      "इसे किसी भी समय देखें ▸ ऑटिज़्म थीम से, नीचे दिए बटन से, या डार्क ▸ लाइट ▸ ऑटिज़्म के बीच चक्रित करने के लिए Ctrl+Shift+T दबाकर स्विच करें।",
+    "autismHelp.switch": "ऑटिज़्म थीम पर स्विच करें",
+    "autismHelp.active": "यह आपकी वर्तमान थीम है।",
+
+    "bionicHelp.intro":
+      "एक टाइपोग्राफ़िक ट्रिक जो हर शब्द के आरंभिक हिस्से को बोल्ड कर देती है, ताकि आँख को प्रति पंक्ति कम और छोटे फ़िक्सेशन बिंदुओं की ज़रूरत पड़े। इसे ADHD, डिस्लेक्सिया और कभी-कभी ऑटिज़्म के लिए पठन सहायता के रूप में प्रचारित किया जाता है।",
+    "bionicHelp.point1":
+      "हर शब्द के लगभग पहले 40% हिस्से को बोल्ड किया जाता है और बाकी सामान्य रहता है — विचार यह है कि दिमाग किसी शब्द को उसकी शुरुआत से पहचान लेता है और अंत को संदर्भ से पूरा करता है।",
+    "bionicHelp.point2":
+      "प्रमाण मिश्रित हैं। कई नियंत्रित अध्ययनों में सामान्य टेक्स्ट की तुलना में पठन गति या समझ में कोई मापने योग्य सुधार नहीं मिला, और कुछ पाठकों को यह अधिक ध्यान भटकाने वाला लगा, कम नहीं। यह मदद करेगा ऐसा मान लेने के बजाय इसे आज़माकर देखें।",
+    "bionicHelp.point3":
+      "स्क्रीन पर मौजूद किसी भी दस्तावेज़ पर लागू होता है, ठीक वर्ड रैप की तरह — यह गद्य तक सीमित नहीं है, इसलिए कोड संपादित करते समय इसे चालू करने पर पहचानकर्ताओं और कीवर्ड की शुरुआत भी बोल्ड हो जाती है।",
+    "bionicHelp.footer":
+      "इसे किसी भी समय देखें ▸ बायोनिक रीडिंग से, नीचे दिए बटन से, या Ctrl+Shift+B दबाकर चालू करें।",
+    "bionicHelp.turnOn": "बायोनिक रीडिंग चालू करें",
+    "bionicHelp.turnOff": "बायोनिक रीडिंग बंद करें",
+
+    "help.center": "सहायता और उपयोग-निर्देश",
+    "modal.helpCenterTitle": "सहायता और उपयोग-निर्देश",
+    "help.searchPlaceholder": "सहायता खोजें…",
+    "help.noResults": "कोई मेल खाता विषय नहीं",
+
+    "help.overviewTitle": "अवलोकन",
+    "help.overviewIntro":
+      "JustCode, HTML, CSS, JavaScript और सामान्य टेक्स्ट या कोड के लिए एक छोटा, तेज़ संपादक है — यह तेज़ी से खुलने और रास्ते से हटकर रहने के लिए बनाया गया है, न कि पूर्ण IDE की जगह लेने के लिए।",
+    "help.overviewPoint1": "फ़ाइलें एक ही विंडो में टैब के रूप में खुलती हैं; पहले सेट करने के लिए कोई प्रोजेक्ट या वर्कस्पेस नहीं है।",
+    "help.overviewPoint2": "पूरी कीबोर्ड शॉर्टकट संदर्भ सूची के लिए किसी भी समय F1 दबाएँ।",
+
+    "help.filesTitle": "फ़ाइलें",
+    "help.filesIntro": "फ़ाइलें टैब के रूप में खुलती हैं; JustCode में प्रोजेक्ट या वर्कस्पेस जैसी कोई अवधारणा नहीं है।",
+    "help.filesPoint1":
+      "नई फ़ाइल (Ctrl+N) कई भाषाओं के लिए आरंभिक टेम्पलेट, या एक खाली दस्तावेज़ प्रस्तुत करती है; खोलें… (Ctrl+O) एक साथ कई फ़ाइलें स्वीकार करता है।",
+    "help.filesPoint2":
+      "सहेजें (Ctrl+S) और इस रूप में सहेजें (Ctrl+Shift+S) सीधे डिस्क पर लिखते हैं; सभी सहेजें (Ctrl+Alt+S) एक बार में हर बदली गई टैब को कवर करता है।",
+    "help.filesPoint3": "फ़ाइल ▸ हाल की फ़ाइलें पुनः आरंभ के बीच पिछली 15 फ़ाइलें याद रखता है।",
+    "help.filesPoint4":
+      "फ़ाइल ▸ फ़ाइल एसोसिएशन… JustCode को Windows के साथ पंजीकृत करता है ताकि यह समझी जाने वाली फ़ाइल प्रकारों के लिए \"इसके साथ खोलें\" विकल्प — या डिफ़ॉल्ट — के रूप में दिखाई दे।",
+
+    "help.editingTitle": "संपादन",
+    "help.editingIntro": "कट, कॉपी, पेस्ट, पूर्ववत करें और फिर से करें के अलावा मानक संपादन, साथ ही कुछ अतिरिक्त सुविधाएँ।",
+    "help.editingPoint1":
+      "Ctrl+/ वर्तमान भाषा के सिंटैक्स का उपयोग करके एक टिप्पणी टॉगल करता है — एक पंक्ति के लिए लाइन टिप्पणियाँ, चयन पर ब्लॉक टिप्पणियाँ।",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L चयन का केस बदलते हैं; Ctrl+Alt+G एक नया GUID जोड़ता है।",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ वर्तमान पंक्ति को स्थानांतरित करता है; Alt+Shift+↑ / Alt+Shift+↓ इसे ऊपर या नीचे डुप्लिकेट करता है।",
+    "help.editingPoint4": "Ctrl+क्लिक एक और कर्सर जोड़ता है; Alt+ड्रैग एक आयताकार (कॉलम) चयन बनाता है।",
+
+    "help.searchTitle": "खोज",
+    "help.searchIntro": "वर्तमान फ़ाइल के भीतर खोजें और बदलें, या सीधे किसी परिभाषा पर जाएँ।",
+    "help.searchPoint1":
+      "Ctrl+F खोज खोलता है; Ctrl+H खोजें और बदलें खोलता है। F3 / Shift+F3 अंतिम खोज को आगे या पीछे दोहराते हैं।",
+    "help.searchPoint2":
+      "Ctrl+Shift+G प्रतीक पर जाएँ खोलता है — वर्तमान फ़ाइल में फ़ंक्शन, क्लास और अन्य घोषणाओं की एक फ़िल्टर करने योग्य सूची।",
+
+    "help.bookmarksTitle": "बुकमार्क",
+    "help.bookmarksIntro": "प्रति दस्तावेज़ तीन क्रमांकित बुकमार्क स्लॉट, बिना अपनी जगह खोजने के लिए स्क्रॉल किए किसी बड़ी फ़ाइल में घूमने के लिए।",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 वर्तमान पंक्ति पर बुकमार्क सेट या साफ़ करता है; Ctrl+1 / 2 / 3 सीधे उस पर जाता है।",
+
+    "help.splitTabsTitle": "स्प्लिट व्यू और टैब",
+    "help.splitTabsIntro": "टैब को अधिकतम चार पैन में व्यवस्थित किया जा सकता है।",
+    "help.splitTabsPoint1":
+      "Ctrl+K के बाद एक ऐरो कुंजी सक्रिय पैन को उस दिशा में विभाजित करती है; टैब को स्क्रीन किनारे तक खींचना भी वही करता है।",
+    "help.splitTabsPoint2":
+      "टैब को किसी अन्य पैन की टैब बार पर खींचना उसे वहाँ ले जाता है; किसी पैन से अंतिम टैब को बाहर खींचना विभाजन को पूर्ववत करता है।",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab टैब के बीच चक्रित होते हैं; टैब पर मध्य-क्लिक इसे बंद कर देता है।",
+
+    "help.foldingTitle": "कोड फ़ोल्डिंग",
+    "help.foldingIntro": "किसी भी ब्लॉक को रास्ते से हटाने के लिए संक्षिप्त किया जा सकता है।",
+    "help.foldingPoint1":
+      "गटर में शेवरॉन पर क्लिक करें, या कर्सर पर मौजूद ब्लॉक को संक्षिप्त या विस्तृत करने के लिए Ctrl+Shift+[ / ] दबाएँ।",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] फ़ाइल में सब कुछ एक साथ संक्षिप्त या विस्तृत कर देता है।",
+
+    "help.terminalTitle": "टर्मिनल",
+    "help.terminalIntro": "एक एकीकृत टर्मिनल पैनल, अलग विंडो नहीं।",
+    "help.terminalPoint1":
+      "Ctrl+` इसे दिखाता या छुपाता है; Ctrl+Shift+` पहले से चल रहे किसी भी टर्मिनल के साथ एक नया खोलता है।",
+    "help.terminalPoint2": "एक नया टर्मिनल वर्तमान में संपादित की जा रही फ़ाइल के फ़ोल्डर में शुरू होता है।",
+    "help.terminalPoint3":
+      "फ़ाइल ▸ टर्मिनल में चलाएँ (Ctrl+F5) वर्तमान स्क्रिप्ट चलाता है और उसके बाद शेल को प्रॉम्प्ट पर खुला छोड़ देता है, ताकि किसी विफलता को तुरंत जाँचा जा सके।",
+
+    "help.runTitle": "चलाएँ",
+    "help.runIntro": "F5 वर्तमान फ़ाइल को स्रोत टेक्स्ट के बजाय वास्तव में जैसी दिखेगी या व्यवहार करेगी, वैसे दिखाता है।",
+    "help.runPoint1":
+      "HTML: डिफ़ॉल्ट ब्राउज़र में खुलती है। उसी फ़ाइल को फिर से चलाने पर, जब तक वह टैब खुला है, नया टैब खोलने के बजाय उसे रीफ़्रेश किया जाता है।",
+    "help.runPoint2": "Markdown: पहले एक स्टाइल किए गए HTML दस्तावेज़ में रेंडर होता है, फिर उसी तरह पूर्वावलोकित किया जाता है।",
+    "help.runPoint3":
+      "PowerShell, Batch और Shell स्क्रिप्ट: अपनी स्वयं की कंसोल विंडो में चलती हैं, जो स्क्रिप्ट पूरी होने के बाद भी खुली रहती है।",
+
+    "help.wordWrapIntro":
+      "डिफ़ॉल्ट रूप से बंद। रैपिंग लंबी पंक्तियों को बिना क्षैतिज स्क्रॉल के स्क्रीन पर बनाए रखती है, लेकिन गटर और वास्तविक पंक्ति संख्याओं के बीच पंक्ति-दर-पंक्ति मेल को तोड़ देती है।",
+    "help.wordWrapPoint1": "इसे देखें ▸ वर्ड रैप या Alt+Z से टॉगल करें। यह वर्तमान में स्क्रीन पर मौजूद दस्तावेज़ पर लागू होता है।",
+
+    "help.spellCheckIntro": "डिफ़ॉल्ट रूप से बंद — स्रोत कोड में अधिकांश पहचानकर्ता परिभाषा के अनुसार \"वर्तनी में ग़लत\" होते हैं।",
+    "help.spellCheckPoint1":
+      "वेबव्यू की अंतर्निहित जाँच के बजाय वास्तविक टेक्स्ट पर लिंटर के रूप में चलता है, इसलिए वर्तनी की ग़लतियाँ कुल समस्याओं में गिनी जाती हैं और सुझाए गए सुधारों के साथ आती हैं।",
+    "help.spellCheckPoint2": "इसे देखें ▸ वर्तनी जाँच से टॉगल करें।",
+
+    "help.languageTitle": "इंटरफ़ेस भाषा",
+    "help.languageIntro": "JustCode के अपने मेनू और डायलॉग की भाषा — किसी भी फ़ाइल की सामग्री या प्रोग्रामिंग भाषा से स्वतंत्र।",
+    "help.languagePoint1":
+      "देखें ▸ भाषा… हर अनुवाद को उसके अंग्रेज़ी नाम के बजाय उसके अपने नाम से सूचीबद्ध करता है, क्योंकि \"German\" उस व्यक्ति की मदद नहीं करता जो केवल हिंदी पढ़ता है।",
+    "help.languagePoint2": "अंग्रेज़ी अंतर्निहित है; कोई भी अन्य भाषा पहली बार चुने जाने पर डाउनलोड होती है।",
+
+    "sc.toolbar": "टूलबार टॉगल करें",
+    "sc.statusBar": "स्टेटस बार टॉगल करें",
+    "sc.spellCheck": "वर्तनी जाँच टॉगल करें",
+    "sc.bionicReading": "बायोनिक रीडिंग टॉगल करें",
+    "sc.cycleTheme": "थीम चक्रित करें (डार्क ▸ लाइट ▸ ऑटिज़्म)",
   },
   hu: {
     "menu.file": "Fájl",
@@ -3151,6 +5035,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Kicsi, gyors kódszerkesztő.",
     "about.builtWith": "Tauri 2 és CodeMirror 6 alapokon.",
     "about.version": "Verzió: {version}",
+    "sc.g.menus": "Menük",
     "sc.g.file": "Fájl",
     "sc.g.editing": "Szerkesztés",
     "sc.g.bookmarks": "Könyvjelzők",
@@ -3176,6 +5061,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+kattintás egy URL-re",
     "sc.k.clickPath": "Kattintson az útvonalra az állapotsoron",
     "sc.k.clickLanguage": "Kattintson a nyelvre az állapotsoron",
+    "sc.openFileMenu": "Fájl menü megnyitása",
+    "sc.openEditMenu": "Szerkesztés menü megnyitása",
+    "sc.openViewMenu": "Nézet menü megnyitása",
+    "sc.openHelpMenu": "Súgó menü megnyitása",
     "sc.newFile": "Új fájl",
     "sc.openFile": "Fájl megnyitása",
     "sc.save": "Mentés",
@@ -3249,6 +5138,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "A kurzor alatti hivatkozás megnyitása",
     "sc.copyFullPath": "Teljes elérési út másolása",
     "sc.changeMode": "Nyelvi mód módosítása",
+
+    "view.autismTheme": "Autizmus téma",
+    "view.autismThemeHint": "Visszafogott, alacsony kontrasztú színek érzékszervi érzékenységhez",
+    "view.bionicReading": "Bionikus olvasás",
+    "help.autismTheme": "Autizmus téma",
+    "help.bionicReading": "Bionikus olvasás",
+    "toolbar.switchToTheme": "Váltás erre: {theme}",
+
+    "autismHelp.intro":
+      "Visszafogott, alacsony ingerküszöbű színtéma érzékszervileg érzékeny felhasználóknak — autizmus, ADHD, migrén és más vizuális stresszállapotok esetén. Hosszú ideig is nyugodt marad a szerkesztő látványa, az olvashatóság feladása nélkül.",
+    "autismHelp.point1":
+      "Nincs tiszta fekete vagy fehér. A meleg, sötét szénszürke háttér és a lágy krémszínű előtér elkerüli mind a képernyő csillogását, mind az éles fekete-fehér kontraszt okozta glóriahatást.",
+    "autismHelp.point2":
+      "Sehol sincs piros vagy sárga — a két leggyakrabban túlingerlőnek jelzett árnyalat. A hibák visszafogott terrakottát, a keresési kiemelések visszafogott aranyat használnak a megszokott vészpiros és élénksárga helyett.",
+    "autismHelp.point3":
+      "Minden szín telítettsége jóval alacsonyabb, mint a Sötét és Világos témáé, így semmi sem \"vibrál\" a szomszédjai mellett, miközben a háttérrel szembeni kontraszt ugyanaz marad.",
+    "autismHelp.point4":
+      "Nyugtató árnyalatok uralkodnak mindenütt: poros kék és zsályazöld a szintaxiskiemelés nagy részéhez, visszafogott levendula és drapp a többihez.",
+    "autismHelp.footer":
+      "Bármikor átválthat rá a Nézet ▸ Autizmus téma menüből, az alábbi gombbal, vagy a Ctrl+Shift+T megnyomásával a Sötét ▸ Világos ▸ Autizmus közötti körbeváltáshoz.",
+    "autismHelp.switch": "Váltás autizmus témára",
+    "autismHelp.active": "Ez az aktuális témád.",
+
+    "bionicHelp.intro":
+      "Tipográfiai trükk, amely minden szó elejét félkövérré teszi, így a szemnek soronként kevesebb és rövidebb fixációs pontra van szüksége. ADHD, diszlexia és néha autizmus esetén olvasási segédeszközként hirdetik.",
+    "bionicHelp.point1":
+      "Minden szó nagyjából első 40%-a félkövér lesz, a többi normál súlyú marad — az ötlet az, hogy az agy a szó elejéről felismeri azt, és a végét a szövegkörnyezetből egészíti ki.",
+    "bionicHelp.point2":
+      "A bizonyítékok vegyesek. Több kontrollált vizsgálat nem talált mérhető javulást az olvasási sebességben vagy a megértésben a hétköznapi szöveghez képest, és egyes olvasók zavaróbbnak, nem kevésbé zavarónak találták. Próbáld ki ahelyett, hogy feltételeznéd, segíteni fog.",
+    "bionicHelp.point3":
+      "Bármely, a képernyőn lévő dokumentumra vonatkozik, akárcsak a sortördelés — nem korlátozódik prózára, így ha kód szerkesztése közben kapcsolod be, az azonosítók és kulcsszavak elejét is félkövérré teszi.",
+    "bionicHelp.footer":
+      "Bármikor bekapcsolhatod a Nézet ▸ Bionikus olvasás menüből, az alábbi gombbal, vagy a Ctrl+Shift+B megnyomásával.",
+    "bionicHelp.turnOn": "Bionikus olvasás bekapcsolása",
+    "bionicHelp.turnOff": "Bionikus olvasás kikapcsolása",
+
+    "help.center": "Súgó és útmutatók",
+    "modal.helpCenterTitle": "Súgó és útmutatók",
+    "help.searchPlaceholder": "Súgó keresése…",
+    "help.noResults": "Nincs egyező téma",
+
+    "help.overviewTitle": "Áttekintés",
+    "help.overviewIntro":
+      "A JustCode egy kis, gyors szerkesztő HTML, CSS, JavaScript és általános szöveg vagy kód számára — arra tervezve, hogy gyorsan nyíljon meg és ne legyen útban, nem pedig arra, hogy egy teljes IDE-t helyettesítsen.",
+    "help.overviewPoint1":
+      "A fájlok lapokként nyílnak meg egyetlen ablakban; nincs előzetesen beállítandó projekt vagy munkaterület.",
+    "help.overviewPoint2": "Bármikor nyomj F1-et a teljes billentyűparancs-referenciáért.",
+
+    "help.filesTitle": "Fájlok",
+    "help.filesIntro": "A fájlok lapokként nyílnak meg; a JustCode nem ismeri a projekt vagy munkaterület fogalmát.",
+    "help.filesPoint1":
+      "Az Új fájl (Ctrl+N) sok nyelvhez kínál kezdősablonokat, vagy üres dokumentumot; a Megnyitás… (Ctrl+O) egyszerre több fájlt is elfogad.",
+    "help.filesPoint2":
+      "A Mentés (Ctrl+S) és a Mentés másként (Ctrl+Shift+S) közvetlenül a lemezre ír; a Mindent ment (Ctrl+Alt+S) egyszerre lefedi az összes módosított lapot.",
+    "help.filesPoint3": "A Fájl ▸ Legutóbbi fájlok az utolsó 15 fájlt jegyzi meg az újraindítások között.",
+    "help.filesPoint4":
+      "A Fájl ▸ Fájltársítások… regisztrálja a JustCode-ot a Windowsnál, hogy \"Megnyitás ezzel\" opcióként — vagy alapértelmezettként — jelenjen meg az általa ismert fájltípusokhoz.",
+
+    "help.editingTitle": "Szerkesztés",
+    "help.editingIntro": "Standard szerkesztés, plusz néhány extra a kivágás, másolás, beillesztés, visszavonás és ismétlés mellett.",
+    "help.editingPoint1":
+      "A Ctrl+/ az aktuális nyelv szintaxisával kapcsolja be/ki a megjegyzést — sormegjegyzések egyetlen sorhoz, blokkmegjegyzések a kijelöléshez.",
+    "help.editingPoint2":
+      "A Ctrl+Shift+U / Ctrl+Shift+L megváltoztatja a kijelölés kis-/nagybetűit; a Ctrl+Alt+G új GUID-ot szúr be.",
+    "help.editingPoint3":
+      "Az Alt+↑ / Alt+↓ elmozdítja az aktuális sort; az Alt+Shift+↑ / Alt+Shift+↓ felfelé vagy lefelé megkettőzi.",
+    "help.editingPoint4": "A Ctrl+kattintás egy újabb kurzort ad hozzá; az Alt+húzás téglalap alakú (oszlopos) kijelölést hoz létre.",
+
+    "help.searchTitle": "Keresés",
+    "help.searchIntro": "Keresés és csere az aktuális fájlon belül, vagy közvetlen ugrás egy definícióra.",
+    "help.searchPoint1":
+      "A Ctrl+F megnyitja a Keresést; a Ctrl+H megnyitja a Keresés és csere ablakot. Az F3 / Shift+F3 megismétli az utolsó keresést előre vagy hátrafelé.",
+    "help.searchPoint2":
+      "A Ctrl+Shift+G megnyitja az Ugrás szimbólumra funkciót — az aktuális fájl függvényeinek, osztályainak és más deklarációinak szűrhető listáját.",
+
+    "help.bookmarksTitle": "Könyvjelzők",
+    "help.bookmarksIntro":
+      "Dokumentumonként három számozott könyvjelzőhely, hogy egy nagy fájlban gördítés nélkül lehessen mozogni a hely megtalálásához.",
+    "help.bookmarksPoint1":
+      "A Ctrl+Shift+1 / 2 / 3 beállít vagy töröl egy könyvjelzőt az aktuális sorban; a Ctrl+1 / 2 / 3 közvetlenül odaugrik.",
+
+    "help.splitTabsTitle": "Osztott nézet és lapok",
+    "help.splitTabsIntro": "A lapok legfeljebb négy panelbe rendezhetők.",
+    "help.splitTabsPoint1":
+      "A Ctrl+K, majd egy nyílbillentyű abba az irányba osztja az aktív panelt; egy lap képernyőszélre húzása ugyanezt teszi.",
+    "help.splitTabsPoint2":
+      "Egy lap másik panel lapsávjára húzása odahelyezi azt; az utolsó lap kihúzása egy panelból megszünteti a felosztást.",
+    "help.splitTabsPoint3": "A Ctrl+Tab / Ctrl+Shift+Tab körbejárja a lapokat; egy lapra kattintva a középső gombbal bezárja azt.",
+
+    "help.foldingTitle": "Kód összecsukása",
+    "help.foldingIntro": "Bármely blokk összecsukható, hogy ne legyen útban.",
+    "help.foldingPoint1":
+      "Kattints a nyílra a margón, vagy nyomj Ctrl+Shift+[ / ] billentyűket a kurzornál lévő blokk összecsukásához vagy kinyitásához.",
+    "help.foldingPoint2": "A Ctrl+Alt+[ / ] egyszerre csukja össze vagy nyitja ki a fájl teljes tartalmát.",
+
+    "help.terminalTitle": "Terminál",
+    "help.terminalIntro": "Egy beépített terminálpanel, nem külön ablak.",
+    "help.terminalPoint1":
+      "A Ctrl+` megjeleníti vagy elrejti; a Ctrl+Shift+` egy újat nyit meg minden már futó mellett.",
+    "help.terminalPoint2": "Egy új terminál az éppen szerkesztett fájl mappájában indul.",
+    "help.terminalPoint3":
+      "A Fájl ▸ Futtatás terminálban (Ctrl+F5) lefuttatja az aktuális szkriptet, majd a parancssort nyitva hagyja utána, hogy egy esetleges hiba azonnal megvizsgálható legyen.",
+
+    "help.runTitle": "Futtatás",
+    "help.runIntro": "Az F5 az aktuális fájlt úgy jeleníti meg, ahogyan valójában kinéz vagy viselkedik, nem forrásszövegként.",
+    "help.runPoint1":
+      "HTML: az alapértelmezett böngészőben nyílik meg. Ugyanannak a fájlnak az ismételt futtatása frissíti azt a lapot ahelyett, hogy másikat nyitna, amíg az nyitva marad.",
+    "help.runPoint2": "Markdown: először formázott HTML dokumentummá alakul, majd ugyanúgy előnézetben jelenik meg.",
+    "help.runPoint3":
+      "PowerShell-, Batch- és Shell-szkriptek: saját konzolablakukban futnak, amely a szkript befejezése után is nyitva marad.",
+
+    "help.wordWrapIntro":
+      "Alapértelmezés szerint kikapcsolva. A tördelés vízszintes görgetés nélkül tartja a képernyőn a hosszú sorokat, de megbontja a margó és a tényleges sorszámok közötti sorról sorra egyezést.",
+    "help.wordWrapPoint1":
+      "Kapcsold be a Nézet ▸ Sortörés menüből vagy az Alt+Z billentyűvel. Az aktuálisan a képernyőn lévő dokumentumra vonatkozik.",
+
+    "help.spellCheckIntro": "Alapértelmezés szerint kikapcsolva — a forráskódban a legtöbb azonosító definíció szerint \"hibásan írt\".",
+    "help.spellCheckPoint1":
+      "A böngészőnézet beépített ellenőrzője helyett a tényleges szövegen fut lintként, így a helyesírási hibák beleszámítanak a problémák összesített számába, és javasolt javításokkal érkeznek.",
+    "help.spellCheckPoint2": "Kapcsold be a Nézet ▸ Helyesírás-ellenőrzés menüből.",
+
+    "help.languageTitle": "Felület nyelve",
+    "help.languageIntro":
+      "A JustCode saját menüinek és párbeszédpaneljeinek nyelve — függetlenül bármely fájl tartalmától vagy programozási nyelvétől.",
+    "help.languagePoint1":
+      "A Nézet ▸ Nyelv… minden fordítást a saját nevén sorol fel, nem az angol nevén, mivel a \"German\" nem segít annak, aki csak magyarul olvas.",
+    "help.languagePoint2": "Az angol beépített; minden más nyelv az első kiválasztáskor töltődik le.",
+
+    "sc.toolbar": "Eszköztár be-/kikapcsolása",
+    "sc.statusBar": "Állapotsor be-/kikapcsolása",
+    "sc.spellCheck": "Helyesírás-ellenőrzés be-/kikapcsolása",
+    "sc.bionicReading": "Bionikus olvasás be-/kikapcsolása",
+    "sc.cycleTheme": "Témák körbeváltása (Sötét ▸ Világos ▸ Autizmus)",
   },
   id: {
     "menu.file": "Berkas",
@@ -3367,6 +5389,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Editor kode yang kecil dan cepat.",
     "about.builtWith": "Dibangun dengan Tauri 2 dan CodeMirror 6.",
     "about.version": "Versi {version}",
+    "sc.g.menus": "Menu",
     "sc.g.file": "File",
     "sc.g.editing": "Pengeditan",
     "sc.g.bookmarks": "Markah",
@@ -3392,6 +5415,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+klik URL",
     "sc.k.clickPath": "Klik path di bilah status",
     "sc.k.clickLanguage": "Klik bahasa di bilah status",
+    "sc.openFileMenu": "Buka menu Berkas",
+    "sc.openEditMenu": "Buka menu Edit",
+    "sc.openViewMenu": "Buka menu Tampilan",
+    "sc.openHelpMenu": "Buka menu Bantuan",
     "sc.newFile": "File baru",
     "sc.openFile": "Buka file",
     "sc.save": "Simpan",
@@ -3465,6 +5492,138 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Buka tautan di bawah kursor",
     "sc.copyFullPath": "Salin path lengkap",
     "sc.changeMode": "Ubah mode bahasa",
+
+    "view.autismTheme": "Tema Autisme",
+    "view.autismThemeHint": "Warna redup dan kontras rendah untuk sensitivitas sensorik",
+    "view.bionicReading": "Bionic Reading",
+    "help.autismTheme": "Tema Autisme",
+    "help.bionicReading": "Bionic Reading",
+    "toolbar.switchToTheme": "Beralih ke {theme}",
+
+    "autismHelp.intro":
+      "Tema warna redup dan rendah rangsangan untuk pengguna dengan sensitivitas sensorik — autisme, ADHD, migrain, dan kondisi stres visual lainnya. Tema ini menjaga editor tetap nyaman dipandang dalam waktu lama, tanpa mengorbankan keterbacaan.",
+    "autismHelp.point1":
+      "Tidak ada hitam murni atau putih murni. Latar belakang abu-abu arang hangat dan teks krem lembut menghindari silau layar sekaligus efek halo yang disebabkan kontras hitam-putih yang tajam.",
+    "autismHelp.point2":
+      "Tidak ada warna merah atau kuning di mana pun — dua warna yang paling sering disebut menyebabkan rangsangan berlebih. Kesalahan menggunakan warna terakota redup dan sorotan pencarian menggunakan emas redup, bukan merah tanda bahaya dan kuning terang biasa.",
+    "autismHelp.point3":
+      "Setiap warna memiliki saturasi yang jauh lebih rendah dibandingkan tema Gelap dan Terang, sehingga tidak ada yang \"bergetar\" di samping warna sekitarnya, meskipun kontras terhadap latar belakang tetap sama.",
+    "autismHelp.point4":
+      "Warna-warna menenangkan mendominasi di mana-mana: biru berdebu dan hijau sage untuk sebagian besar penyorotan sintaks, lavender redup dan tan untuk sisanya.",
+    "autismHelp.footer":
+      "Beralihlah ke tema ini kapan saja dari Tampilan ▸ Tema Autisme, dengan tombol di bawah, atau dengan menekan Ctrl+Shift+T untuk berputar antara Gelap ▸ Terang ▸ Autisme.",
+    "autismHelp.switch": "Beralih ke Tema Autisme",
+    "autismHelp.active": "Ini adalah tema Anda saat ini.",
+
+    "bionicHelp.intro":
+      "Trik tipografi yang menebalkan bagian awal setiap kata, sehingga mata memerlukan titik fiksasi yang lebih sedikit dan lebih pendek per baris. Ini dipasarkan sebagai alat bantu membaca untuk ADHD, disleksia, dan terkadang autisme.",
+    "bionicHelp.point1":
+      "Sekitar 40% bagian awal setiap kata ditebalkan dan sisanya tetap dengan ketebalan normal — idenya adalah otak mengenali kata dari awalnya dan melengkapi akhirnya dari konteks.",
+    "bionicHelp.point2":
+      "Buktinya beragam. Beberapa studi terkontrol tidak menemukan peningkatan yang terukur dalam kecepatan membaca atau pemahaman dibandingkan teks biasa, dan beberapa pembaca merasa lebih mengganggu, bukan berkurang. Cobalah sendiri alih-alih menganggap ini akan membantu.",
+    "bionicHelp.point3":
+      "Berlaku untuk dokumen apa pun yang ada di layar, sama seperti Bungkus Kata — tidak terbatas pada prosa, jadi mengaktifkannya saat mengedit kode juga menebalkan awal pengenal dan kata kunci.",
+    "bionicHelp.footer":
+      "Aktifkan kapan saja dari Tampilan ▸ Bionic Reading, dengan tombol di bawah, atau dengan menekan Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Aktifkan Bionic Reading",
+    "bionicHelp.turnOff": "Nonaktifkan Bionic Reading",
+
+    "help.center": "Bantuan & Panduan",
+    "modal.helpCenterTitle": "Bantuan & Panduan",
+    "help.searchPlaceholder": "Cari bantuan…",
+    "help.noResults": "Tidak ada topik yang cocok",
+
+    "help.overviewTitle": "Ringkasan",
+    "help.overviewIntro":
+      "JustCode adalah editor kecil dan cepat untuk HTML, CSS, JavaScript, dan teks atau kode umum — dibuat agar cepat dibuka dan tidak mengganggu, bukan untuk menggantikan IDE lengkap.",
+    "help.overviewPoint1":
+      "File terbuka sebagai tab dalam satu jendela; tidak ada proyek atau ruang kerja yang perlu disiapkan terlebih dahulu.",
+    "help.overviewPoint2": "Tekan F1 kapan saja untuk referensi pintasan keyboard lengkap.",
+
+    "help.filesTitle": "File",
+    "help.filesIntro": "File terbuka sebagai tab; JustCode tidak memiliki konsep proyek atau ruang kerja.",
+    "help.filesPoint1":
+      "Berkas Baru (Ctrl+N) menawarkan templat awal untuk banyak bahasa, atau dokumen kosong; Buka… (Ctrl+O) menerima beberapa file sekaligus.",
+    "help.filesPoint2":
+      "Simpan (Ctrl+S) dan Simpan Sebagai (Ctrl+Shift+S) menulis langsung ke disk; Simpan Semua (Ctrl+Alt+S) mencakup semua tab yang berubah sekaligus.",
+    "help.filesPoint3": "Berkas ▸ File Terbaru mengingat 15 file terakhir di antara mulai ulang.",
+    "help.filesPoint4":
+      "Berkas ▸ Asosiasi File… mendaftarkan JustCode ke Windows sehingga muncul sebagai opsi \"Buka dengan\" — atau default — untuk jenis file yang dipahaminya.",
+
+    "help.editingTitle": "Pengeditan",
+    "help.editingIntro": "Pengeditan standar, ditambah beberapa fitur ekstra selain potong, salin, tempel, urungkan, dan ulangi.",
+    "help.editingPoint1":
+      "Ctrl+/ mengalihkan komentar menggunakan sintaks bahasa saat ini — komentar baris untuk satu baris, komentar blok untuk seleksi.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L mengubah huruf besar/kecil pada seleksi; Ctrl+Alt+G menyisipkan GUID baru.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ memindahkan baris saat ini; Alt+Shift+↑ / Alt+Shift+↓ menduplikasinya ke atas atau bawah.",
+    "help.editingPoint4": "Ctrl+klik menambahkan kursor lain; Alt+seret membuat seleksi persegi panjang (kolom).",
+
+    "help.searchTitle": "Pencarian",
+    "help.searchIntro": "Cari dan ganti di dalam file saat ini, atau langsung lompat ke definisi.",
+    "help.searchPoint1":
+      "Ctrl+F membuka Cari; Ctrl+H membuka Cari dan Ganti. F3 / Shift+F3 mengulangi pencarian terakhir maju atau mundur.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G membuka Lompat ke Simbol — daftar fungsi, kelas, dan deklarasi lain yang dapat difilter dalam file saat ini.",
+
+    "help.bookmarksTitle": "Markah",
+    "help.bookmarksIntro": "Tiga slot markah bernomor per dokumen, untuk berpindah-pindah di file besar tanpa perlu menggulir untuk menemukan posisi Anda.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 mengatur atau menghapus markah pada baris saat ini; Ctrl+1 / 2 / 3 langsung melompat ke sana.",
+
+    "help.splitTabsTitle": "Tampilan Terpisah & Tab",
+    "help.splitTabsIntro": "Tab dapat diatur menjadi hingga empat panel.",
+    "help.splitTabsPoint1":
+      "Ctrl+K diikuti tombol panah membagi panel aktif ke arah tersebut; menyeret tab ke tepi layar melakukan hal yang sama.",
+    "help.splitTabsPoint2":
+      "Menyeret tab ke bilah tab panel lain memindahkannya ke sana; menyeret tab terakhir keluar dari panel membatalkan pembagian.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab berpindah antar tab; klik tombol tengah pada tab menutupnya.",
+
+    "help.foldingTitle": "Melipat Kode",
+    "help.foldingIntro": "Blok apa pun dapat dilipat agar tidak menghalangi.",
+    "help.foldingPoint1":
+      "Klik tanda panah di gutter, atau tekan Ctrl+Shift+[ / ] untuk melipat atau membuka blok di posisi kursor.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] melipat atau membuka semua isi file sekaligus.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Panel terminal terintegrasi, bukan jendela terpisah.",
+    "help.terminalPoint1":
+      "Ctrl+` menampilkan atau menyembunyikannya; Ctrl+Shift+` membuka yang baru di samping yang sudah berjalan.",
+    "help.terminalPoint2": "Terminal baru dimulai di folder file yang sedang diedit.",
+    "help.terminalPoint3":
+      "Berkas ▸ Jalankan di Terminal (Ctrl+F5) menjalankan skrip saat ini dan membiarkan shell terbuka di prompt setelahnya, sehingga kegagalan dapat langsung diperiksa.",
+
+    "help.runTitle": "Jalankan",
+    "help.runIntro": "F5 menampilkan file saat ini seperti tampilan atau perilaku sebenarnya, bukan sebagai teks sumber.",
+    "help.runPoint1":
+      "HTML: terbuka di peramban default. Menjalankan file yang sama lagi akan menyegarkan tab tersebut, bukan membuka tab baru, selama tab itu masih terbuka.",
+    "help.runPoint2": "Markdown: dirender terlebih dahulu menjadi dokumen HTML bergaya, lalu dipratinjau dengan cara yang sama.",
+    "help.runPoint3":
+      "Skrip PowerShell, Batch, dan Shell: berjalan di jendela konsolnya sendiri, yang tetap terbuka setelah skrip selesai.",
+
+    "help.wordWrapIntro":
+      "Nonaktif secara default. Pembungkusan menjaga baris panjang tetap di layar tanpa gulir horizontal, tetapi merusak kesesuaian baris demi baris antara gutter dan nomor baris sebenarnya.",
+    "help.wordWrapPoint1":
+      "Alihkan dari Tampilan ▸ Bungkus Kata atau Alt+Z. Ini berlaku untuk dokumen yang saat ini ada di layar.",
+
+    "help.spellCheckIntro": "Nonaktif secara default — sebagian besar pengenal dalam kode sumber \"salah eja\" menurut definisinya.",
+    "help.spellCheckPoint1":
+      "Berjalan sebagai linter pada teks sebenarnya, bukan pemeriksa bawaan tampilan web, sehingga kesalahan ejaan dihitung dalam total Masalah dan disertai saran perbaikan.",
+    "help.spellCheckPoint2": "Alihkan dari Tampilan ▸ Pemeriksaan Ejaan.",
+
+    "help.languageTitle": "Bahasa Antarmuka",
+    "help.languageIntro":
+      "Bahasa menu dan dialog JustCode sendiri — tidak tergantung pada konten atau bahasa pemrograman file mana pun.",
+    "help.languagePoint1":
+      "Tampilan ▸ Bahasa… mencantumkan setiap terjemahan dengan namanya sendiri, bukan nama Inggrisnya, karena \"German\" tidak membantu seseorang yang hanya membaca bahasa Indonesia.",
+    "help.languagePoint2": "Bahasa Inggris sudah bawaan; bahasa lain akan diunduh saat pertama kali dipilih.",
+
+    "sc.toolbar": "Alihkan bilah alat",
+    "sc.statusBar": "Alihkan bilah status",
+    "sc.spellCheck": "Alihkan pemeriksaan ejaan",
+    "sc.bionicReading": "Alihkan Bionic Reading",
+    "sc.cycleTheme": "Putar tema (Gelap ▸ Terang ▸ Autisme)",
   },
   it: {
     "menu.file": "File",
@@ -3583,6 +5742,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Un editor di codice piccolo e veloce.",
     "about.builtWith": "Realizzato con Tauri 2 e CodeMirror 6.",
     "about.version": "Versione {version}",
+    "sc.g.menus": "Menu",
     "sc.g.file": "File",
     "sc.g.editing": "Modifica",
     "sc.g.bookmarks": "Segnalibri",
@@ -3608,6 +5768,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+clic su un URL",
     "sc.k.clickPath": "Fare clic sul percorso nella barra di stato",
     "sc.k.clickLanguage": "Fare clic sul linguaggio nella barra di stato",
+    "sc.openFileMenu": "Apri il menu File",
+    "sc.openEditMenu": "Apri il menu Modifica",
+    "sc.openViewMenu": "Apri il menu Visualizza",
+    "sc.openHelpMenu": "Apri il menu Aiuto",
     "sc.newFile": "Nuovo file",
     "sc.openFile": "Apri file",
     "sc.save": "Salva",
@@ -3681,6 +5845,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Apri il collegamento sotto il cursore",
     "sc.copyFullPath": "Copia il percorso completo",
     "sc.changeMode": "Cambia il modo linguaggio",
+
+    "view.autismTheme": "Tema Autismo",
+    "view.autismThemeHint": "Colori tenui e a basso contrasto per la sensibilità sensoriale",
+    "view.bionicReading": "Lettura bionica",
+    "help.autismTheme": "Tema Autismo",
+    "help.bionicReading": "Lettura bionica",
+    "toolbar.switchToTheme": "Passa a {theme}",
+
+    "autismHelp.intro":
+      "Un tema di colori tenui e poco stimolanti per utenti sensibili dal punto di vista sensoriale — autismo, ADHD, emicrania e altre condizioni di stress visivo. Mantiene l'editor rilassante da guardare per lunghi periodi, senza sacrificare la leggibilità.",
+    "autismHelp.point1":
+      "Niente nero puro o bianco puro. Uno sfondo grigio antracite caldo e un testo color crema tenue evitano sia l'abbagliamento dello schermo sia l'effetto alone causato da un forte contrasto bianco-nero.",
+    "autismHelp.point2":
+      "Nessun rosso o giallo da nessuna parte — le due tonalità più spesso segnalate come sovrastimolanti. Gli errori usano un terracotta tenue e le evidenziazioni di ricerca un oro tenue al posto del solito rosso allarme e giallo acceso.",
+    "autismHelp.point3":
+      "Ogni colore ha una saturazione molto più bassa rispetto ai temi Scuro e Chiaro, così nulla \"vibra\" accanto ai suoi vicini, pur mantenendo lo stesso contrasto rispetto allo sfondo.",
+    "autismHelp.point4":
+      "Le tonalità rilassanti dominano ovunque: blu polveroso e verde salvia per la maggior parte dell'evidenziazione della sintassi, lavanda tenue e beige per il resto.",
+    "autismHelp.footer":
+      "Passa a questo tema in qualsiasi momento da Visualizza ▸ Tema Autismo, con il pulsante sottostante, oppure premendo Ctrl+Maiusc+T per alternare tra Scuro ▸ Chiaro ▸ Autismo.",
+    "autismHelp.switch": "Passa al tema Autismo",
+    "autismHelp.active": "Questo è il tuo tema attuale.",
+
+    "bionicHelp.intro":
+      "Un trucco tipografico che rende in grassetto la parte iniziale di ogni parola, così l'occhio ha bisogno di meno punti di fissazione, e più brevi, per riga. Viene proposto come ausilio alla lettura per ADHD, dislessia e talvolta autismo.",
+    "bionicHelp.point1":
+      "Circa il primo 40% di ogni parola viene messo in grassetto, il resto rimane con peso normale — l'idea è che il cervello riconosca una parola dall'inizio e completi la fine dal contesto.",
+    "bionicHelp.point2":
+      "Le prove sono contrastanti. Diversi studi controllati non hanno riscontrato un miglioramento misurabile nella velocità di lettura o nella comprensione rispetto al testo normale, e alcuni lettori la trovano più distraente, non meno. Provala invece di dare per scontato che aiuterà.",
+    "bionicHelp.point3":
+      "Si applica a qualsiasi documento sullo schermo, come il ritorno a capo automatico — non è limitata alla prosa, quindi attivarla durante la modifica del codice mette in grassetto anche l'inizio di identificatori e parole chiave.",
+    "bionicHelp.footer":
+      "Attivala in qualsiasi momento da Visualizza ▸ Lettura bionica, con il pulsante sottostante, oppure premendo Ctrl+Maiusc+B.",
+    "bionicHelp.turnOn": "Attiva lettura bionica",
+    "bionicHelp.turnOff": "Disattiva lettura bionica",
+
+    "help.center": "Guida e istruzioni",
+    "modal.helpCenterTitle": "Guida e istruzioni",
+    "help.searchPlaceholder": "Cerca nella guida…",
+    "help.noResults": "Nessun argomento corrispondente",
+
+    "help.overviewTitle": "Panoramica",
+    "help.overviewIntro":
+      "JustCode è un editor piccolo e veloce per HTML, CSS, JavaScript e testo o codice generico — pensato per aprirsi rapidamente e non intralciare, non per sostituire un IDE completo.",
+    "help.overviewPoint1":
+      "I file si aprono come schede in un'unica finestra; non esiste un progetto o uno spazio di lavoro da configurare prima.",
+    "help.overviewPoint2": "Premi F1 in qualsiasi momento per il riferimento completo delle scorciatoie da tastiera.",
+
+    "help.filesTitle": "File",
+    "help.filesIntro": "I file si aprono come schede; JustCode non ha il concetto di progetto o spazio di lavoro.",
+    "help.filesPoint1":
+      "Nuovo file (Ctrl+N) offre modelli iniziali per molti linguaggi, o un documento vuoto; Apri… (Ctrl+O) accetta più file contemporaneamente.",
+    "help.filesPoint2":
+      "Salva (Ctrl+S) e Salva con nome (Ctrl+Maiusc+S) scrivono direttamente su disco; Salva tutto (Ctrl+Alt+S) copre tutte le schede modificate in una volta.",
+    "help.filesPoint3": "File ▸ File recenti ricorda gli ultimi 15 file tra i riavvii.",
+    "help.filesPoint4":
+      "File ▸ Associazioni file… registra JustCode presso Windows in modo che appaia come opzione \"Apri con\" — o come predefinito — per i tipi di file che comprende.",
+
+    "help.editingTitle": "Modifica",
+    "help.editingIntro": "Modifica standard, più alcune funzioni extra oltre taglia, copia, incolla, annulla e ripristina.",
+    "help.editingPoint1":
+      "Ctrl+/ attiva/disattiva un commento usando la sintassi del linguaggio corrente — commenti di riga per una singola riga, commenti a blocchi su una selezione.",
+    "help.editingPoint2":
+      "Ctrl+Maiusc+U / Ctrl+Maiusc+L cambiano il maiuscolo/minuscolo della selezione; Ctrl+Alt+G inserisce un nuovo GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ sposta la riga corrente; Alt+Maiusc+↑ / Alt+Maiusc+↓ la duplica in su o in giù.",
+    "help.editingPoint4": "Ctrl+clic aggiunge un altro cursore; Alt+trascina crea una selezione rettangolare (a colonna).",
+
+    "help.searchTitle": "Ricerca",
+    "help.searchIntro": "Trova e sostituisci all'interno del file corrente, oppure salta direttamente a una definizione.",
+    "help.searchPoint1":
+      "Ctrl+F apre Trova; Ctrl+H apre Trova e sostituisci. F3 / Maiusc+F3 ripetono l'ultima ricerca in avanti o indietro.",
+    "help.searchPoint2":
+      "Ctrl+Maiusc+G apre Vai al simbolo — un elenco filtrabile di funzioni, classi e altre dichiarazioni nel file corrente.",
+
+    "help.bookmarksTitle": "Segnalibri",
+    "help.bookmarksIntro":
+      "Tre slot di segnalibri numerati per documento, per spostarsi in un file grande senza dover scorrere per ritrovare il proprio punto.",
+    "help.bookmarksPoint1":
+      "Ctrl+Maiusc+1 / 2 / 3 imposta o cancella un segnalibro sulla riga corrente; Ctrl+1 / 2 / 3 salta direttamente ad esso.",
+
+    "help.splitTabsTitle": "Visualizzazione divisa e schede",
+    "help.splitTabsIntro": "Le schede possono essere disposte in un massimo di quattro riquadri.",
+    "help.splitTabsPoint1":
+      "Ctrl+K seguito da un tasto freccia divide il riquadro attivo in quella direzione; trascinare una scheda verso un bordo dello schermo fa lo stesso.",
+    "help.splitTabsPoint2":
+      "Trascinare una scheda sulla barra delle schede di un altro riquadro la sposta lì; trascinare l'ultima scheda fuori da un riquadro annulla la divisione.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Maiusc+Tab scorrono tra le schede; il clic centrale su una scheda la chiude.",
+
+    "help.foldingTitle": "Compressione del codice",
+    "help.foldingIntro": "Qualsiasi blocco può essere compresso per toglierlo di mezzo.",
+    "help.foldingPoint1":
+      "Fai clic sulla freccetta nel margine, o premi Ctrl+Maiusc+[ / ] per comprimere o espandere il blocco al cursore.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] comprime o espande tutto il file in una volta.",
+
+    "help.terminalTitle": "Terminale",
+    "help.terminalIntro": "Un pannello del terminale integrato, non una finestra separata.",
+    "help.terminalPoint1":
+      "Ctrl+` lo mostra o nasconde; Ctrl+Maiusc+` ne apre uno nuovo accanto a qualsiasi altro già in esecuzione.",
+    "help.terminalPoint2": "Un nuovo terminale si avvia nella cartella del file attualmente in modifica.",
+    "help.terminalPoint3":
+      "File ▸ Esegui nel terminale (Ctrl+F5) esegue lo script corrente e lascia poi la shell aperta a un prompt, così un errore può essere esaminato sul posto.",
+
+    "help.runTitle": "Esegui",
+    "help.runIntro": "F5 mostra il file corrente come apparirà o si comporterà realmente, anziché come testo sorgente.",
+    "help.runPoint1":
+      "HTML: si apre nel browser predefinito. Eseguire di nuovo lo stesso file aggiorna quella scheda invece di aprirne una seconda, finché resta aperta.",
+    "help.runPoint2": "Markdown: viene prima trasformato in un documento HTML stilizzato, poi visualizzato in anteprima allo stesso modo.",
+    "help.runPoint3":
+      "Script PowerShell, Batch e Shell: vengono eseguiti nella propria finestra di console, che resta aperta dopo il termine dello script.",
+
+    "help.wordWrapIntro":
+      "Disattivato per impostazione predefinita. Il ritorno a capo mantiene le righe lunghe sullo schermo senza scorrimento orizzontale, ma interrompe la corrispondenza riga per riga tra il margine e i numeri di riga effettivi.",
+    "help.wordWrapPoint1":
+      "Attiva/disattiva da Visualizza ▸ A capo automatico o con Alt+Z. Si applica al documento attualmente sullo schermo.",
+
+    "help.spellCheckIntro": "Disattivato per impostazione predefinita — la maggior parte degli identificatori nel codice sorgente sono \"errori di ortografia\" per definizione.",
+    "help.spellCheckPoint1":
+      "Funziona come un linter sul testo reale anziché il controllo integrato della visualizzazione web, quindi gli errori di ortografia vengono conteggiati nel totale dei problemi e arrivano con correzioni suggerite.",
+    "help.spellCheckPoint2": "Attiva/disattiva da Visualizza ▸ Controllo ortografico.",
+
+    "help.languageTitle": "Lingua dell'interfaccia",
+    "help.languageIntro":
+      "La lingua dei menu e delle finestre di dialogo di JustCode stesso — indipendente dal contenuto o dal linguaggio di programmazione di un file.",
+    "help.languagePoint1":
+      "Visualizza ▸ Lingua… elenca ogni traduzione con il proprio nome anziché con il nome inglese, perché \"German\" non aiuta chi legge solo l'italiano.",
+    "help.languagePoint2": "L'inglese è integrato; ogni altra lingua viene scaricata alla prima selezione.",
+
+    "sc.toolbar": "Attiva/disattiva la barra degli strumenti",
+    "sc.statusBar": "Attiva/disattiva la barra di stato",
+    "sc.spellCheck": "Attiva/disattiva il controllo ortografico",
+    "sc.bionicReading": "Attiva/disattiva lettura bionica",
+    "sc.cycleTheme": "Alterna temi (Scuro ▸ Chiaro ▸ Autismo)",
   },
   ja: {
     "menu.file": "ファイル",
@@ -3799,6 +6096,7 @@ export const TRANSLATIONS = {
     "about.tagline": "小さくて高速なコードエディター。",
     "about.builtWith": "Tauri 2 と CodeMirror 6 で構築。",
     "about.version": "バージョン {version}",
+    "sc.g.menus": "メニュー",
     "sc.g.file": "ファイル",
     "sc.g.editing": "編集",
     "sc.g.bookmarks": "ブックマーク",
@@ -3824,6 +6122,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "URLをCtrl+クリック",
     "sc.k.clickPath": "ステータスバーのパスをクリック",
     "sc.k.clickLanguage": "ステータスバーの言語をクリック",
+    "sc.openFileMenu": "「ファイル」メニューを開く",
+    "sc.openEditMenu": "「編集」メニューを開く",
+    "sc.openViewMenu": "「表示」メニューを開く",
+    "sc.openHelpMenu": "「ヘルプ」メニューを開く",
     "sc.newFile": "新しいファイル",
     "sc.openFile": "ファイルを開く",
     "sc.save": "保存",
@@ -3897,6 +6199,136 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "カーソル位置のリンクを開く",
     "sc.copyFullPath": "フルパスをコピー",
     "sc.changeMode": "言語モードを変更",
+
+    "view.autismTheme": "自閉症テーマ",
+    "view.autismThemeHint": "感覚過敏に配慮した、落ち着いた低コントラストの配色",
+    "view.bionicReading": "バイオニックリーディング",
+    "help.autismTheme": "自閉症テーマ",
+    "help.bionicReading": "バイオニックリーディング",
+    "toolbar.switchToTheme": "{theme}に切り替え",
+
+    "autismHelp.intro":
+      "自閉症、ADHD、片頭痛、その他の視覚ストレス状態など、感覚過敏なユーザー向けの落ち着いた低刺激の配色テーマです。読みやすさを犠牲にすることなく、長時間見ていても穏やかなエディター表示を保ちます。",
+    "autismHelp.point1":
+      "純粋な黒や白は使用していません。温かみのある濃いチャコールグレーの背景と柔らかいクリーム色の文字により、画面のギラつきと、強い白黒コントラストによるハロー効果の両方を避けています。",
+    "autismHelp.point2":
+      "赤や黄色はどこにも使用していません — 過剰な刺激になると最も頻繁に指摘される2色です。エラーには通常の警告用の赤や鮮やかな黄色の代わりに、落ち着いたテラコッタ色と落ち着いたゴールド色（検索ハイライト）を使用しています。",
+    "autismHelp.point3":
+      "すべての色はダークテーマやライトテーマよりも彩度をかなり抑えているため、背景とのコントラストは変わらないまま、隣り合う色同士が「ぶつかり合う」ことがありません。",
+    "autismHelp.point4":
+      "全体を通して落ち着いた色調が中心です：構文の強調表示の大部分にはくすんだ青とセージグリーン、残りには落ち着いたラベンダーとタン色を使用しています。",
+    "autismHelp.footer":
+      "表示 ▸ 自閉症テーマからいつでも切り替えられるほか、下のボタン、または Ctrl+Shift+T を押してダーク ▸ ライト ▸ 自閉症を順に切り替えることもできます。",
+    "autismHelp.switch": "自閉症テーマに切り替え",
+    "autismHelp.active": "これが現在のテーマです。",
+
+    "bionicHelp.intro":
+      "各単語の先頭部分を太字にすることで、1行あたりの視線の停留点を少なく、短くするタイポグラフィのテクニックです。ADHD、ディスレクシア、時には自閉症向けの読書補助として宣伝されています。",
+    "bionicHelp.point1":
+      "各単語のおおよそ最初の40％が太字になり、残りは通常の太さのままです — 脳は単語の先頭からその単語を認識し、文脈から語尾を補完するという考え方に基づいています。",
+    "bionicHelp.point2":
+      "証拠はまちまちです。複数の対照研究では、通常のテキストと比べて読書速度や理解度に測定可能な向上は見られず、むしろ気が散ると感じる読者もいました。効果があると決めつけるのではなく、実際に試してみてください。",
+    "bionicHelp.point3":
+      "画面上のどの文書にも適用され、折り返しと同様に文章専用ではありません。そのため、コード編集中に有効にすると、識別子やキーワードの先頭も太字になります。",
+    "bionicHelp.footer":
+      "表示 ▸ バイオニックリーディングからいつでもオンにできるほか、下のボタン、または Ctrl+Shift+B でも切り替えられます。",
+    "bionicHelp.turnOn": "バイオニックリーディングをオンにする",
+    "bionicHelp.turnOff": "バイオニックリーディングをオフにする",
+
+    "help.center": "ヘルプと使い方",
+    "modal.helpCenterTitle": "ヘルプと使い方",
+    "help.searchPlaceholder": "ヘルプを検索…",
+    "help.noResults": "一致するトピックがありません",
+
+    "help.overviewTitle": "概要",
+    "help.overviewIntro":
+      "JustCode は HTML、CSS、JavaScript、および一般的なテキストやコード向けの小型で高速なエディターです — 完全な IDE の代替ではなく、素早く開いて邪魔にならないことを目指して作られています。",
+    "help.overviewPoint1": "ファイルは1つのウィンドウ内にタブとして開きます。事前に設定するプロジェクトやワークスペースはありません。",
+    "help.overviewPoint2": "いつでも F1 を押すと、キーボードショートカットの完全な一覧が表示されます。",
+
+    "help.filesTitle": "ファイル",
+    "help.filesIntro": "ファイルはタブとして開きます。JustCode にはプロジェクトやワークスペースという概念はありません。",
+    "help.filesPoint1":
+      "新規ファイル（Ctrl+N）では多くの言語向けの開始用テンプレート、または空の文書を選べます。開く…（Ctrl+O）は一度に複数のファイルを受け付けます。",
+    "help.filesPoint2":
+      "保存（Ctrl+S）と名前を付けて保存（Ctrl+Shift+S）はディスクに直接書き込みます。すべて保存（Ctrl+Alt+S）は変更されたすべてのタブを一度に処理します。",
+    "help.filesPoint3": "ファイル ▸ 最近使ったファイルは、再起動をまたいで直近15件のファイルを記憶します。",
+    "help.filesPoint4":
+      "ファイル ▸ ファイルの関連付け…を使うと、JustCode が理解できるファイル形式について、Windows の「プログラムから開く」の選択肢 — または既定のプログラム — として表示されるように登録できます。",
+
+    "help.editingTitle": "編集",
+    "help.editingIntro": "切り取り、コピー、貼り付け、元に戻す、やり直しに加えて、いくつかの追加機能を備えた標準的な編集機能です。",
+    "help.editingPoint1":
+      "Ctrl+/ は現在の言語の構文でコメントを切り替えます — 1行の場合は行コメント、選択範囲がある場合はブロックコメントになります。",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L は選択範囲の大文字・小文字を変更します。Ctrl+Alt+G は新しい GUID を挿入します。",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ は現在の行を移動します。Alt+Shift+↑ / Alt+Shift+↓ は行を上または下に複製します。",
+    "help.editingPoint4": "Ctrl+クリックでカーソルを追加します。Alt+ドラッグで矩形（列）選択を作成します。",
+
+    "help.searchTitle": "検索",
+    "help.searchIntro": "現在のファイル内で検索・置換を行うか、定義へ直接ジャンプします。",
+    "help.searchPoint1":
+      "Ctrl+F で検索を開き、Ctrl+H で検索と置換を開きます。F3 / Shift+F3 で直前の検索を前方または後方に繰り返します。",
+    "help.searchPoint2":
+      "Ctrl+Shift+G でシンボルへ移動を開きます — 現在のファイル内の関数、クラス、その他の宣言をフィルタリングできる一覧です。",
+
+    "help.bookmarksTitle": "ブックマーク",
+    "help.bookmarksIntro": "文書ごとに番号付きのブックマークスロットが3つあり、位置を探すためにスクロールせずに大きなファイル内を移動できます。",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 で現在の行にブックマークを設定または解除します。Ctrl+1 / 2 / 3 でそこへ直接ジャンプします。",
+
+    "help.splitTabsTitle": "分割表示とタブ",
+    "help.splitTabsIntro": "タブは最大4つのペインに配置できます。",
+    "help.splitTabsPoint1":
+      "Ctrl+K の後に矢印キーを押すと、その方向にアクティブなペインが分割されます。タブを画面端にドラッグしても同じ効果があります。",
+    "help.splitTabsPoint2":
+      "タブを別のペインのタブバーにドラッグすると、そこへ移動します。ペイン内の最後のタブをドラッグして外に出すと、分割が解除されます。",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab でタブを順に切り替えます。タブを中クリックすると閉じます。",
+
+    "help.foldingTitle": "コードの折りたたみ",
+    "help.foldingIntro": "任意のブロックを折りたたんで邪魔にならないようにできます。",
+    "help.foldingPoint1":
+      "ガター内の矢印をクリックするか、Ctrl+Shift+[ / ] を押してカーソル位置のブロックを折りたたみ・展開します。",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] でファイル内のすべてを一度に折りたたみ・展開します。",
+
+    "help.terminalTitle": "ターミナル",
+    "help.terminalIntro": "別ウィンドウではなく、統合されたターミナルパネルです。",
+    "help.terminalPoint1":
+      "Ctrl+` で表示・非表示を切り替えます。Ctrl+Shift+` は、すでに実行中のターミナルがあってもその隣に新しいものを開きます。",
+    "help.terminalPoint2": "新しいターミナルは、現在編集中のファイルのフォルダーで開始されます。",
+    "help.terminalPoint3":
+      "ファイル ▸ ターミナルで実行（Ctrl+F5）は現在のスクリプトを実行し、その後シェルをプロンプトの状態で開いたままにするので、失敗した場合にその場で調べられます。",
+
+    "help.runTitle": "実行",
+    "help.runIntro": "F5 は、現在のファイルをソーステキストとしてではなく、実際の見た目や動作のとおりに表示します。",
+    "help.runPoint1":
+      "HTML：既定のブラウザーで開きます。同じファイルを再度実行すると、そのタブがまだ開いている限り、新しいタブを開くのではなくそのタブを更新します。",
+    "help.runPoint2": "Markdown：まずスタイル付きの HTML 文書としてレンダリングされ、同じ方法でプレビューされます。",
+    "help.runPoint3":
+      "PowerShell、Batch、Shell スクリプト：専用のコンソールウィンドウで実行され、スクリプト終了後もそのウィンドウは開いたままになります。",
+
+    "help.wordWrapIntro":
+      "既定では無効です。折り返しを有効にすると、横スクロールなしで長い行を画面に収められますが、ガターと実際の行番号との1行ごとの対応関係が崩れます。",
+    "help.wordWrapPoint1":
+      "表示 ▸ 折り返し、または Alt+Z で切り替えます。現在画面に表示されている文書に適用されます。",
+
+    "help.spellCheckIntro": "既定では無効です — ソースコード内のほとんどの識別子は、定義上「スペルミス」となります。",
+    "help.spellCheckPoint1":
+      "Web ビューに組み込まれたチェッカーではなく、実際のテキストに対して lint として動作するため、スペルミスは問題の合計数に含まれ、修正候補とともに表示されます。",
+    "help.spellCheckPoint2": "表示 ▸ スペルチェックで切り替えます。",
+
+    "help.languageTitle": "インターフェース言語",
+    "help.languageIntro": "JustCode 自体のメニューやダイアログの言語です — ファイルの内容やプログラミング言語とは無関係です。",
+    "help.languagePoint1":
+      "表示 ▸ 言語…では、各翻訳を英語名ではなくその言語自身の名前で一覧表示します。「German」と表示しても、日本語しか読めない人の助けにはならないためです。",
+    "help.languagePoint2": "英語は組み込みです。それ以外の言語は、最初に選択したときにダウンロードされます。",
+
+    "sc.toolbar": "ツールバーの切り替え",
+    "sc.statusBar": "ステータスバーの切り替え",
+    "sc.spellCheck": "スペルチェックの切り替え",
+    "sc.bionicReading": "バイオニックリーディングの切り替え",
+    "sc.cycleTheme": "テーマを切り替え（ダーク ▸ ライト ▸ 自閉症）",
   },
   ko: {
     "menu.file": "파일",
@@ -4015,6 +6447,7 @@ export const TRANSLATIONS = {
     "about.tagline": "작고 빠른 코드 편집기.",
     "about.builtWith": "Tauri 2와 CodeMirror 6으로 제작.",
     "about.version": "버전 {version}",
+    "sc.g.menus": "메뉴",
     "sc.g.file": "파일",
     "sc.g.editing": "편집",
     "sc.g.bookmarks": "책갈피",
@@ -4040,6 +6473,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "URL을 Ctrl+클릭",
     "sc.k.clickPath": "상태 표시줄의 경로 클릭",
     "sc.k.clickLanguage": "상태 표시줄의 언어 클릭",
+    "sc.openFileMenu": "파일 메뉴 열기",
+    "sc.openEditMenu": "편집 메뉴 열기",
+    "sc.openViewMenu": "보기 메뉴 열기",
+    "sc.openHelpMenu": "도움말 메뉴 열기",
     "sc.newFile": "새 파일",
     "sc.openFile": "파일 열기",
     "sc.save": "저장",
@@ -4113,6 +6550,136 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "커서 위치의 링크 열기",
     "sc.copyFullPath": "전체 경로 복사",
     "sc.changeMode": "언어 모드 변경",
+
+    "view.autismTheme": "자폐 테마",
+    "view.autismThemeHint": "감각 민감성을 위한 차분하고 저대비 색상",
+    "view.bionicReading": "바이오닉 리딩",
+    "help.autismTheme": "자폐 테마",
+    "help.bionicReading": "바이오닉 리딩",
+    "toolbar.switchToTheme": "{theme}(으)로 전환",
+
+    "autismHelp.intro":
+      "자폐, ADHD, 편두통 및 기타 시각적 스트레스 상태 등 감각에 민감한 사용자를 위한 차분하고 자극이 적은 색상 테마입니다. 가독성을 희생하지 않으면서 오랫동안 편안하게 볼 수 있도록 편집기를 유지합니다.",
+    "autismHelp.point1":
+      "순수한 검정이나 흰색은 사용하지 않습니다. 따뜻한 진회색 배경과 부드러운 크림색 전경은 화면의 눈부심과, 강한 흑백 대비로 인한 헤일로 효과를 모두 피합니다.",
+    "autismHelp.point2":
+      "어디에도 빨간색이나 노란색이 없습니다 — 과도한 자극으로 가장 자주 지목되는 두 색조입니다. 오류에는 일반적인 경고 빨강과 밝은 노랑 대신 차분한 테라코타를, 검색 강조 표시에는 차분한 금색을 사용합니다.",
+    "autismHelp.point3":
+      "모든 색상은 다크 테마와 라이트 테마보다 채도가 훨씬 낮아, 배경과의 대비는 동일하게 유지되면서도 이웃한 색상끼리 \"부딪히는\" 느낌이 없습니다.",
+    "autismHelp.point4":
+      "차분한 색조가 전체적으로 주를 이룹니다: 구문 강조의 대부분에는 흐린 파랑과 세이지 그린을, 나머지에는 차분한 라벤더와 탠 색을 사용합니다.",
+    "autismHelp.footer":
+      "언제든지 보기 ▸ 자폐 테마에서, 아래 버튼으로, 또는 Ctrl+Shift+T를 눌러 다크 ▸ 라이트 ▸ 자폐를 순환하여 전환할 수 있습니다.",
+    "autismHelp.switch": "자폐 테마로 전환",
+    "autismHelp.active": "현재 사용 중인 테마입니다.",
+
+    "bionicHelp.intro":
+      "각 단어의 앞부분을 굵게 표시하여 눈이 줄마다 더 적고 짧은 고정점만 필요로 하도록 만드는 타이포그래피 기법입니다. ADHD, 난독증, 때로는 자폐를 위한 읽기 보조 도구로 홍보됩니다.",
+    "bionicHelp.point1":
+      "각 단어의 대략 처음 40%가 굵게 표시되고 나머지는 일반 두께로 유지됩니다 — 뇌가 단어의 시작 부분으로 단어를 인식하고 문맥으로 끝부분을 보완한다는 발상입니다.",
+    "bionicHelp.point2":
+      "근거는 엇갈립니다. 여러 대조 연구에서 일반 텍스트에 비해 읽기 속도나 이해도에서 측정 가능한 향상이 나타나지 않았고, 일부 독자는 오히려 더 산만하다고 느꼈습니다. 도움이 될 것이라고 가정하기보다 직접 사용해 보세요.",
+    "bionicHelp.point3":
+      "자동 줄 바꿈과 마찬가지로 화면에 있는 모든 문서에 적용됩니다 — 산문에만 국한되지 않으므로, 코드를 편집하는 동안 켜면 식별자와 키워드의 시작 부분도 굵게 표시됩니다.",
+    "bionicHelp.footer":
+      "언제든지 보기 ▸ 바이오닉 리딩에서, 아래 버튼으로, 또는 Ctrl+Shift+B를 눌러 켤 수 있습니다.",
+    "bionicHelp.turnOn": "바이오닉 리딩 켜기",
+    "bionicHelp.turnOff": "바이오닉 리딩 끄기",
+
+    "help.center": "도움말 및 사용 가이드",
+    "modal.helpCenterTitle": "도움말 및 사용 가이드",
+    "help.searchPlaceholder": "도움말 검색…",
+    "help.noResults": "일치하는 항목이 없습니다",
+
+    "help.overviewTitle": "개요",
+    "help.overviewIntro":
+      "JustCode는 HTML, CSS, JavaScript 및 일반 텍스트나 코드를 위한 작고 빠른 편집기입니다 — 완전한 IDE를 대체하기 위해서가 아니라 빠르게 열리고 방해되지 않도록 만들어졌습니다.",
+    "help.overviewPoint1": "파일은 하나의 창에서 탭으로 열립니다. 먼저 설정해야 할 프로젝트나 작업 영역은 없습니다.",
+    "help.overviewPoint2": "언제든지 F1을 눌러 전체 키보드 단축키 참조를 확인할 수 있습니다.",
+
+    "help.filesTitle": "파일",
+    "help.filesIntro": "파일은 탭으로 열립니다. JustCode에는 프로젝트나 작업 영역이라는 개념이 없습니다.",
+    "help.filesPoint1":
+      "새 파일(Ctrl+N)은 여러 언어를 위한 시작 템플릿이나 빈 문서를 제공합니다. 열기…(Ctrl+O)는 한 번에 여러 파일을 받을 수 있습니다.",
+    "help.filesPoint2":
+      "저장(Ctrl+S)과 다른 이름으로 저장(Ctrl+Shift+S)은 디스크에 바로 씁니다. 모두 저장(Ctrl+Alt+S)은 변경된 모든 탭을 한 번에 처리합니다.",
+    "help.filesPoint3": "파일 ▸ 최근 파일은 재시작 후에도 최근 15개 파일을 기억합니다.",
+    "help.filesPoint4":
+      "파일 ▸ 파일 연결…은 JustCode가 이해하는 파일 형식에 대해 Windows에서 \"연결 프로그램\" 옵션 — 또는 기본 프로그램 — 으로 나타나도록 등록합니다.",
+
+    "help.editingTitle": "편집",
+    "help.editingIntro": "잘라내기, 복사, 붙여넣기, 실행 취소, 다시 실행 외에 몇 가지 추가 기능을 갖춘 표준 편집 기능입니다.",
+    "help.editingPoint1":
+      "Ctrl+/ 는 현재 언어의 구문을 사용하여 주석을 전환합니다 — 한 줄에는 줄 주석, 선택 영역에는 블록 주석을 사용합니다.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L 은 선택 영역의 대소문자를 변경합니다. Ctrl+Alt+G 는 새 GUID를 삽입합니다.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ 는 현재 줄을 이동합니다. Alt+Shift+↑ / Alt+Shift+↓ 는 줄을 위아래로 복제합니다.",
+    "help.editingPoint4": "Ctrl+클릭은 커서를 하나 더 추가합니다. Alt+드래그는 직사각형(열) 선택을 만듭니다.",
+
+    "help.searchTitle": "검색",
+    "help.searchIntro": "현재 파일 내에서 찾기 및 바꾸기를 하거나, 정의로 바로 이동합니다.",
+    "help.searchPoint1":
+      "Ctrl+F는 찾기를 엽니다. Ctrl+H는 찾기 및 바꾸기를 엽니다. F3 / Shift+F3은 마지막 검색을 앞뒤로 반복합니다.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G는 기호로 이동을 엽니다 — 현재 파일의 함수, 클래스 및 기타 선언을 필터링할 수 있는 목록입니다.",
+
+    "help.bookmarksTitle": "책갈피",
+    "help.bookmarksIntro": "문서마다 번호가 매겨진 책갈피 슬롯이 세 개씩 있어, 위치를 찾기 위해 스크롤하지 않고도 큰 파일 안을 이동할 수 있습니다.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 은 현재 줄에 책갈피를 설정하거나 지웁니다. Ctrl+1 / 2 / 3 은 해당 위치로 바로 이동합니다.",
+
+    "help.splitTabsTitle": "분할 보기 및 탭",
+    "help.splitTabsIntro": "탭은 최대 네 개의 창으로 배치할 수 있습니다.",
+    "help.splitTabsPoint1":
+      "Ctrl+K 다음 화살표 키를 누르면 활성 창이 그 방향으로 분할됩니다. 탭을 화면 가장자리로 끌어도 동일하게 작동합니다.",
+    "help.splitTabsPoint2":
+      "탭을 다른 창의 탭 바로 끌어오면 그곳으로 이동합니다. 창에서 마지막 탭을 밖으로 끌어내면 분할이 취소됩니다.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab은 탭을 순환합니다. 탭을 가운데 버튼으로 클릭하면 닫힙니다.",
+
+    "help.foldingTitle": "코드 접기",
+    "help.foldingIntro": "어떤 블록이든 접어서 방해가 되지 않도록 할 수 있습니다.",
+    "help.foldingPoint1":
+      "여백의 화살표를 클릭하거나 Ctrl+Shift+[ / ] 를 눌러 커서 위치의 블록을 접거나 펼칩니다.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] 는 파일의 모든 내용을 한 번에 접거나 펼칩니다.",
+
+    "help.terminalTitle": "터미널",
+    "help.terminalIntro": "별도 창이 아닌 통합 터미널 패널입니다.",
+    "help.terminalPoint1":
+      "Ctrl+` 는 표시하거나 숨깁니다. Ctrl+Shift+` 는 이미 실행 중인 터미널 옆에 새 터미널을 엽니다.",
+    "help.terminalPoint2": "새 터미널은 현재 편집 중인 파일의 폴더에서 시작됩니다.",
+    "help.terminalPoint3":
+      "파일 ▸ 터미널에서 실행(Ctrl+F5)은 현재 스크립트를 실행한 후 셸을 프롬프트 상태로 열어두어, 실패한 경우 그 자리에서 바로 확인할 수 있습니다.",
+
+    "help.runTitle": "실행",
+    "help.runIntro": "F5는 현재 파일을 소스 텍스트가 아니라 실제로 보이거나 동작하는 모습으로 보여줍니다.",
+    "help.runPoint1":
+      "HTML: 기본 브라우저에서 열립니다. 같은 파일을 다시 실행하면, 해당 탭이 아직 열려 있는 한 새 탭을 여는 대신 그 탭을 새로 고칩니다.",
+    "help.runPoint2": "Markdown: 먼저 스타일이 적용된 HTML 문서로 렌더링된 후 같은 방식으로 미리 봅니다.",
+    "help.runPoint3":
+      "PowerShell, Batch, Shell 스크립트: 자체 콘솔 창에서 실행되며, 스크립트가 끝난 후에도 창이 열려 있습니다.",
+
+    "help.wordWrapIntro":
+      "기본적으로 꺼져 있습니다. 자동 줄 바꿈은 가로 스크롤 없이 긴 줄을 화면에 유지하지만, 여백과 실제 줄 번호 사이의 줄 대 줄 대응 관계를 깨뜨립니다.",
+    "help.wordWrapPoint1":
+      "보기 ▸ 자동 줄 바꿈 또는 Alt+Z로 전환합니다. 현재 화면에 있는 문서에 적용됩니다.",
+
+    "help.spellCheckIntro": "기본적으로 꺼져 있습니다 — 소스 코드의 대부분 식별자는 정의상 \"철자가 틀린\" 상태입니다.",
+    "help.spellCheckPoint1":
+      "웹뷰에 내장된 검사기가 아니라 실제 텍스트에 대해 린터로 작동하므로, 맞춤법 오류가 문제 총계에 포함되며 수정 제안과 함께 표시됩니다.",
+    "help.spellCheckPoint2": "보기 ▸ 맞춤법 검사에서 전환합니다.",
+
+    "help.languageTitle": "인터페이스 언어",
+    "help.languageIntro": "JustCode 자체 메뉴와 대화 상자의 언어입니다 — 파일의 내용이나 프로그래밍 언어와는 무관합니다.",
+    "help.languagePoint1":
+      "보기 ▸ 언어…는 각 번역을 영어 이름이 아닌 해당 언어 고유의 이름으로 나열합니다. \"German\"이라고 표시해도 한국어만 읽는 사람에게는 도움이 되지 않기 때문입니다.",
+    "help.languagePoint2": "영어는 기본 내장되어 있습니다. 다른 언어는 처음 선택할 때 다운로드됩니다.",
+
+    "sc.toolbar": "도구 모음 전환",
+    "sc.statusBar": "상태 표시줄 전환",
+    "sc.spellCheck": "맞춤법 검사 전환",
+    "sc.bionicReading": "바이오닉 리딩 전환",
+    "sc.cycleTheme": "테마 순환 (다크 ▸ 라이트 ▸ 자폐)",
   },
   ms: {
     "menu.file": "Fail",
@@ -4231,6 +6798,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Editor kod yang kecil dan pantas.",
     "about.builtWith": "Dibina dengan Tauri 2 dan CodeMirror 6.",
     "about.version": "Versi {version}",
+    "sc.g.menus": "Menu",
     "sc.g.file": "Fail",
     "sc.g.editing": "Penyuntingan",
     "sc.g.bookmarks": "Penanda buku",
@@ -4256,6 +6824,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+klik URL",
     "sc.k.clickPath": "Klik laluan pada bar status",
     "sc.k.clickLanguage": "Klik bahasa pada bar status",
+    "sc.openFileMenu": "Buka menu Fail",
+    "sc.openEditMenu": "Buka menu Edit",
+    "sc.openViewMenu": "Buka menu Lihat",
+    "sc.openHelpMenu": "Buka menu Bantuan",
     "sc.newFile": "Fail baharu",
     "sc.openFile": "Buka fail",
     "sc.save": "Simpan",
@@ -4329,6 +6901,136 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Buka pautan di bawah kursor",
     "sc.copyFullPath": "Salin laluan penuh",
     "sc.changeMode": "Tukar mod bahasa",
+
+    "view.autismTheme": "Tema Autisme",
+    "view.autismThemeHint": "Warna malap berkontras rendah untuk sensitiviti deria",
+    "view.bionicReading": "Bacaan Bionik",
+    "help.autismTheme": "Tema Autisme",
+    "help.bionicReading": "Bacaan Bionik",
+    "toolbar.switchToTheme": "Tukar kepada {theme}",
+
+    "autismHelp.intro":
+      "Tema warna malap dan tidak merangsang untuk pengguna yang sensitif dari segi deria — autisme, ADHD, migrain dan keadaan tekanan visual yang lain. Ia mengekalkan editor kelihatan tenang dalam tempoh yang panjang, tanpa mengorbankan kebolehbacaan.",
+    "autismHelp.point1":
+      "Tiada hitam tulen atau putih tulen. Latar belakang kelabu arang gelap yang hangat dan teks krim lembut mengelakkan kedua-dua silauan skrin dan kesan halo yang disebabkan oleh kontras hitam-putih yang tajam.",
+    "autismHelp.point2":
+      "Tiada warna merah atau kuning di mana-mana — dua warna yang paling kerap dilaporkan menyebabkan rangsangan berlebihan. Ralat menggunakan terakota malap dan sorotan carian menggunakan emas malap, bukannya merah amaran dan kuning terang yang biasa.",
+    "autismHelp.point3":
+      "Setiap warna mempunyai ketepuan yang jauh lebih rendah berbanding tema Gelap dan Terang, jadi tiada warna yang \"bergetar\" bersebelahan jirannya walaupun kontras terhadap latar belakang kekal sama.",
+    "autismHelp.point4":
+      "Warna yang menenangkan mendominasi di mana-mana: biru berhabuk dan hijau sage untuk kebanyakan sorotan sintaks, lavender malap dan tan untuk selebihnya.",
+    "autismHelp.footer":
+      "Tukar kepadanya pada bila-bila masa melalui Papar ▸ Tema Autisme, dengan butang di bawah, atau dengan menekan Ctrl+Shift+T untuk bergilir antara Gelap ▸ Terang ▸ Autisme.",
+    "autismHelp.switch": "Tukar kepada Tema Autisme",
+    "autismHelp.active": "Ini ialah tema semasa anda.",
+
+    "bionicHelp.intro":
+      "Helah tipografi yang menebalkan bahagian hadapan setiap perkataan, supaya mata memerlukan titik fiksasi yang lebih sedikit dan lebih pendek bagi setiap baris. Ia dipasarkan sebagai bantuan bacaan untuk ADHD, disleksia dan kadangkala autisme.",
+    "bionicHelp.point1":
+      "Kira-kira 40% pertama setiap perkataan ditebalkan dan selebihnya kekal pada berat biasa — ideanya ialah otak mengenali perkataan daripada permulaannya dan melengkapkan penghujungnya daripada konteks.",
+    "bionicHelp.point2":
+      "Bukti adalah bercampur-campur. Beberapa kajian terkawal tidak menemui peningkatan yang boleh diukur dalam kelajuan membaca atau kefahaman berbanding teks biasa, dan sesetengah pembaca mendapatinya lebih mengganggu, bukan kurang. Cubalah sendiri berbanding menganggap ia akan membantu.",
+    "bionicHelp.point3":
+      "Terpakai kepada mana-mana dokumen pada skrin, sama seperti Balut Perkataan — ia tidak terhad kepada prosa, jadi menghidupkannya semasa menyunting kod turut menebalkan permulaan pengecam dan kata kunci.",
+    "bionicHelp.footer":
+      "Hidupkannya pada bila-bila masa melalui Papar ▸ Bacaan Bionik, dengan butang di bawah, atau dengan menekan Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Hidupkan Bacaan Bionik",
+    "bionicHelp.turnOff": "Matikan Bacaan Bionik",
+
+    "help.center": "Bantuan & Panduan",
+    "modal.helpCenterTitle": "Bantuan & Panduan",
+    "help.searchPlaceholder": "Cari bantuan…",
+    "help.noResults": "Tiada topik sepadan",
+
+    "help.overviewTitle": "Gambaran Keseluruhan",
+    "help.overviewIntro":
+      "JustCode ialah editor kecil dan pantas untuk HTML, CSS, JavaScript serta teks atau kod am — dibina untuk dibuka dengan cepat dan tidak menghalang, bukan untuk menggantikan IDE yang lengkap.",
+    "help.overviewPoint1": "Fail dibuka sebagai tab dalam satu tetingkap; tiada projek atau ruang kerja yang perlu disediakan terlebih dahulu.",
+    "help.overviewPoint2": "Tekan F1 pada bila-bila masa untuk rujukan pintasan papan kekunci yang lengkap.",
+
+    "help.filesTitle": "Fail",
+    "help.filesIntro": "Fail dibuka sebagai tab; JustCode tiada konsep projek atau ruang kerja.",
+    "help.filesPoint1":
+      "Fail Baharu (Ctrl+N) menawarkan templat permulaan untuk banyak bahasa, atau dokumen kosong; Buka… (Ctrl+O) menerima beberapa fail sekali gus.",
+    "help.filesPoint2":
+      "Simpan (Ctrl+S) dan Simpan Sebagai (Ctrl+Shift+S) menulis terus ke cakera; Simpan Semua (Ctrl+Alt+S) meliputi semua tab yang berubah sekali gus.",
+    "help.filesPoint3": "Fail ▸ Fail Terkini mengingati 15 fail terakhir merentasi permulaan semula.",
+    "help.filesPoint4":
+      "Fail ▸ Perkaitan Fail… mendaftarkan JustCode dengan Windows supaya ia muncul sebagai pilihan \"Buka dengan\" — atau lalai — untuk jenis fail yang difahaminya.",
+
+    "help.editingTitle": "Penyuntingan",
+    "help.editingIntro": "Penyuntingan standard, ditambah beberapa fungsi tambahan selain potong, salin, tampal, buat asal dan buat semula.",
+    "help.editingPoint1":
+      "Ctrl+/ menogol komen menggunakan sintaks bahasa semasa — komen baris untuk satu baris, komen blok merentasi pemilihan.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L menukar huruf besar/kecil pemilihan; Ctrl+Alt+G memasukkan GUID baharu.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ menggerakkan baris semasa; Alt+Shift+↑ / Alt+Shift+↓ menduplikasinya ke atas atau ke bawah.",
+    "help.editingPoint4": "Ctrl+klik menambah kursor lain; Alt+seret membuat pemilihan segi empat tepat (lajur).",
+
+    "help.searchTitle": "Carian",
+    "help.searchIntro": "Cari dan gantikan di dalam fail semasa, atau lompat terus ke definisi.",
+    "help.searchPoint1":
+      "Ctrl+F membuka Cari; Ctrl+H membuka Cari dan Gantikan. F3 / Shift+F3 mengulangi carian terakhir ke hadapan atau ke belakang.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G membuka Pergi ke Simbol — senarai fungsi, kelas dan pengisytiharan lain dalam fail semasa yang boleh ditapis.",
+
+    "help.bookmarksTitle": "Penanda Halaman",
+    "help.bookmarksIntro": "Tiga slot penanda halaman bernombor bagi setiap dokumen, untuk melompat di sekitar fail besar tanpa perlu menatal untuk mencari tempat anda.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 menetapkan atau mengosongkan penanda halaman pada baris semasa; Ctrl+1 / 2 / 3 melompat terus kepadanya.",
+
+    "help.splitTabsTitle": "Paparan Berpisah & Tab",
+    "help.splitTabsIntro": "Tab boleh disusun kepada sehingga empat anak tetingkap.",
+    "help.splitTabsPoint1":
+      "Ctrl+K diikuti kekunci anak panah membahagikan anak tetingkap aktif ke arah tersebut; menyeret tab ke tepi skrin melakukan perkara yang sama.",
+    "help.splitTabsPoint2":
+      "Menyeret tab ke bar tab anak tetingkap lain memindahkannya ke sana; menyeret tab terakhir keluar daripada anak tetingkap membatalkan pembahagian.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab bergilir antara tab; klik butang tengah pada tab menutupnya.",
+
+    "help.foldingTitle": "Lipatan Kod",
+    "help.foldingIntro": "Mana-mana blok boleh dilipat supaya tidak menghalang.",
+    "help.foldingPoint1":
+      "Klik anak panah pada lorong, atau tekan Ctrl+Shift+[ / ] untuk melipat atau membuka blok pada kursor.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] melipat atau membuka semua kandungan dalam fail sekali gus.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Panel terminal bersepadu, bukan tetingkap berasingan.",
+    "help.terminalPoint1":
+      "Ctrl+` memaparkan atau menyembunyikannya; Ctrl+Shift+` membuka satu yang baharu di sebelah mana-mana yang sudah berjalan.",
+    "help.terminalPoint2": "Terminal baharu bermula dalam folder fail yang sedang disunting.",
+    "help.terminalPoint3":
+      "Fail ▸ Jalankan dalam Terminal (Ctrl+F5) menjalankan skrip semasa dan membiarkan shell terbuka pada gesaan selepas itu, supaya kegagalan boleh disemak di situ juga.",
+
+    "help.runTitle": "Jalankan",
+    "help.runIntro": "F5 memaparkan fail semasa seperti mana ia sebenarnya akan kelihatan atau berkelakuan, bukan sebagai teks sumber.",
+    "help.runPoint1":
+      "HTML: dibuka dalam pelayar lalai. Menjalankan fail yang sama sekali lagi menyegarkan tab tersebut dan bukannya membuka tab kedua, selagi ia masih terbuka.",
+    "help.runPoint2": "Markdown: mula-mula dipaparkan sebagai dokumen HTML bergaya, kemudian dipratonton dengan cara yang sama.",
+    "help.runPoint3":
+      "Skrip PowerShell, Batch dan Shell: dijalankan dalam tetingkap konsolnya sendiri, yang kekal terbuka selepas skrip selesai.",
+
+    "help.wordWrapIntro":
+      "Dimatikan secara lalai. Balutan mengekalkan baris panjang pada skrin tanpa tatal mendatar, tetapi ia memutuskan padanan baris demi baris antara lorong dan nombor baris sebenar.",
+    "help.wordWrapPoint1":
+      "Togolkannya melalui Papar ▸ Balut Perkataan atau Alt+Z. Ia terpakai kepada dokumen yang kini berada pada skrin.",
+
+    "help.spellCheckIntro": "Dimatikan secara lalai — kebanyakan pengecam dalam kod sumber adalah \"salah eja\" mengikut definisi.",
+    "help.spellCheckPoint1":
+      "Berjalan sebagai linter ke atas teks sebenar dan bukannya pemeriksa terbina dalam paparan web, jadi kesilapan ejaan dikira dalam jumlah Masalah dan disertakan dengan pembetulan yang dicadangkan.",
+    "help.spellCheckPoint2": "Togolkannya melalui Papar ▸ Semakan Ejaan.",
+
+    "help.languageTitle": "Bahasa Antara Muka",
+    "help.languageIntro": "Bahasa menu dan dialog JustCode sendiri — tidak bergantung pada kandungan atau bahasa pengaturcaraan mana-mana fail.",
+    "help.languagePoint1":
+      "Papar ▸ Bahasa… menyenaraikan setiap terjemahan mengikut namanya sendiri dan bukannya nama Inggerisnya, kerana \"German\" tidak membantu sesiapa yang hanya membaca bahasa Melayu.",
+    "help.languagePoint2": "Bahasa Inggeris terbina dalam; mana-mana bahasa lain dimuat turun apabila dipilih buat kali pertama.",
+
+    "sc.toolbar": "Togol bar alat",
+    "sc.statusBar": "Togol bar status",
+    "sc.spellCheck": "Togol semakan ejaan",
+    "sc.bionicReading": "Togol Bacaan Bionik",
+    "sc.cycleTheme": "Gilir tema (Gelap ▸ Terang ▸ Autisme)",
   },
   no: {
     "menu.file": "Fil",
@@ -4447,6 +7149,7 @@ export const TRANSLATIONS = {
     "about.tagline": "En liten, rask kodeeditor.",
     "about.builtWith": "Bygget med Tauri 2 og CodeMirror 6.",
     "about.version": "Versjon {version}",
+    "sc.g.menus": "Menyer",
     "sc.g.file": "Fil",
     "sc.g.editing": "Redigering",
     "sc.g.bookmarks": "Bokmerker",
@@ -4472,6 +7175,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+klikk på en URL",
     "sc.k.clickPath": "Klikk på banen i statuslinjen",
     "sc.k.clickLanguage": "Klikk på språket i statuslinjen",
+    "sc.openFileMenu": "Åpne Fil-menyen",
+    "sc.openEditMenu": "Åpne Rediger-menyen",
+    "sc.openViewMenu": "Åpne Vis-menyen",
+    "sc.openHelpMenu": "Åpne Hjelp-menyen",
     "sc.newFile": "Ny fil",
     "sc.openFile": "Åpne fil",
     "sc.save": "Lagre",
@@ -4545,6 +7252,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Åpne lenken ved markøren",
     "sc.copyFullPath": "Kopier hele banen",
     "sc.changeMode": "Endre språkmodus",
+
+    "view.autismTheme": "Autismetema",
+    "view.autismThemeHint": "Dempede farger med lav kontrast for sensorisk følsomhet",
+    "view.bionicReading": "Bionisk lesing",
+    "help.autismTheme": "Autismetema",
+    "help.bionicReading": "Bionisk lesing",
+    "toolbar.switchToTheme": "Bytt til {theme}",
+
+    "autismHelp.intro":
+      "Et dempet, lite stimulerende fargetema for sensorisk følsomme brukere — autisme, ADHD, migrene og andre former for visuell stress. Det holder editoren rolig å se på over lange perioder, uten å gå på bekostning av lesbarheten.",
+    "autismHelp.point1":
+      "Ingen ren svart eller hvit. En varm, mørk kullgrå bakgrunn og en myk kremfarget tekst unngår både skjermblending og haloeffekten skarp svart-hvit-kontrast forårsaker.",
+    "autismHelp.point2":
+      "Ingen rødt eller gult noe sted — de to fargetonene som oftest nevnes som overstimulerende. Feil bruker en dempet terrakotta, og søkemarkeringer en dempet gull, i stedet for det vanlige alarmrøde og skarpt gule.",
+    "autismHelp.point3":
+      "Hver farge har en metning som er langt lavere enn i det mørke og lyse temaet, slik at ingenting \"vibrerer\" mot naboene sine, selv om kontrasten mot bakgrunnen forblir den samme.",
+    "autismHelp.point4":
+      "Beroligende fargetoner dominerer overalt: støvete blått og salviegrønt for det meste av syntaksutheving, dempet lavendel og beige for resten.",
+    "autismHelp.footer":
+      "Bytt til det når som helst fra Vis ▸ Autismetema, med knappen nedenfor, eller ved å trykke Ctrl+Shift+T for å rullere mellom Mørkt ▸ Lyst ▸ Autisme.",
+    "autismHelp.switch": "Bytt til autismetema",
+    "autismHelp.active": "Dette er ditt gjeldende tema.",
+
+    "bionicHelp.intro":
+      "Et typografisk triks som gjør den fremste delen av hvert ord fet, slik at øyet trenger færre og kortere fikseringspunkter per linje. Det markedsføres som en lesehjelp for ADHD, dysleksi og noen ganger autisme.",
+    "bionicHelp.point1":
+      "Omtrent de første 40 % av hvert ord gjøres fet, og resten forblir normal — tanken er at hjernen gjenkjenner et ord fra begynnelsen og fyller inn slutten ut fra sammenhengen.",
+    "bionicHelp.point2":
+      "Bevisene er blandede. Flere kontrollerte studier fant ingen målbar forbedring i lesehastighet eller forståelse sammenlignet med vanlig tekst, og noen lesere synes den er mer forstyrrende, ikke mindre. Prøv den i stedet for å anta at den vil hjelpe.",
+    "bionicHelp.point3":
+      "Gjelder for ethvert dokument på skjermen, akkurat som tekstbryting — den er ikke begrenset til løpende tekst, så å slå den på under redigering av kode gjør også begynnelsen av identifikatorer og nøkkelord fet.",
+    "bionicHelp.footer":
+      "Slå den på når som helst fra Vis ▸ Bionisk lesing, med knappen nedenfor, eller ved å trykke Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Slå på bionisk lesing",
+    "bionicHelp.turnOff": "Slå av bionisk lesing",
+
+    "help.center": "Hjelp og veiledning",
+    "modal.helpCenterTitle": "Hjelp og veiledning",
+    "help.searchPlaceholder": "Søk i hjelp…",
+    "help.noResults": "Ingen samsvarende emner",
+
+    "help.overviewTitle": "Oversikt",
+    "help.overviewIntro":
+      "JustCode er en liten, rask editor for HTML, CSS, JavaScript og generell tekst eller kode — bygget for å åpne raskt og holde seg unna veien, ikke for å erstatte et fullverdig IDE.",
+    "help.overviewPoint1":
+      "Filer åpnes som faner i ett vindu; det finnes ikke noe prosjekt eller arbeidsområde som må settes opp først.",
+    "help.overviewPoint2": "Trykk F1 når som helst for den fullstendige oversikten over tastatursnarveier.",
+
+    "help.filesTitle": "Filer",
+    "help.filesIntro": "Filer åpnes som faner; JustCode har ikke noe prosjekt- eller arbeidsområdebegrep.",
+    "help.filesPoint1":
+      "Ny fil (Ctrl+N) tilbyr startmaler for mange språk, eller et tomt dokument; Åpne… (Ctrl+O) godtar flere filer på én gang.",
+    "help.filesPoint2":
+      "Lagre (Ctrl+S) og Lagre som (Ctrl+Shift+S) skriver direkte til disk; Lagre alle (Ctrl+Alt+S) dekker alle endrede faner på én gang.",
+    "help.filesPoint3": "Fil ▸ Nylige filer husker de siste 15 filene på tvers av omstarter.",
+    "help.filesPoint4":
+      "Fil ▸ Filtilknytninger… registrerer JustCode hos Windows slik at det vises som et \"Åpne med\"-alternativ — eller standarden — for filtypene det forstår.",
+
+    "help.editingTitle": "Redigering",
+    "help.editingIntro": "Standardredigering pluss noen ekstrafunksjoner utover klipp ut, kopier, lim inn, angre og gjør om.",
+    "help.editingPoint1":
+      "Ctrl+/ slår av/på en kommentar med syntaksen til det gjeldende språket — linjekommentarer for én linje, blokkommentarer over et utvalg.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L endrer store/små bokstaver i utvalget; Ctrl+Alt+G setter inn en ny GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ flytter gjeldende linje; Alt+Shift+↑ / Alt+Shift+↓ dupliserer den opp eller ned.",
+    "help.editingPoint4": "Ctrl+klikk legger til en ekstra markør; Alt+dra lager et rektangulært (kolonne-) utvalg.",
+
+    "help.searchTitle": "Søk",
+    "help.searchIntro": "Søk og erstatt i den gjeldende filen, eller hopp direkte til en definisjon.",
+    "help.searchPoint1":
+      "Ctrl+F åpner Søk; Ctrl+H åpner Søk og erstatt. F3 / Shift+F3 gjentar det siste søket fremover eller bakover.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G åpner Gå til symbol — en filtrerbar liste over funksjoner, klasser og andre deklarasjoner i den gjeldende filen.",
+
+    "help.bookmarksTitle": "Bokmerker",
+    "help.bookmarksIntro":
+      "Tre nummererte bokmerkeplasser per dokument, for å bevege seg rundt i en stor fil uten å måtte scrolle for å finne stedet sitt igjen.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 setter eller fjerner et bokmerke på gjeldende linje; Ctrl+1 / 2 / 3 hopper rett til det.",
+
+    "help.splitTabsTitle": "Delt visning og faner",
+    "help.splitTabsIntro": "Faner kan ordnes i inntil fire ruter.",
+    "help.splitTabsPoint1":
+      "Ctrl+K etterfulgt av en piltast deler den aktive ruten i den retningen; å dra en fane til en skjermkant gjør det samme.",
+    "help.splitTabsPoint2":
+      "Å dra en fane til en annen rutes fanelinje flytter den dit; å dra den siste fanen ut av en rute opphever delingen.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab bla gjennom faner; midtklikk på en fane lukker den.",
+
+    "help.foldingTitle": "Kodesammenfolding",
+    "help.foldingIntro": "Enhver blokk kan foldes sammen for å komme ut av veien.",
+    "help.foldingPoint1":
+      "Klikk på pilen i venstre marg, eller trykk Ctrl+Shift+[ / ] for å folde sammen eller ut blokken ved markøren.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] folder sammen eller ut alt i filen på én gang.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Et integrert terminalpanel, ikke et eget vindu.",
+    "help.terminalPoint1":
+      "Ctrl+` viser eller skjuler det; Ctrl+Shift+` åpner en ny ved siden av enhver som allerede kjører.",
+    "help.terminalPoint2": "En ny terminal starter i mappen til filen som redigeres for øyeblikket.",
+    "help.terminalPoint3":
+      "Fil ▸ Kjør i terminal (Ctrl+F5) kjører gjeldende skript og lar skallet stå åpent ved en ledetekst etterpå, slik at en feil kan undersøkes på stedet.",
+
+    "help.runTitle": "Kjør",
+    "help.runIntro": "F5 viser den gjeldende filen slik den faktisk vil se ut eller oppføre seg, i stedet for som kildetekst.",
+    "help.runPoint1":
+      "HTML: åpnes i standardnettleseren. Å kjøre samme fil igjen oppdaterer den fanen i stedet for å åpne en ny, så lenge den fortsatt er åpen.",
+    "help.runPoint2": "Markdown: gjengis først til et formatert HTML-dokument og forhåndsvises deretter på samme måte.",
+    "help.runPoint3":
+      "PowerShell-, Batch- og Shell-skript: kjøres i sitt eget konsollvindu, som forblir åpent etter at skriptet er ferdig.",
+
+    "help.wordWrapIntro":
+      "Slått av som standard. Bryting holder lange linjer på skjermen uten horisontal rulling, men bryter en-til-en-samsvaret mellom margen og de faktiske linjenumrene.",
+    "help.wordWrapPoint1":
+      "Slå det av/på fra Vis ▸ Tekstbryting eller Alt+Z. Det gjelder for dokumentet som for øyeblikket vises på skjermen.",
+
+    "help.spellCheckIntro": "Slått av som standard — de fleste identifikatorer i kildekode er per definisjon \"feilstavet\".",
+    "help.spellCheckPoint1":
+      "Kjører som en linter over den faktiske teksten i stedet for nettvisningens innebygde kontroll, så stavefeil telles med i det totale antallet problemer og kommer med foreslåtte rettelser.",
+    "help.spellCheckPoint2": "Slå det av/på fra Vis ▸ Stavekontroll.",
+
+    "help.languageTitle": "Grensesnittspråk",
+    "help.languageIntro":
+      "Språket til JustCodes egne menyer og dialogbokser — uavhengig av innholdet eller programmeringsspråket i en fil.",
+    "help.languagePoint1":
+      "Vis ▸ Språk… viser hver oversettelse under sitt eget navn i stedet for det engelske navnet, siden \"German\" ikke hjelper noen som bare leser norsk.",
+    "help.languagePoint2": "Engelsk er innebygd; alle andre språk lastes ned første gang de velges.",
+
+    "sc.toolbar": "Slå verktøylinjen av/på",
+    "sc.statusBar": "Slå statuslinjen av/på",
+    "sc.spellCheck": "Slå stavekontroll av/på",
+    "sc.bionicReading": "Slå bionisk lesing av/på",
+    "sc.cycleTheme": "Bytt mellom temaer (Mørkt ▸ Lyst ▸ Autisme)",
   },
   fa: {
     "menu.file": "پرونده",
@@ -4663,6 +7503,7 @@ export const TRANSLATIONS = {
     "about.tagline": "ویرایشگر کد کوچک و سریع.",
     "about.builtWith": "ساخته‌شده با Tauri 2 و CodeMirror 6.",
     "about.version": "نسخهٔ {version}",
+    "sc.g.menus": "منوها",
     "sc.g.file": "پرونده",
     "sc.g.editing": "ویرایش",
     "sc.g.bookmarks": "نشانک‌ها",
@@ -4688,6 +7529,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+کلیک روی نشانی",
     "sc.k.clickPath": "کلیک روی مسیر در نوار وضعیت",
     "sc.k.clickLanguage": "کلیک روی زبان در نوار وضعیت",
+    "sc.openFileMenu": "باز کردن منوی پرونده",
+    "sc.openEditMenu": "باز کردن منوی ویرایش",
+    "sc.openViewMenu": "باز کردن منوی نما",
+    "sc.openHelpMenu": "باز کردن منوی راهنما",
     "sc.newFile": "پرونده جدید",
     "sc.openFile": "باز کردن پرونده",
     "sc.save": "ذخیره",
@@ -4761,6 +7606,138 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "باز کردن پیوند زیر مکان‌نما",
     "sc.copyFullPath": "رونوشت مسیر کامل",
     "sc.changeMode": "تغییر حالت زبان",
+
+    "view.autismTheme": "پوسته اوتیسم",
+    "view.autismThemeHint": "رنگ‌های ملایم و کم‌کنتراست برای حساسیت حسی",
+    "view.bionicReading": "خوانش بایونیک",
+    "help.autismTheme": "پوسته اوتیسم",
+    "help.bionicReading": "خوانش بایونیک",
+    "toolbar.switchToTheme": "تغییر به {theme}",
+
+    "autismHelp.intro":
+      "یک پوستهٔ رنگی ملایم و کم‌محرک برای کاربران با حساسیت حسی — اوتیسم، ADHD، میگرن و سایر حالت‌های استرس بصری. این پوسته ویرایشگر را برای دیدن طولانی‌مدت آرام نگه می‌دارد، بدون اینکه از خوانایی صرف‌نظر کند.",
+    "autismHelp.point1":
+      "بدون سیاه خالص یا سفید خالص. پس‌زمینهٔ خاکستری دودی گرم و متن کرمی نرم، هم از خیرگی صفحه‌نمایش و هم از اثر هاله‌ای که کنتراست تند سیاه‌وسفید ایجاد می‌کند، جلوگیری می‌کند.",
+    "autismHelp.point2":
+      "هیچ‌جا قرمز یا زرد وجود ندارد — دو رنگی که بیشتر از همه به عنوان محرک بیش‌ازحد گزارش شده‌اند. خطاها از رنگ تراکوتای ملایم و برجسته‌سازی جست‌وجو از طلایی ملایم به‌جای قرمز هشدارآمیز و زرد روشن معمول استفاده می‌کنند.",
+    "autismHelp.point3":
+      "اشباع هر رنگ به‌طور قابل‌توجهی کمتر از پوسته‌های تیره و روشن است، بنابراین هیچ رنگی کنار همسایه‌هایش \"نمی‌لرزد\"، در حالی که کنتراست با پس‌زمینه همچنان یکسان می‌ماند.",
+    "autismHelp.point4":
+      "رنگ‌های آرامش‌بخش در همه‌جا غالب‌اند: آبی خاک‌آلود و سبز مریم‌گلی برای بیشتر برجسته‌سازی نحو، اسطوخودوس ملایم و قهوه‌ای روشن برای بقیه.",
+    "autismHelp.footer":
+      "هر زمان می‌توانید از طریق نمایش ▸ پوسته اوتیسم، با دکمهٔ پایین، یا با فشردن Ctrl+Shift+T برای چرخش بین تیره ▸ روشن ▸ اوتیسم به آن تغییر دهید.",
+    "autismHelp.switch": "تغییر به پوسته اوتیسم",
+    "autismHelp.active": "این پوستهٔ فعلی شماست.",
+
+    "bionicHelp.intro":
+      "یک ترفند تایپوگرافی که بخش ابتدایی هر کلمه را ضخیم می‌کند، تا چشم در هر خط به نقاط تثبیت کمتر و کوتاه‌تری نیاز داشته باشد. این روش به‌عنوان ابزار کمکی خواندن برای ADHD، دیس‌لکسی و گاهی اوتیسم تبلیغ می‌شود.",
+    "bionicHelp.point1":
+      "تقریباً ۴۰٪ ابتدای هر کلمه ضخیم می‌شود و بقیه با وزن معمولی باقی می‌ماند — ایده این است که مغز کلمه را از ابتدای آن تشخیص می‌دهد و انتهای آن را از روی زمینه تکمیل می‌کند.",
+    "bionicHelp.point2":
+      "شواهد ضدونقیض است. چندین مطالعهٔ کنترل‌شده هیچ بهبود قابل‌اندازه‌گیری در سرعت خواندن یا درک مطلب نسبت به متن معمولی پیدا نکردند، و برخی خوانندگان آن را حواس‌پرت‌کننده‌تر یافتند، نه کمتر. به‌جای فرض اینکه کمک می‌کند، آن را امتحان کنید.",
+    "bionicHelp.point3":
+      "برای هر سندی که روی صفحه است اعمال می‌شود، درست مانند شکستن خط — محدود به نثر نیست، بنابراین روشن‌کردن آن هنگام ویرایش کد، ابتدای شناسه‌ها و کلمات کلیدی را نیز ضخیم می‌کند.",
+    "bionicHelp.footer":
+      "هر زمان می‌توانید آن را از طریق نمایش ▸ خوانش بایونیک، با دکمهٔ پایین، یا با فشردن Ctrl+Shift+B روشن کنید.",
+    "bionicHelp.turnOn": "روشن کردن خوانش بایونیک",
+    "bionicHelp.turnOff": "خاموش کردن خوانش بایونیک",
+
+    "help.center": "راهنما و آموزش",
+    "modal.helpCenterTitle": "راهنما و آموزش",
+    "help.searchPlaceholder": "جست‌وجو در راهنما…",
+    "help.noResults": "هیچ موضوع مطابقی یافت نشد",
+
+    "help.overviewTitle": "نمای کلی",
+    "help.overviewIntro":
+      "JustCode یک ویرایشگر کوچک و سریع برای HTML، CSS، JavaScript و متن یا کد عمومی است — طراحی‌شده برای باز شدن سریع و بی‌دردسر بودن، نه جایگزینی یک IDE کامل.",
+    "help.overviewPoint1": "فایل‌ها به‌صورت زبانه در یک پنجره باز می‌شوند؛ هیچ پروژه یا فضای کاری‌ای برای تنظیم اولیه وجود ندارد.",
+    "help.overviewPoint2": "هر زمان F1 را فشار دهید تا مرجع کامل میان‌برهای صفحه‌کلید نمایش داده شود.",
+
+    "help.filesTitle": "فایل‌ها",
+    "help.filesIntro": "فایل‌ها به‌صورت زبانه باز می‌شوند؛ JustCode مفهوم پروژه یا فضای کاری ندارد.",
+    "help.filesPoint1":
+      "فایل جدید (Ctrl+N) قالب‌های آغازین برای بسیاری از زبان‌ها یا یک سند خالی ارائه می‌دهد؛ باز کردن… (Ctrl+O) چند فایل را همزمان می‌پذیرد.",
+    "help.filesPoint2":
+      "ذخیره (Ctrl+S) و ذخیره به‌عنوان (Ctrl+Shift+S) مستقیم روی دیسک می‌نویسند؛ ذخیرهٔ همه (Ctrl+Alt+S) همهٔ زبانه‌های تغییریافته را یک‌جا پوشش می‌دهد.",
+    "help.filesPoint3": "فایل ▸ فایل‌های اخیر آخرین ۱۵ فایل را بین راه‌اندازی‌های مجدد به خاطر می‌سپارد.",
+    "help.filesPoint4":
+      "فایل ▸ ارتباط‌های فایل… جاست‌کد را نزد ویندوز ثبت می‌کند تا برای نوع‌های فایلی که می‌شناسد، به‌عنوان گزینهٔ \"باز کردن با\" — یا برنامهٔ پیش‌فرض — ظاهر شود.",
+
+    "help.editingTitle": "ویرایش",
+    "help.editingIntro": "ویرایش استاندارد، به‌علاوهٔ چند ویژگی اضافه فراتر از برش، کپی، جای‌گذاری، واگرد و انجام مجدد.",
+    "help.editingPoint1":
+      "Ctrl+/ یک توضیح را با استفاده از نحو زبان فعلی تغییر وضعیت می‌دهد — توضیح خطی برای یک خط، توضیح بلوکی برای یک گزینش.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L حروف بزرگ و کوچک گزینش را تغییر می‌دهند؛ Ctrl+Alt+G یک GUID جدید درج می‌کند.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ خط فعلی را جابه‌جا می‌کند؛ Alt+Shift+↑ / Alt+Shift+↓ آن را به بالا یا پایین تکثیر می‌کند.",
+    "help.editingPoint4": "Ctrl+کلیک نشانگر دیگری اضافه می‌کند؛ Alt+کشیدن یک گزینش مستطیلی (ستونی) ایجاد می‌کند.",
+
+    "help.searchTitle": "جست‌وجو",
+    "help.searchIntro": "یافتن و جایگزینی درون فایل فعلی، یا پرش مستقیم به یک تعریف.",
+    "help.searchPoint1":
+      "Ctrl+F یافتن را باز می‌کند؛ Ctrl+H یافتن و جایگزینی را باز می‌کند. F3 / Shift+F3 آخرین جست‌وجو را به جلو یا عقب تکرار می‌کنند.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G رفتن به نماد را باز می‌کند — فهرستی قابل‌فیلتر از توابع، کلاس‌ها و سایر اعلان‌های فایل فعلی.",
+
+    "help.bookmarksTitle": "نشانک‌ها",
+    "help.bookmarksIntro":
+      "سه جایگاه نشانک شماره‌گذاری‌شده به ازای هر سند، برای جابه‌جایی در یک فایل بزرگ بدون نیاز به پیمایش برای یافتن جای خود.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 یک نشانک در خط فعلی تنظیم یا پاک می‌کند؛ Ctrl+1 / 2 / 3 مستقیم به آن می‌پرد.",
+
+    "help.splitTabsTitle": "نمای تقسیم‌شده و زبانه‌ها",
+    "help.splitTabsIntro": "زبانه‌ها را می‌توان تا چهار قاب چیدمان کرد.",
+    "help.splitTabsPoint1":
+      "Ctrl+K و سپس یک کلید جهت‌نما، قاب فعال را در آن جهت تقسیم می‌کند؛ کشیدن یک زبانه به لبهٔ صفحه‌نمایش همین کار را انجام می‌دهد.",
+    "help.splitTabsPoint2":
+      "کشیدن یک زبانه روی نوار زبانهٔ قاب دیگر، آن را به آنجا منتقل می‌کند؛ کشیدن آخرین زبانه به بیرون از یک قاب، تقسیم را لغو می‌کند.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab بین زبانه‌ها می‌چرخند؛ کلیک وسط روی یک زبانه آن را می‌بندد.",
+
+    "help.foldingTitle": "تاخوردن کد",
+    "help.foldingIntro": "هر بلوکی را می‌توان تاخورد تا از سر راه کنار برود.",
+    "help.foldingPoint1":
+      "روی فلش کنارهٔ صفحه کلیک کنید، یا Ctrl+Shift+[ / ] را فشار دهید تا بلوک در محل نشانگر تاخورده یا باز شود.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] همه‌چیز را در فایل یک‌جا تاخورده یا باز می‌کند.",
+
+    "help.terminalTitle": "پایانه",
+    "help.terminalIntro": "یک پنل پایانهٔ یکپارچه، نه یک پنجرهٔ جداگانه.",
+    "help.terminalPoint1":
+      "Ctrl+` آن را نمایش یا پنهان می‌کند؛ Ctrl+Shift+` یک پایانهٔ جدید در کنار هر پایانهٔ در حال اجرا باز می‌کند.",
+    "help.terminalPoint2": "یک پایانهٔ جدید در پوشهٔ فایلی که در حال ویرایش است آغاز می‌شود.",
+    "help.terminalPoint3":
+      "فایل ▸ اجرا در پایانه (Ctrl+F5) اسکریپت فعلی را اجرا می‌کند و پس از آن پوسته را باز و روی خط فرمان باقی می‌گذارد، تا بتوان یک شکست را همان‌جا بررسی کرد.",
+
+    "help.runTitle": "اجرا",
+    "help.runIntro": "F5 فایل فعلی را همان‌گونه که واقعاً به نظر می‌رسد یا رفتار می‌کند نشان می‌دهد، نه به‌صورت متن مبدأ.",
+    "help.runPoint1":
+      "HTML: در مرورگر پیش‌فرض باز می‌شود. اجرای دوبارهٔ همان فایل، به‌جای باز کردن زبانهٔ دومی، همان زبانه را تازه می‌کند، تا زمانی که همچنان باز باشد.",
+    "help.runPoint2": "Markdown: ابتدا به یک سند HTML سبک‌دهی‌شده تبدیل می‌شود، سپس به همان روش پیش‌نمایش می‌شود.",
+    "help.runPoint3":
+      "اسکریپت‌های PowerShell، Batch و Shell: در پنجرهٔ کنسول خودشان اجرا می‌شوند که پس از پایان اسکریپت باز باقی می‌ماند.",
+
+    "help.wordWrapIntro":
+      "به‌طور پیش‌فرض خاموش است. شکستن خط، خطوط طولانی را بدون پیمایش افقی روی صفحه نگه می‌دارد، اما تطابق خط‌به‌خط بین کنارهٔ صفحه و شماره‌های واقعی خط را می‌شکند.",
+    "help.wordWrapPoint1":
+      "آن را از طریق نمایش ▸ شکستن خط یا Alt+Z تغییر وضعیت دهید. این ویژگی روی سندی که در حال حاضر روی صفحه است اعمال می‌شود.",
+
+    "help.spellCheckIntro": "به‌طور پیش‌فرض خاموش است — بیشتر شناسه‌های کد مبدأ ذاتاً \"غلط املایی\" محسوب می‌شوند.",
+    "help.spellCheckPoint1":
+      "به‌جای بررسی‌کنندهٔ داخلی نمای وب، به‌صورت یک linter روی متن واقعی اجرا می‌شود، بنابراین غلط‌های املایی در مجموع مشکلات شمرده می‌شوند و همراه با اصلاحات پیشنهادی می‌آیند.",
+    "help.spellCheckPoint2": "آن را از طریق نمایش ▸ غلط‌یاب املایی تغییر وضعیت دهید.",
+
+    "help.languageTitle": "زبان رابط کاربری",
+    "help.languageIntro":
+      "زبان منوها و کادرهای گفت‌وگوی خود JustCode — مستقل از محتوا یا زبان برنامه‌نویسی هر فایل.",
+    "help.languagePoint1":
+      "نمایش ▸ زبان… هر ترجمه را با نام خودش فهرست می‌کند، نه نام انگلیسی آن، چون \"German\" به کسی که فقط فارسی می‌خواند کمکی نمی‌کند.",
+    "help.languagePoint2": "زبان انگلیسی از پیش نصب شده است؛ هر زبان دیگری در اولین انتخاب دانلود می‌شود.",
+
+    "sc.toolbar": "تغییر وضعیت نوار ابزار",
+    "sc.statusBar": "تغییر وضعیت نوار وضعیت",
+    "sc.spellCheck": "تغییر وضعیت غلط‌یاب املایی",
+    "sc.bionicReading": "تغییر وضعیت خوانش بایونیک",
+    "sc.cycleTheme": "چرخش بین پوسته‌ها (تیره ▸ روشن ▸ اوتیسم)",
   },
   pl: {
     "menu.file": "Plik",
@@ -4879,6 +7856,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Mały, szybki edytor kodu.",
     "about.builtWith": "Zbudowany z Tauri 2 i CodeMirror 6.",
     "about.version": "Wersja {version}",
+    "sc.g.menus": "Menu",
     "sc.g.file": "Plik",
     "sc.g.editing": "Edycja",
     "sc.g.bookmarks": "Zakładki",
@@ -4904,6 +7882,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+kliknięcie adresu URL",
     "sc.k.clickPath": "Kliknij ścieżkę na pasku stanu",
     "sc.k.clickLanguage": "Kliknij język na pasku stanu",
+    "sc.openFileMenu": "Otwórz menu Plik",
+    "sc.openEditMenu": "Otwórz menu Edycja",
+    "sc.openViewMenu": "Otwórz menu Widok",
+    "sc.openHelpMenu": "Otwórz menu Pomoc",
     "sc.newFile": "Nowy plik",
     "sc.openFile": "Otwórz plik",
     "sc.save": "Zapisz",
@@ -4977,6 +7959,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Otwórz link pod kursorem",
     "sc.copyFullPath": "Kopiuj pełną ścieżkę",
     "sc.changeMode": "Zmień tryb języka",
+
+    "view.autismTheme": "Motyw autystyczny",
+    "view.autismThemeHint": "Stonowane kolory o niskim kontraście dla wrażliwości sensorycznej",
+    "view.bionicReading": "Czytanie bioniczne",
+    "help.autismTheme": "Motyw autystyczny",
+    "help.bionicReading": "Czytanie bioniczne",
+    "toolbar.switchToTheme": "Przełącz na {theme}",
+
+    "autismHelp.intro":
+      "Stonowany, mało pobudzający motyw kolorystyczny dla osób wrażliwych sensorycznie — z autyzmem, ADHD, migreną i innymi stanami stresu wzrokowego. Sprawia, że edytor pozostaje spokojny dla oczu przez długi czas, bez utraty czytelności.",
+    "autismHelp.point1":
+      "Bez czystej czerni ani bieli. Ciepłe, ciemnoszare tło i miękki kremowy tekst pozwalają uniknąć zarówno olśnienia ekranu, jak i efektu halo powodowanego przez ostry kontrast czarno-biały.",
+    "autismHelp.point2":
+      "Nigdzie nie ma czerwieni ani żółci — dwóch barw najczęściej wskazywanych jako nadmiernie pobudzające. Błędy używają stonowanej terakoty, a podświetlenia wyszukiwania stonowanego złota, zamiast zwykłej alarmowej czerwieni i jaskrawej żółci.",
+    "autismHelp.point3":
+      "Każdy kolor ma nasycenie znacznie niższe niż w motywach Ciemnym i Jasnym, dzięki czemu nic nie \"wibruje\" przy sąsiednich elementach, mimo że kontrast wobec tła pozostaje taki sam.",
+    "autismHelp.point4":
+      "Wszędzie dominują uspokajające barwy: przykurzony błękit i szałwiowa zieleń dla większości podświetlenia składni, stonowana lawenda i beż dla reszty.",
+    "autismHelp.footer":
+      "Przełącz się na niego w dowolnym momencie z Widok ▸ Motyw autystyczny, przyciskiem poniżej, lub naciskając Ctrl+Shift+T, aby przełączać między Ciemny ▸ Jasny ▸ Autystyczny.",
+    "autismHelp.switch": "Przełącz na motyw autystyczny",
+    "autismHelp.active": "To jest twój aktualny motyw.",
+
+    "bionicHelp.intro":
+      "Sztuczka typograficzna, która pogrubia początkową część każdego słowa, dzięki czemu oko potrzebuje mniej i krótszych punktów fiksacji na wiersz. Jest reklamowana jako pomoc w czytaniu przy ADHD, dysleksji, a czasem autyzmie.",
+    "bionicHelp.point1":
+      "Pogrubiane jest mniej więcej pierwsze 40% każdego słowa, a reszta pozostaje o normalnej grubości — pomysł polega na tym, że mózg rozpoznaje słowo po jego początku i uzupełnia zakończenie z kontekstu.",
+    "bionicHelp.point2":
+      "Dowody są niejednoznaczne. Kilka kontrolowanych badań nie wykazało mierzalnej poprawy prędkości czytania ani rozumienia w porównaniu ze zwykłym tekstem, a niektórzy czytelnicy uznali to za bardziej rozpraszające, a nie mniej. Wypróbuj sam, zamiast zakładać, że pomoże.",
+    "bionicHelp.point3":
+      "Dotyczy każdego dokumentu na ekranie, tak samo jak zawijanie wierszy — nie ogranicza się do prozy, więc włączenie tego podczas edycji kodu pogrubia też początki identyfikatorów i słów kluczowych.",
+    "bionicHelp.footer":
+      "Włącz je w dowolnym momencie z Widok ▸ Czytanie bioniczne, przyciskiem poniżej, lub naciskając Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Włącz czytanie bioniczne",
+    "bionicHelp.turnOff": "Wyłącz czytanie bioniczne",
+
+    "help.center": "Pomoc i poradniki",
+    "modal.helpCenterTitle": "Pomoc i poradniki",
+    "help.searchPlaceholder": "Szukaj w pomocy…",
+    "help.noResults": "Brak pasujących tematów",
+
+    "help.overviewTitle": "Przegląd",
+    "help.overviewIntro":
+      "JustCode to mały, szybki edytor dla HTML, CSS, JavaScript oraz ogólnego tekstu lub kodu — zbudowany, aby szybko się otwierać i nie przeszkadzać, a nie zastępować pełnego IDE.",
+    "help.overviewPoint1":
+      "Pliki otwierają się jako karty w jednym oknie; nie ma projektu ani obszaru roboczego do wcześniejszego skonfigurowania.",
+    "help.overviewPoint2": "Naciśnij F1 w dowolnym momencie, aby zobaczyć pełną listę skrótów klawiszowych.",
+
+    "help.filesTitle": "Pliki",
+    "help.filesIntro": "Pliki otwierają się jako karty; JustCode nie ma pojęcia projektu ani obszaru roboczego.",
+    "help.filesPoint1":
+      "Nowy plik (Ctrl+N) oferuje szablony startowe dla wielu języków lub pusty dokument; Otwórz… (Ctrl+O) akceptuje kilka plików naraz.",
+    "help.filesPoint2":
+      "Zapisz (Ctrl+S) i Zapisz jako (Ctrl+Shift+S) zapisują bezpośrednio na dysku; Zapisz wszystko (Ctrl+Alt+S) obejmuje wszystkie zmienione karty naraz.",
+    "help.filesPoint3": "Plik ▸ Ostatnie pliki zapamiętuje ostatnich 15 plików między ponownymi uruchomieniami.",
+    "help.filesPoint4":
+      "Plik ▸ Powiązania plików… rejestruje JustCode w systemie Windows, dzięki czemu pojawia się jako opcja \"Otwórz za pomocą\" — lub domyślna — dla obsługiwanych typów plików.",
+
+    "help.editingTitle": "Edycja",
+    "help.editingIntro": "Standardowa edycja, plus kilka dodatkowych funkcji poza wycinaniem, kopiowaniem, wklejaniem, cofaniem i ponawianiem.",
+    "help.editingPoint1":
+      "Ctrl+/ przełącza komentarz przy użyciu składni bieżącego języka — komentarze liniowe dla jednego wiersza, blokowe dla zaznaczenia.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L zmieniają wielkość liter zaznaczenia; Ctrl+Alt+G wstawia nowy GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ przesuwa bieżący wiersz; Alt+Shift+↑ / Alt+Shift+↓ duplikuje go w górę lub w dół.",
+    "help.editingPoint4": "Ctrl+kliknięcie dodaje kolejny kursor; Alt+przeciągnięcie tworzy zaznaczenie prostokątne (kolumnowe).",
+
+    "help.searchTitle": "Wyszukiwanie",
+    "help.searchIntro": "Znajdź i zamień w bieżącym pliku, lub przejdź bezpośrednio do definicji.",
+    "help.searchPoint1":
+      "Ctrl+F otwiera Znajdź; Ctrl+H otwiera Znajdź i zamień. F3 / Shift+F3 powtarzają ostatnie wyszukiwanie do przodu lub do tyłu.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G otwiera Przejdź do symbolu — filtrowaną listę funkcji, klas i innych deklaracji w bieżącym pliku.",
+
+    "help.bookmarksTitle": "Zakładki",
+    "help.bookmarksIntro":
+      "Trzy numerowane miejsca zakładek na dokument, do poruszania się po dużym pliku bez przewijania w poszukiwaniu swojego miejsca.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 ustawia lub czyści zakładkę w bieżącym wierszu; Ctrl+1 / 2 / 3 przechodzi bezpośrednio do niej.",
+
+    "help.splitTabsTitle": "Podzielony widok i karty",
+    "help.splitTabsIntro": "Karty można ułożyć w maksymalnie czterech panelach.",
+    "help.splitTabsPoint1":
+      "Ctrl+K, a następnie klawisz strzałki, dzieli aktywny panel w tym kierunku; przeciągnięcie karty do krawędzi ekranu robi to samo.",
+    "help.splitTabsPoint2":
+      "Przeciągnięcie karty na pasek kart innego panelu przenosi ją tam; przeciągnięcie ostatniej karty poza panel cofa podział.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab przełącza między kartami; kliknięcie środkowym przyciskiem zamyka kartę.",
+
+    "help.foldingTitle": "Zwijanie kodu",
+    "help.foldingIntro": "Każdy blok można zwinąć, aby nie przeszkadzał.",
+    "help.foldingPoint1":
+      "Kliknij strzałkę na marginesie lub naciśnij Ctrl+Shift+[ / ], aby zwinąć lub rozwinąć blok przy kursorze.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] zwija lub rozwija naraz wszystko w pliku.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Zintegrowany panel terminala, a nie osobne okno.",
+    "help.terminalPoint1":
+      "Ctrl+` pokazuje lub ukrywa go; Ctrl+Shift+` otwiera nowy obok każdego już działającego.",
+    "help.terminalPoint2": "Nowy terminal uruchamia się w folderze pliku aktualnie edytowanego.",
+    "help.terminalPoint3":
+      "Plik ▸ Uruchom w terminalu (Ctrl+F5) uruchamia bieżący skrypt, a następnie pozostawia powłokę otwartą przy wierszu poleceń, dzięki czemu awarię można od razu zbadać.",
+
+    "help.runTitle": "Uruchom",
+    "help.runIntro": "F5 pokazuje bieżący plik tak, jak będzie faktycznie wyglądał lub się zachowywał, a nie jako tekst źródłowy.",
+    "help.runPoint1":
+      "HTML: otwiera się w domyślnej przeglądarce. Ponowne uruchomienie tego samego pliku odświeża tę kartę zamiast otwierać kolejną, dopóki pozostaje otwarta.",
+    "help.runPoint2": "Markdown: jest najpierw renderowany do stylizowanego dokumentu HTML, a potem podglądany w ten sam sposób.",
+    "help.runPoint3":
+      "Skrypty PowerShell, Batch i Shell: uruchamiają się we własnym oknie konsoli, które pozostaje otwarte po zakończeniu skryptu.",
+
+    "help.wordWrapIntro":
+      "Domyślnie wyłączone. Zawijanie utrzymuje długie wiersze na ekranie bez przewijania w poziomie, ale zaburza zgodność wiersz-po-wierszu między marginesem a rzeczywistymi numerami wierszy.",
+    "help.wordWrapPoint1":
+      "Przełącz je z Widok ▸ Zawijanie wierszy lub Alt+Z. Dotyczy dokumentu aktualnie wyświetlanego na ekranie.",
+
+    "help.spellCheckIntro": "Domyślnie wyłączona — większość identyfikatorów w kodzie źródłowym jest z definicji \"błędnie napisana\".",
+    "help.spellCheckPoint1":
+      "Działa jako linter na rzeczywistym tekście zamiast wbudowanego sprawdzania widoku sieciowego, więc błędy pisowni są liczone do sumy problemów i przychodzą z proponowanymi poprawkami.",
+    "help.spellCheckPoint2": "Przełącz ją z Widok ▸ Sprawdzanie pisowni.",
+
+    "help.languageTitle": "Język interfejsu",
+    "help.languageIntro":
+      "Język własnych menu i okien dialogowych JustCode — niezależny od zawartości ani języka programowania jakiegokolwiek pliku.",
+    "help.languagePoint1":
+      "Widok ▸ Język… wymienia każde tłumaczenie pod jego własną nazwą, a nie angielską, ponieważ \"German\" nie pomaga nikomu, kto czyta tylko po polsku.",
+    "help.languagePoint2": "Angielski jest wbudowany; każdy inny język jest pobierany przy pierwszym wyborze.",
+
+    "sc.toolbar": "Przełącz pasek narzędzi",
+    "sc.statusBar": "Przełącz pasek stanu",
+    "sc.spellCheck": "Przełącz sprawdzanie pisowni",
+    "sc.bionicReading": "Przełącz czytanie bioniczne",
+    "sc.cycleTheme": "Zmieniaj motywy (Ciemny ▸ Jasny ▸ Autystyczny)",
   },
   pt: {
     "menu.file": "Arquivo",
@@ -5095,6 +8210,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Um editor de código pequeno e rápido.",
     "about.builtWith": "Feito com Tauri 2 e CodeMirror 6.",
     "about.version": "Versão {version}",
+    "sc.g.menus": "Menus",
     "sc.g.file": "Ficheiro",
     "sc.g.editing": "Edição",
     "sc.g.bookmarks": "Marcadores",
@@ -5120,6 +8236,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+clique num URL",
     "sc.k.clickPath": "Clicar no caminho na barra de estado",
     "sc.k.clickLanguage": "Clicar na linguagem na barra de estado",
+    "sc.openFileMenu": "Abrir o menu Arquivo",
+    "sc.openEditMenu": "Abrir o menu Editar",
+    "sc.openViewMenu": "Abrir o menu Exibir",
+    "sc.openHelpMenu": "Abrir o menu Ajuda",
     "sc.newFile": "Novo ficheiro",
     "sc.openFile": "Abrir ficheiro",
     "sc.save": "Guardar",
@@ -5193,6 +8313,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Abrir a ligação sob o cursor",
     "sc.copyFullPath": "Copiar o caminho completo",
     "sc.changeMode": "Alterar o modo de linguagem",
+
+    "view.autismTheme": "Tema Autismo",
+    "view.autismThemeHint": "Cores suaves e de baixo contraste para sensibilidade sensorial",
+    "view.bionicReading": "Leitura biônica",
+    "help.autismTheme": "Tema Autismo",
+    "help.bionicReading": "Leitura biônica",
+    "toolbar.switchToTheme": "Mudar para {theme}",
+
+    "autismHelp.intro":
+      "Um tema de cores suaves e pouco estimulantes para usuários sensíveis sensorialmente — autismo, TDAH, enxaqueca e outras condições de estresse visual. Mantém o editor calmo de se olhar por longos períodos, sem sacrificar a legibilidade.",
+    "autismHelp.point1":
+      "Sem preto puro nem branco puro. Um fundo cinza-carvão escuro e quente e um texto creme suave evitam tanto o ofuscamento da tela quanto o efeito de halo causado por contraste preto-branco intenso.",
+    "autismHelp.point2":
+      "Nenhum vermelho ou amarelo em lugar nenhum — os dois tons mais frequentemente citados como superestimulantes. Erros usam um terracota suave e os destaques de busca um dourado suave, em vez do vermelho de alerta e amarelo vivo habituais.",
+    "autismHelp.point3":
+      "Cada cor tem uma saturação bem menor do que nos temas Escuro e Claro, de modo que nada \"vibra\" ao lado de seus vizinhos, mesmo com o contraste em relação ao fundo permanecendo o mesmo.",
+    "autismHelp.point4":
+      "Tons calmantes predominam em toda parte: azul empoeirado e verde-sálvia para a maior parte do destaque de sintaxe, lavanda suave e bege para o restante.",
+    "autismHelp.footer":
+      "Mude para ele a qualquer momento em Exibir ▸ Tema Autismo, com o botão abaixo, ou pressionando Ctrl+Shift+T para alternar entre Escuro ▸ Claro ▸ Autismo.",
+    "autismHelp.switch": "Mudar para o Tema Autismo",
+    "autismHelp.active": "Este é o seu tema atual.",
+
+    "bionicHelp.intro":
+      "Um truque tipográfico que deixa em negrito a parte inicial de cada palavra, para que o olho precise de menos e mais curtos pontos de fixação por linha. É divulgado como um auxílio de leitura para TDAH, dislexia e, às vezes, autismo.",
+    "bionicHelp.point1":
+      "Cerca dos primeiros 40% de cada palavra ficam em negrito, e o restante permanece com peso normal — a ideia é que o cérebro reconheça uma palavra pelo início e complete o final pelo contexto.",
+    "bionicHelp.point2":
+      "As evidências são mistas. Vários estudos controlados não encontraram ganho mensurável na velocidade de leitura ou compreensão em relação ao texto comum, e alguns leitores acham mais distrativo, não menos. Experimente em vez de presumir que vai ajudar.",
+    "bionicHelp.point3":
+      "Aplica-se a qualquer documento na tela, assim como a quebra de linha — não se limita à prosa, então ativá-la ao editar código também deixa em negrito o início de identificadores e palavras-chave.",
+    "bionicHelp.footer":
+      "Ative-a a qualquer momento em Exibir ▸ Leitura biônica, com o botão abaixo, ou pressionando Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Ativar leitura biônica",
+    "bionicHelp.turnOff": "Desativar leitura biônica",
+
+    "help.center": "Ajuda e guias",
+    "modal.helpCenterTitle": "Ajuda e guias",
+    "help.searchPlaceholder": "Pesquisar na ajuda…",
+    "help.noResults": "Nenhum tópico correspondente",
+
+    "help.overviewTitle": "Visão geral",
+    "help.overviewIntro":
+      "O JustCode é um editor pequeno e rápido para HTML, CSS, JavaScript e texto ou código em geral — feito para abrir rapidamente e não atrapalhar, não para substituir uma IDE completa.",
+    "help.overviewPoint1":
+      "Os arquivos abrem como abas em uma única janela; não há projeto ou espaço de trabalho para configurar antes.",
+    "help.overviewPoint2": "Pressione F1 a qualquer momento para a referência completa de atalhos de teclado.",
+
+    "help.filesTitle": "Arquivos",
+    "help.filesIntro": "Os arquivos abrem como abas; o JustCode não tem conceito de projeto ou espaço de trabalho.",
+    "help.filesPoint1":
+      "Novo arquivo (Ctrl+N) oferece modelos iniciais para várias linguagens, ou um documento em branco; Abrir… (Ctrl+O) aceita vários arquivos de uma vez.",
+    "help.filesPoint2":
+      "Salvar (Ctrl+S) e Salvar como (Ctrl+Shift+S) gravam diretamente no disco; Salvar tudo (Ctrl+Alt+S) cobre todas as abas alteradas de uma vez.",
+    "help.filesPoint3": "Arquivo ▸ Arquivos recentes lembra os últimos 15 arquivos entre reinicializações.",
+    "help.filesPoint4":
+      "Arquivo ▸ Associações de arquivo… registra o JustCode no Windows para que apareça como opção \"Abrir com\" — ou como padrão — para os tipos de arquivo que ele entende.",
+
+    "help.editingTitle": "Edição",
+    "help.editingIntro": "Edição padrão, além de alguns extras além de recortar, copiar, colar, desfazer e refazer.",
+    "help.editingPoint1":
+      "Ctrl+/ alterna um comentário usando a sintaxe da linguagem atual — comentários de linha para uma única linha, comentários de bloco em uma seleção.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L alteram a caixa da seleção; Ctrl+Alt+G insere um novo GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ move a linha atual; Alt+Shift+↑ / Alt+Shift+↓ a duplica para cima ou para baixo.",
+    "help.editingPoint4": "Ctrl+clique adiciona outro cursor; Alt+arrastar cria uma seleção retangular (em coluna).",
+
+    "help.searchTitle": "Pesquisa",
+    "help.searchIntro": "Localizar e substituir dentro do arquivo atual, ou pular diretamente para uma definição.",
+    "help.searchPoint1":
+      "Ctrl+F abre Localizar; Ctrl+H abre Localizar e substituir. F3 / Shift+F3 repetem a última pesquisa para frente ou para trás.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G abre Ir para símbolo — uma lista filtrável de funções, classes e outras declarações no arquivo atual.",
+
+    "help.bookmarksTitle": "Favoritos",
+    "help.bookmarksIntro":
+      "Três posições de favoritos numeradas por documento, para se mover em um arquivo grande sem rolar para reencontrar seu lugar.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 define ou limpa um favorito na linha atual; Ctrl+1 / 2 / 3 pula diretamente para ele.",
+
+    "help.splitTabsTitle": "Visualização dividida e abas",
+    "help.splitTabsIntro": "As abas podem ser organizadas em até quatro painéis.",
+    "help.splitTabsPoint1":
+      "Ctrl+K seguido de uma tecla de seta divide o painel ativo naquela direção; arrastar uma aba até a borda da tela faz o mesmo.",
+    "help.splitTabsPoint2":
+      "Arrastar uma aba para a barra de abas de outro painel a move para lá; arrastar a última aba para fora de um painel desfaz a divisão.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab percorrem as abas; clicar com o botão do meio em uma aba a fecha.",
+
+    "help.foldingTitle": "Recolhimento de código",
+    "help.foldingIntro": "Qualquer bloco pode ser recolhido para sair do caminho.",
+    "help.foldingPoint1":
+      "Clique na seta na margem, ou pressione Ctrl+Shift+[ / ] para recolher ou expandir o bloco no cursor.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] recolhe ou expande tudo no arquivo de uma vez.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Um painel de terminal integrado, não uma janela separada.",
+    "help.terminalPoint1":
+      "Ctrl+` o mostra ou oculta; Ctrl+Shift+` abre um novo ao lado de qualquer um já em execução.",
+    "help.terminalPoint2": "Um novo terminal inicia na pasta do arquivo que está sendo editado no momento.",
+    "help.terminalPoint3":
+      "Arquivo ▸ Executar no terminal (Ctrl+F5) executa o script atual e deixa o shell aberto em um prompt depois, para que uma falha possa ser investigada na hora.",
+
+    "help.runTitle": "Executar",
+    "help.runIntro": "F5 mostra o arquivo atual como ele realmente vai parecer ou se comportar, em vez de como texto-fonte.",
+    "help.runPoint1":
+      "HTML: abre no navegador padrão. Executar o mesmo arquivo novamente atualiza essa aba em vez de abrir uma segunda, enquanto ela permanecer aberta.",
+    "help.runPoint2": "Markdown: primeiro é renderizado como um documento HTML estilizado, e depois pré-visualizado da mesma forma.",
+    "help.runPoint3":
+      "Scripts PowerShell, Batch e Shell: são executados em sua própria janela de console, que permanece aberta após o término do script.",
+
+    "help.wordWrapIntro":
+      "Desativado por padrão. A quebra de linha mantém linhas longas na tela sem rolagem horizontal, mas quebra a correspondência linha a linha entre a margem e os números de linha reais.",
+    "help.wordWrapPoint1":
+      "Ative-a em Exibir ▸ Moldar linha ou Alt+Z. Aplica-se ao documento atualmente exibido na tela.",
+
+    "help.spellCheckIntro": "Desativada por padrão — a maioria dos identificadores no código-fonte é \"escrita incorretamente\" por definição.",
+    "help.spellCheckPoint1":
+      "Funciona como um linter sobre o texto real em vez do verificador embutido da webview, então os erros de ortografia são contados no total de Problemas e vêm com correções sugeridas.",
+    "help.spellCheckPoint2": "Ative-a em Exibir ▸ Verificação ortográfica.",
+
+    "help.languageTitle": "Idioma da interface",
+    "help.languageIntro":
+      "O idioma dos próprios menus e caixas de diálogo do JustCode — independente do conteúdo ou da linguagem de programação de qualquer arquivo.",
+    "help.languagePoint1":
+      "Exibir ▸ Idioma… lista cada tradução pelo seu próprio nome em vez do nome em inglês, já que \"German\" não ajuda quem só lê português.",
+    "help.languagePoint2": "O inglês vem embutido; qualquer outro idioma é baixado na primeira vez que é selecionado.",
+
+    "sc.toolbar": "Ativar/desativar a barra de ferramentas",
+    "sc.statusBar": "Ativar/desativar a barra de status",
+    "sc.spellCheck": "Ativar/desativar a verificação ortográfica",
+    "sc.bionicReading": "Ativar/desativar leitura biônica",
+    "sc.cycleTheme": "Alternar temas (Escuro ▸ Claro ▸ Autismo)",
   },
   ro: {
     "menu.file": "Fișier",
@@ -5311,6 +8564,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Un editor de cod mic și rapid.",
     "about.builtWith": "Construit cu Tauri 2 și CodeMirror 6.",
     "about.version": "Versiunea {version}",
+    "sc.g.menus": "Meniuri",
     "sc.g.file": "Fișier",
     "sc.g.editing": "Editare",
     "sc.g.bookmarks": "Marcaje",
@@ -5336,6 +8590,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+clic pe un URL",
     "sc.k.clickPath": "Faceți clic pe cale în bara de stare",
     "sc.k.clickLanguage": "Faceți clic pe limbaj în bara de stare",
+    "sc.openFileMenu": "Deschide meniul Fișier",
+    "sc.openEditMenu": "Deschide meniul Editare",
+    "sc.openViewMenu": "Deschide meniul Vizualizare",
+    "sc.openHelpMenu": "Deschide meniul Ajutor",
     "sc.newFile": "Fișier nou",
     "sc.openFile": "Deschidere fișier",
     "sc.save": "Salvare",
@@ -5409,6 +8667,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Deschidere link de sub cursor",
     "sc.copyFullPath": "Copiere cale completă",
     "sc.changeMode": "Modificare mod limbaj",
+
+    "view.autismTheme": "Temă pentru autism",
+    "view.autismThemeHint": "Culori estompate, cu contrast redus, pentru sensibilitate senzorială",
+    "view.bionicReading": "Citire bionică",
+    "help.autismTheme": "Temă pentru autism",
+    "help.bionicReading": "Citire bionică",
+    "toolbar.switchToTheme": "Comută la {theme}",
+
+    "autismHelp.intro":
+      "O temă de culori estompate, cu stimulare redusă, pentru utilizatorii sensibili senzorial — autism, ADHD, migrenă și alte stări de stres vizual. Menține editorul liniștit la privit pe perioade lungi, fără a sacrifica lizibilitatea.",
+    "autismHelp.point1":
+      "Fără negru pur sau alb pur. Un fundal gri-cărbune cald și un text crem moale evită atât strălucirea ecranului, cât și efectul de halou provocat de un contrast alb-negru puternic.",
+    "autismHelp.point2":
+      "Nicăieri nu apar roșu sau galben — cele două nuanțe cel mai des menționate ca fiind suprastimulante. Erorile folosesc un teracotă estompat, iar evidențierile de căutare un auriu estompat, în locul obișnuitului roșu de alarmă și galben aprins.",
+    "autismHelp.point3":
+      "Fiecare culoare are o saturație mult mai redusă decât cea din temele Întunecată și Luminoasă, astfel încât nimic nu \"vibrează\" lângă vecinii săi, deși contrastul față de fundal rămâne același.",
+    "autismHelp.point4":
+      "Nuanțele calmante domină peste tot: albastru prăfuit și verde salvie pentru majoritatea evidențierii sintaxei, lavandă estompată și bej pentru rest.",
+    "autismHelp.footer":
+      "Comută la ea oricând din Vizualizare ▸ Temă pentru autism, cu butonul de mai jos, sau apăsând Ctrl+Shift+T pentru a parcurge Întunecată ▸ Luminoasă ▸ Autism.",
+    "autismHelp.switch": "Comută la tema pentru autism",
+    "autismHelp.active": "Aceasta este tema ta actuală.",
+
+    "bionicHelp.intro":
+      "Un truc tipografic care îngroașă partea inițială a fiecărui cuvânt, astfel încât ochiul are nevoie de mai puține și mai scurte puncte de fixare pe rând. Este promovat ca ajutor de citire pentru ADHD, dislexie și, uneori, autism.",
+    "bionicHelp.point1":
+      "Aproximativ primele 40% din fiecare cuvânt sunt îngroșate, iar restul rămâne cu grosime normală — ideea este că creierul recunoaște un cuvânt după început și completează sfârșitul din context.",
+    "bionicHelp.point2":
+      "Dovezile sunt neconcludente. Mai multe studii controlate nu au găsit o îmbunătățire măsurabilă a vitezei de citire sau a înțelegerii față de textul obișnuit, iar unii cititori îl consideră mai degrabă mai distractiv, nu mai puțin. Încearcă-l în loc să presupui că va ajuta.",
+    "bionicHelp.point3":
+      "Se aplică oricărui document aflat pe ecran, la fel ca încadrarea textului — nu se limitează la proză, așa că activarea lui în timpul editării codului îngroașă și începutul identificatorilor și cuvintelor cheie.",
+    "bionicHelp.footer":
+      "Activeaz-o oricând din Vizualizare ▸ Citire bionică, cu butonul de mai jos, sau apăsând Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Activează citirea bionică",
+    "bionicHelp.turnOff": "Dezactivează citirea bionică",
+
+    "help.center": "Ajutor și ghiduri",
+    "modal.helpCenterTitle": "Ajutor și ghiduri",
+    "help.searchPlaceholder": "Caută în ajutor…",
+    "help.noResults": "Niciun subiect corespunzător",
+
+    "help.overviewTitle": "Prezentare generală",
+    "help.overviewIntro":
+      "JustCode este un editor mic și rapid pentru HTML, CSS, JavaScript și text sau cod general — construit pentru a se deschide rapid și a nu deranja, nu pentru a înlocui un IDE complet.",
+    "help.overviewPoint1":
+      "Fișierele se deschid ca file într-o singură fereastră; nu există un proiect sau spațiu de lucru care trebuie configurat mai întâi.",
+    "help.overviewPoint2": "Apasă F1 oricând pentru referința completă a scurtăturilor de tastatură.",
+
+    "help.filesTitle": "Fișiere",
+    "help.filesIntro": "Fișierele se deschid ca file; JustCode nu are un concept de proiect sau spațiu de lucru.",
+    "help.filesPoint1":
+      "Fișier nou (Ctrl+N) oferă șabloane de pornire pentru multe limbaje, sau un document gol; Deschide… (Ctrl+O) acceptă mai multe fișiere odată.",
+    "help.filesPoint2":
+      "Salvare (Ctrl+S) și Salvare ca (Ctrl+Shift+S) scriu direct pe disc; Salvează tot (Ctrl+Alt+S) acoperă odată toate filele modificate.",
+    "help.filesPoint3": "Fișier ▸ Fișiere recente reține ultimele 15 fișiere între repornirile aplicației.",
+    "help.filesPoint4":
+      "Fișier ▸ Asocieri de fișiere… înregistrează JustCode la Windows astfel încât să apară ca opțiune \"Deschide cu\" — sau ca implicit — pentru tipurile de fișiere pe care le înțelege.",
+
+    "help.editingTitle": "Editare",
+    "help.editingIntro": "Editare standard, plus câteva extra dincolo de tăiere, copiere, lipire, anulare și refacere.",
+    "help.editingPoint1":
+      "Ctrl+/ comută un comentariu folosind sintaxa limbajului curent — comentarii de linie pentru un singur rând, comentarii bloc pentru o selecție.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L schimbă tipul de literă al selecției; Ctrl+Alt+G inserează un GUID nou.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ mută rândul curent; Alt+Shift+↑ / Alt+Shift+↓ îl duplică în sus sau în jos.",
+    "help.editingPoint4": "Ctrl+clic adaugă un alt cursor; Alt+tragere creează o selecție dreptunghiulară (pe coloană).",
+
+    "help.searchTitle": "Căutare",
+    "help.searchIntro": "Caută și înlocuiește în fișierul curent, sau sari direct la o definiție.",
+    "help.searchPoint1":
+      "Ctrl+F deschide Căutare; Ctrl+H deschide Căutare și înlocuire. F3 / Shift+F3 repetă ultima căutare înainte sau înapoi.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G deschide Salt la simbol — o listă filtrabilă a funcțiilor, claselor și altor declarații din fișierul curent.",
+
+    "help.bookmarksTitle": "Marcaje",
+    "help.bookmarksIntro":
+      "Trei sloturi de marcaje numerotate pe document, pentru a te deplasa într-un fișier mare fără a derula pentru a-ți regăsi locul.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 setează sau șterge un marcaj pe rândul curent; Ctrl+1 / 2 / 3 sare direct la el.",
+
+    "help.splitTabsTitle": "Vizualizare împărțită și file",
+    "help.splitTabsIntro": "Filele pot fi aranjate în până la patru panouri.",
+    "help.splitTabsPoint1":
+      "Ctrl+K urmat de o tastă săgeată împarte panoul activ în acea direcție; tragerea unei file către marginea ecranului face același lucru.",
+    "help.splitTabsPoint2":
+      "Tragerea unei file pe bara de file a altui panou o mută acolo; tragerea ultimei file afară dintr-un panou anulează împărțirea.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab parcurg filele; click cu butonul din mijloc pe o filă o închide.",
+
+    "help.foldingTitle": "Plierea codului",
+    "help.foldingIntro": "Orice bloc poate fi pliat pentru a nu mai sta în cale.",
+    "help.foldingPoint1":
+      "Fă clic pe săgeata din marginea laterală, sau apasă Ctrl+Shift+[ / ] pentru a plia sau a deschide blocul de la cursor.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] pliază sau deschide odată tot conținutul fișierului.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Un panou de terminal integrat, nu o fereastră separată.",
+    "help.terminalPoint1":
+      "Ctrl+` îl afișează sau îl ascunde; Ctrl+Shift+` deschide unul nou lângă oricare deja în funcțiune.",
+    "help.terminalPoint2": "Un terminal nou pornește în folderul fișierului editat în prezent.",
+    "help.terminalPoint3":
+      "Fișier ▸ Rulează în terminal (Ctrl+F5) rulează scriptul curent și lasă apoi shell-ul deschis la un prompt, astfel încât o eșecuare poate fi verificată pe loc.",
+
+    "help.runTitle": "Rulează",
+    "help.runIntro": "F5 arată fișierul curent așa cum va arăta sau se va comporta cu adevărat, în loc de text sursă.",
+    "help.runPoint1":
+      "HTML: se deschide în browserul implicit. Rularea din nou a aceluiași fișier reîmprospătează acea filă în loc să deschidă alta, atât timp cât aceasta rămâne deschisă.",
+    "help.runPoint2": "Markdown: este mai întâi randat ca document HTML stilizat, apoi previzualizat în același mod.",
+    "help.runPoint3":
+      "Scripturile PowerShell, Batch și Shell: rulează în propria fereastră de consolă, care rămâne deschisă după terminarea scriptului.",
+
+    "help.wordWrapIntro":
+      "Dezactivată implicit. Încadrarea păstrează rândurile lungi pe ecran fără derulare orizontală, dar rupe corespondența rând-cu-rând dintre marginea laterală și numerele reale de rând.",
+    "help.wordWrapPoint1":
+      "Comută din Vizualizare ▸ Încadrare text sau Alt+Z. Se aplică documentului aflat în prezent pe ecran.",
+
+    "help.spellCheckIntro": "Dezactivată implicit — majoritatea identificatorilor din codul sursă sunt \"scriși greșit\" prin definiție.",
+    "help.spellCheckPoint1":
+      "Rulează ca un linter pe textul real, nu ca verificatorul integrat al vizualizării web, astfel încât greșelile de ortografie sunt numărate în totalul problemelor și vin cu corecturi sugerate.",
+    "help.spellCheckPoint2": "Comută din Vizualizare ▸ Verificare ortografică.",
+
+    "help.languageTitle": "Limba interfeței",
+    "help.languageIntro":
+      "Limba meniurilor și a dialogurilor proprii ale JustCode — independentă de conținutul sau limbajul de programare al oricărui fișier.",
+    "help.languagePoint1":
+      "Vizualizare ▸ Limbă… listează fiecare traducere sub numele ei propriu, nu sub numele englezesc, deoarece \"German\" nu ajută pe cineva care citește doar română.",
+    "help.languagePoint2": "Engleza este integrată; orice altă limbă se descarcă la prima selectare.",
+
+    "sc.toolbar": "Comută bara de instrumente",
+    "sc.statusBar": "Comută bara de stare",
+    "sc.spellCheck": "Comută verificarea ortografică",
+    "sc.bionicReading": "Comută citirea bionică",
+    "sc.cycleTheme": "Parcurge temele (Întunecată ▸ Luminoasă ▸ Autism)",
   },
   ru: {
     "menu.file": "Файл",
@@ -5527,6 +8918,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Маленький быстрый редактор кода.",
     "about.builtWith": "Создан на Tauri 2 и CodeMirror 6.",
     "about.version": "Версия {version}",
+    "sc.g.menus": "Меню",
     "sc.g.file": "Файл",
     "sc.g.editing": "Редактирование",
     "sc.g.bookmarks": "Закладки",
@@ -5552,6 +8944,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+щелчок по URL-адресу",
     "sc.k.clickPath": "Щелчок по пути в строке состояния",
     "sc.k.clickLanguage": "Щелчок по языку в строке состояния",
+    "sc.openFileMenu": "Открыть меню Файл",
+    "sc.openEditMenu": "Открыть меню Правка",
+    "sc.openViewMenu": "Открыть меню Вид",
+    "sc.openHelpMenu": "Открыть меню Справка",
     "sc.newFile": "Создать файл",
     "sc.openFile": "Открыть файл",
     "sc.save": "Сохранить",
@@ -5625,6 +9021,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Открыть ссылку под курсором",
     "sc.copyFullPath": "Копировать полный путь",
     "sc.changeMode": "Изменить языковой режим",
+
+    "view.autismTheme": "Тема для аутизма",
+    "view.autismThemeHint": "Приглушённые цвета с низким контрастом для сенсорной чувствительности",
+    "view.bionicReading": "Бионическое чтение",
+    "help.autismTheme": "Тема для аутизма",
+    "help.bionicReading": "Бионическое чтение",
+    "toolbar.switchToTheme": "Переключить на {theme}",
+
+    "autismHelp.intro":
+      "Приглушённая, малостимулирующая цветовая тема для сенсорно чувствительных пользователей — аутизм, СДВГ, мигрень и другие состояния зрительного стресса. Она делает редактор спокойным для просмотра в течение долгого времени, не жертвуя удобочитаемостью.",
+    "autismHelp.point1":
+      "Нет ни чистого чёрного, ни чистого белого. Тёплый тёмно-угольный фон и мягкий кремовый текст избегают как бликов экрана, так и эффекта ореола, вызываемого резким чёрно-белым контрастом.",
+    "autismHelp.point2":
+      "Нигде нет красного или жёлтого — двух оттенков, которые чаще всего называют чрезмерно стимулирующими. Ошибки используют приглушённую терракоту, а выделения поиска — приглушённое золото вместо обычного тревожного красного и яркого жёлтого.",
+    "autismHelp.point3":
+      "Насыщенность каждого цвета значительно ниже, чем в тёмной и светлой темах, поэтому ничто не \"вибрирует\" рядом с соседними элементами, хотя контраст с фоном остаётся тем же.",
+    "autismHelp.point4":
+      "Успокаивающие оттенки преобладают повсюду: пыльно-синий и шалфейно-зелёный для большей части подсветки синтаксиса, приглушённая лаванда и бежевый для остального.",
+    "autismHelp.footer":
+      "Переключитесь на неё в любой момент через Вид ▸ Тема для аутизма, с помощью кнопки ниже, или нажав Ctrl+Shift+T для переключения между Тёмная ▸ Светлая ▸ Аутизм.",
+    "autismHelp.switch": "Переключиться на тему для аутизма",
+    "autismHelp.active": "Это ваша текущая тема.",
+
+    "bionicHelp.intro":
+      "Типографский приём, при котором начальная часть каждого слова выделяется жирным, чтобы глазу требовалось меньше и более коротких точек фиксации на строку. Рекламируется как средство для чтения при СДВГ, дислексии и иногда аутизме.",
+    "bionicHelp.point1":
+      "Примерно первые 40% каждого слова выделяются жирным, а остальная часть остаётся обычной — идея в том, что мозг узнаёт слово по началу и достраивает конец из контекста.",
+    "bionicHelp.point2":
+      "Доказательства неоднозначны. Несколько контролируемых исследований не обнаружили измеримого улучшения скорости чтения или понимания по сравнению с обычным текстом, а некоторые читатели сочли это более отвлекающим, а не менее. Попробуйте сами, а не предполагайте, что это поможет.",
+    "bionicHelp.point3":
+      "Применяется к любому документу на экране, как и перенос по словам — не ограничивается прозой, поэтому включение при редактировании кода также выделяет жирным начало идентификаторов и ключевых слов.",
+    "bionicHelp.footer":
+      "Включите его в любой момент через Вид ▸ Бионическое чтение, с помощью кнопки ниже, или нажав Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Включить бионическое чтение",
+    "bionicHelp.turnOff": "Выключить бионическое чтение",
+
+    "help.center": "Справка и руководства",
+    "modal.helpCenterTitle": "Справка и руководства",
+    "help.searchPlaceholder": "Поиск по справке…",
+    "help.noResults": "Нет подходящих тем",
+
+    "help.overviewTitle": "Обзор",
+    "help.overviewIntro":
+      "JustCode — небольшой, быстрый редактор для HTML, CSS, JavaScript и обычного текста или кода — созданный, чтобы быстро открываться и не мешать, а не заменять полноценную среду разработки.",
+    "help.overviewPoint1":
+      "Файлы открываются как вкладки в одном окне; нет проекта или рабочей области, которую нужно сначала настроить.",
+    "help.overviewPoint2": "Нажмите F1 в любой момент для полного списка сочетаний клавиш.",
+
+    "help.filesTitle": "Файлы",
+    "help.filesIntro": "Файлы открываются как вкладки; в JustCode нет понятия проекта или рабочей области.",
+    "help.filesPoint1":
+      "Новый файл (Ctrl+N) предлагает начальные шаблоны для многих языков или пустой документ; Открыть… (Ctrl+O) принимает несколько файлов одновременно.",
+    "help.filesPoint2":
+      "Сохранить (Ctrl+S) и Сохранить как (Ctrl+Shift+S) записывают прямо на диск; Сохранить всё (Ctrl+Alt+S) охватывает все изменённые вкладки за раз.",
+    "help.filesPoint3": "Файл ▸ Недавние файлы запоминает последние 15 файлов между перезапусками.",
+    "help.filesPoint4":
+      "Файл ▸ Ассоциации файлов… регистрирует JustCode в Windows, чтобы он появлялся как вариант \"Открыть с помощью\" — или как приложение по умолчанию — для понимаемых им типов файлов.",
+
+    "help.editingTitle": "Редактирование",
+    "help.editingIntro": "Стандартное редактирование плюс несколько дополнительных функций помимо вырезания, копирования, вставки, отмены и повтора.",
+    "help.editingPoint1":
+      "Ctrl+/ переключает комментарий с использованием синтаксиса текущего языка — строчные комментарии для одной строки, блочные — для выделения.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L изменяют регистр выделения; Ctrl+Alt+G вставляет новый GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ перемещает текущую строку; Alt+Shift+↑ / Alt+Shift+↓ дублирует её вверх или вниз.",
+    "help.editingPoint4": "Ctrl+клик добавляет ещё один курсор; Alt+перетаскивание создаёт прямоугольное (колоночное) выделение.",
+
+    "help.searchTitle": "Поиск",
+    "help.searchIntro": "Поиск и замена в текущем файле или прямой переход к определению.",
+    "help.searchPoint1":
+      "Ctrl+F открывает Поиск; Ctrl+H открывает Поиск и замену. F3 / Shift+F3 повторяют последний поиск вперёд или назад.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G открывает Переход к символу — фильтруемый список функций, классов и других объявлений в текущем файле.",
+
+    "help.bookmarksTitle": "Закладки",
+    "help.bookmarksIntro":
+      "Три пронумерованных слота закладок на документ, чтобы перемещаться по большому файлу без прокрутки в поисках своего места.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 устанавливает или очищает закладку на текущей строке; Ctrl+1 / 2 / 3 переходит прямо к ней.",
+
+    "help.splitTabsTitle": "Разделённый вид и вкладки",
+    "help.splitTabsIntro": "Вкладки можно расположить максимум в четырёх панелях.",
+    "help.splitTabsPoint1":
+      "Ctrl+K, а затем клавиша со стрелкой разделяет активную панель в этом направлении; перетаскивание вкладки к краю экрана делает то же самое.",
+    "help.splitTabsPoint2":
+      "Перетаскивание вкладки на панель вкладок другой панели перемещает её туда; перетаскивание последней вкладки за пределы панели отменяет разделение.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab переключают вкладки; клик средней кнопкой мыши по вкладке закрывает её.",
+
+    "help.foldingTitle": "Сворачивание кода",
+    "help.foldingIntro": "Любой блок можно свернуть, чтобы он не мешал.",
+    "help.foldingPoint1":
+      "Щёлкните стрелку на полях или нажмите Ctrl+Shift+[ / ], чтобы свернуть или развернуть блок у курсора.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] сворачивает или разворачивает всё в файле сразу.",
+
+    "help.terminalTitle": "Терминал",
+    "help.terminalIntro": "Встроенная панель терминала, а не отдельное окно.",
+    "help.terminalPoint1":
+      "Ctrl+` показывает или скрывает его; Ctrl+Shift+` открывает новый рядом с уже работающими.",
+    "help.terminalPoint2": "Новый терминал запускается в папке редактируемого в данный момент файла.",
+    "help.terminalPoint3":
+      "Файл ▸ Запустить в терминале (Ctrl+F5) запускает текущий скрипт и оставляет оболочку открытой в командной строке после этого, чтобы сбой можно было сразу изучить.",
+
+    "help.runTitle": "Запуск",
+    "help.runIntro": "F5 показывает текущий файл таким, каким он будет выглядеть или вести себя на самом деле, а не как исходный текст.",
+    "help.runPoint1":
+      "HTML: открывается в браузере по умолчанию. Повторный запуск того же файла обновляет эту вкладку вместо открытия второй, пока она остаётся открытой.",
+    "help.runPoint2": "Markdown: сначала преобразуется в оформленный HTML-документ, затем просматривается таким же образом.",
+    "help.runPoint3":
+      "Скрипты PowerShell, Batch и Shell: выполняются в собственном окне консоли, которое остаётся открытым после завершения скрипта.",
+
+    "help.wordWrapIntro":
+      "По умолчанию выключено. Перенос удерживает длинные строки на экране без горизонтальной прокрутки, но нарушает построчное соответствие между полями и реальными номерами строк.",
+    "help.wordWrapPoint1":
+      "Переключите его в Вид ▸ Перенос по словам или Alt+Z. Применяется к документу, который в данный момент на экране.",
+
+    "help.spellCheckIntro": "По умолчанию выключена — большинство идентификаторов в исходном коде по определению \"написаны с ошибками\".",
+    "help.spellCheckPoint1":
+      "Работает как линтер поверх реального текста, а не встроенная проверка веб-просмотра, поэтому орфографические ошибки учитываются в общем числе проблем и сопровождаются предлагаемыми исправлениями.",
+    "help.spellCheckPoint2": "Переключите её в Вид ▸ Проверка орфографии.",
+
+    "help.languageTitle": "Язык интерфейса",
+    "help.languageIntro":
+      "Язык собственных меню и диалогов JustCode — независимый от содержимого или языка программирования любого файла.",
+    "help.languagePoint1":
+      "Вид ▸ Язык… перечисляет каждый перевод под его собственным названием, а не английским, поскольку \"German\" не поможет тому, кто читает только по-русски.",
+    "help.languagePoint2": "Английский встроен; любой другой язык загружается при первом выборе.",
+
+    "sc.toolbar": "Переключить панель инструментов",
+    "sc.statusBar": "Переключить строку состояния",
+    "sc.spellCheck": "Переключить проверку орфографии",
+    "sc.bionicReading": "Переключить бионическое чтение",
+    "sc.cycleTheme": "Переключать темы (Тёмная ▸ Светлая ▸ Аутизм)",
   },
   sr: {
     "menu.file": "Датотека",
@@ -5743,6 +9272,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Мали и брзи уређивач кода.",
     "about.builtWith": "Направљено помоћу Tauri 2 и CodeMirror 6.",
     "about.version": "Верзија {version}",
+    "sc.g.menus": "Мени",
     "sc.g.file": "Датотека",
     "sc.g.editing": "Уређивање",
     "sc.g.bookmarks": "Обележивачи",
@@ -5768,6 +9298,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+клик на URL",
     "sc.k.clickPath": "Клик на путању у статусној траци",
     "sc.k.clickLanguage": "Клик на језик у статусној траци",
+    "sc.openFileMenu": "Отвори мени Датотека",
+    "sc.openEditMenu": "Отвори мени Уређивање",
+    "sc.openViewMenu": "Отвори мени Приказ",
+    "sc.openHelpMenu": "Отвори мени Помоћ",
     "sc.newFile": "Нова датотека",
     "sc.openFile": "Отвори датотеку",
     "sc.save": "Сачувај",
@@ -5841,6 +9375,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Отвори везу испод курсора",
     "sc.copyFullPath": "Копирај пуну путању",
     "sc.changeMode": "Промени језички режим",
+
+    "view.autismTheme": "Тема за аутизам",
+    "view.autismThemeHint": "Пригушене боје ниског контраста за сензорну осетљивост",
+    "view.bionicReading": "Бионичко читање",
+    "help.autismTheme": "Тема за аутизам",
+    "help.bionicReading": "Бионичко читање",
+    "toolbar.switchToTheme": "Пређи на {theme}",
+
+    "autismHelp.intro":
+      "Пригушена тема ниске побуде за сензорно осетљиве кориснике — аутизам, ADHD, мигрену и друга стања визуелног стреса. Одржава уређивач мирним за гледање током дужих периода, без жртвовања читљивости.",
+    "autismHelp.point1":
+      "Без чисто црне или беле боје. Топла тамносива позадина и мек крем текст избегавају и одсјај екрана и ефекат ореола који изазива оштар црно-бели контраст.",
+    "autismHelp.point2":
+      "Нигде нема црвене ни жуте — две нијансе које се најчешће наводе као превише стимулативне. Грешке користе пригушену теракоту, а истакнути резултати претраге пригушено злато уместо уобичајене аларматно црвене и јарко жуте.",
+    "autismHelp.point3":
+      "Свака боја има знатно смањену засићеност у односу на тамну и светлу тему, тако да ништа не \"вибрира\" поред суседних елемената, иако контраст према позадини остаје исти.",
+    "autismHelp.point4":
+      "Смирујуће нијансе доминирају свуда: прашњаво плава и рузмарин зелена за већину истицања синтаксе, пригушена лаванда и беж за остало.",
+    "autismHelp.footer":
+      "Пређите на њу у било ком тренутку преко Приказ ▸ Тема за аутизам, дугметом испод, или притиском Ctrl+Shift+T за кружење кроз Тамна ▸ Светла ▸ Аутизам.",
+    "autismHelp.switch": "Пређи на тему за аутизам",
+    "autismHelp.active": "Ово је ваша тренутна тема.",
+
+    "bionicHelp.intro":
+      "Типографски трик који подебљава почетни део сваке речи, тако да око има мање и краће тачке фиксације по реду. Рекламира се као помоћ при читању за ADHD, дислексију, а понекад и аутизам.",
+    "bionicHelp.point1":
+      "Подебљава се отприлике првих 40% сваке речи, а остатак остаје нормалне дебљине — идеја је да мозак препознаје реч по почетку и допуњава крај из контекста.",
+    "bionicHelp.point2":
+      "Докази су противречни. Неколико контролисаних студија није пронашло мерљиво побољшање брзине читања или разумевања у односу на обичан текст, а неки читаоци сматрају да више омета, а не мање. Испробајте уместо да претпостављате да ће помоћи.",
+    "bionicHelp.point3":
+      "Примењује се на било који документ на екрану, исто као прелом текста — није ограничено на прозу, па укључивање током уређивања кода подебљава и почетак идентификатора и кључних речи.",
+    "bionicHelp.footer":
+      "Укључите је у било ком тренутку преко Приказ ▸ Бионичко читање, дугметом испод, или притиском Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Укључи бионичко читање",
+    "bionicHelp.turnOff": "Искључи бионичко читање",
+
+    "help.center": "Помоћ и упутства",
+    "modal.helpCenterTitle": "Помоћ и упутства",
+    "help.searchPlaceholder": "Претражи помоћ…",
+    "help.noResults": "Нема одговарајућих тема",
+
+    "help.overviewTitle": "Преглед",
+    "help.overviewIntro":
+      "JustCode је мали, брзи уређивач за HTML, CSS, JavaScript и општи текст или код — направљен да се брзо отвара и не смета, а не да замени потпуно окружење за развој.",
+    "help.overviewPoint1":
+      "Датотеке се отварају као картице у једном прозору; не постоји пројекат или радни простор који треба прво поставити.",
+    "help.overviewPoint2": "Притисните F1 у било ком тренутку за потпуни преглед пречица на тастатури.",
+
+    "help.filesTitle": "Датотеке",
+    "help.filesIntro": "Датотеке се отварају као картице; JustCode нема концепт пројекта или радног простора.",
+    "help.filesPoint1":
+      "Нова датотека (Ctrl+N) нуди почетне шаблоне за многе језике, или празан документ; Отвори… (Ctrl+O) прихвата више датотека одједном.",
+    "help.filesPoint2":
+      "Сачувај (Ctrl+S) и Сачувај као (Ctrl+Shift+S) пишу директно на диск; Сачувај све (Ctrl+Alt+S) обухвата све измењене картице одједном.",
+    "help.filesPoint3": "Датотека ▸ Недавне датотеке памти последњих 15 датотека између поновних покретања.",
+    "help.filesPoint4":
+      "Датотека ▸ Повезивања датотека… региструје JustCode код Windows-а тако да се појављује као опција \"Отвори помоћу\" — или подразумевана — за типове датотека које разуме.",
+
+    "help.editingTitle": "Уређивање",
+    "help.editingIntro": "Стандардно уређивање, плус неколико додатака уз исецање, копирање, лепљење, опозив и понављање.",
+    "help.editingPoint1":
+      "Ctrl+/ укључује/искључује коментар користећи синтаксу тренутног језика — коментаре реда за један ред, блок-коментаре за избор.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L мењају величину слова избора; Ctrl+Alt+G уноси нови GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ помера тренутни ред; Alt+Shift+↑ / Alt+Shift+↓ га дуплира горе или доле.",
+    "help.editingPoint4": "Ctrl+клик додаје још један курсор; Alt+превлачење прави правоугаони (колонски) избор.",
+
+    "help.searchTitle": "Претрага",
+    "help.searchIntro": "Проналажење и замена унутар тренутне датотеке, или директан скок на дефиницију.",
+    "help.searchPoint1":
+      "Ctrl+F отвара Пронађи; Ctrl+H отвара Пронађи и замени. F3 / Shift+F3 понављају последњу претрагу унапред или уназад.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G отвара Иди на симбол — листу функција, класа и других декларација у тренутној датотеци коју је могуће филтрирати.",
+
+    "help.bookmarksTitle": "Обележивачи",
+    "help.bookmarksIntro":
+      "Три нумерисана места за обележиваче по документу, за кретање по великој датотеци без померања ради проналажења места.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 поставља или брише обележивач на тренутном реду; Ctrl+1 / 2 / 3 скаче директно на њега.",
+
+    "help.splitTabsTitle": "Подељени приказ и картице",
+    "help.splitTabsIntro": "Картице се могу распоредити у до четири окна.",
+    "help.splitTabsPoint1":
+      "Ctrl+K, а затим стрелица дели активно окно у том смеру; превлачење картице до ивице екрана ради исто.",
+    "help.splitTabsPoint2":
+      "Превлачење картице на траку картица другог окна премешта је тамо; превлачење последње картице ван окна поништава поделу.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab круже кроз картице; клик средњим тастером затвара картицу.",
+
+    "help.foldingTitle": "Сажимање кода",
+    "help.foldingIntro": "Сваки блок се може сажети како не би сметао.",
+    "help.foldingPoint1":
+      "Кликните на стрелицу у жлебу, или притисните Ctrl+Shift+[ / ] да сажмете или разгранате блок на курсору.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] сажима или разгранава све у датотеци одједном.",
+
+    "help.terminalTitle": "Терминал",
+    "help.terminalIntro": "Уграђени панел терминала, а не засебан прозор.",
+    "help.terminalPoint1":
+      "Ctrl+` га приказује или скрива; Ctrl+Shift+` отвара нови поред сваког већ покренутог.",
+    "help.terminalPoint2": "Нови терминал се покреће у фасцикли датотеке која се тренутно уређује.",
+    "help.terminalPoint3":
+      "Датотека ▸ Покрени у терминалу (Ctrl+F5) покреће тренутну скрипту и потом оставља љуску отворену на линији за унос, тако да се неуспех може одмах истражити.",
+
+    "help.runTitle": "Покрени",
+    "help.runIntro": "F5 приказује тренутну датотеку онако како ће заиста изгледати или се понашати, уместо као изворни текст.",
+    "help.runPoint1":
+      "HTML: отвара се у подразумеваном прегледачу. Поновно покретање исте датотеке освежава ту картицу уместо отварања друге, док год је она отворена.",
+    "help.runPoint2": "Markdown: прво се приказује као обликован HTML документ, а затим прегледа на исти начин.",
+    "help.runPoint3":
+      "PowerShell, Batch и Shell скрипте: покрећу се у сопственом прозору конзоле, који остаје отворен и након завршетка скрипте.",
+
+    "help.wordWrapIntro":
+      "Подразумевано искључено. Прелом задржава дуге редове на екрану без хоризонталног померања, али нарушава подударање ред по ред између жлеба и стварних бројева редова.",
+    "help.wordWrapPoint1":
+      "Укључите/искључите преко Приказ ▸ Прелом редова или Alt+Z. Примењује се на документ који је тренутно на екрану.",
+
+    "help.spellCheckIntro": "Подразумевано искључена — већина идентификатора у изворном коду је по дефиницији \"погрешно написана\".",
+    "help.spellCheckPoint1":
+      "Ради као линтер над стварним текстом, а не уграђена провера веб приказа, па се правописне грешке рачунају у укупан број проблема и долазе са предложеним исправкама.",
+    "help.spellCheckPoint2": "Укључите/искључите преко Приказ ▸ Провера правописа.",
+
+    "help.languageTitle": "Језик интерфејса",
+    "help.languageIntro":
+      "Језик сопствених менија и дијалога JustCode-а — независан од садржаја или програмског језика било које датотеке.",
+    "help.languagePoint1":
+      "Приказ ▸ Језик… наводи сваки превод под његовим сопственим именом, а не енглеским именом, јер \"German\" не помаже некоме ко чита само српски.",
+    "help.languagePoint2": "Енглески је уграђен; сваки други језик се преузима приликом првог избора.",
+
+    "sc.toolbar": "Укључи/искључи траку са алаткама",
+    "sc.statusBar": "Укључи/искључи траку стања",
+    "sc.spellCheck": "Укључи/искључи проверу правописа",
+    "sc.bionicReading": "Укључи/искључи бионичко читање",
+    "sc.cycleTheme": "Кружи кроз теме (Тамна ▸ Светла ▸ Аутизам)",
   },
   sk: {
     "menu.file": "Súbor",
@@ -5959,6 +9626,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Malý a rýchly editor kódu.",
     "about.builtWith": "Postavené na Tauri 2 a CodeMirror 6.",
     "about.version": "Verzia {version}",
+    "sc.g.menus": "Ponuky",
     "sc.g.file": "Súbor",
     "sc.g.editing": "Úpravy",
     "sc.g.bookmarks": "Záložky",
@@ -5984,6 +9652,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+kliknutie na URL",
     "sc.k.clickPath": "Kliknite na cestu v stavovom riadku",
     "sc.k.clickLanguage": "Kliknite na jazyk v stavovom riadku",
+    "sc.openFileMenu": "Otvoriť ponuku Súbor",
+    "sc.openEditMenu": "Otvoriť ponuku Upraviť",
+    "sc.openViewMenu": "Otvoriť ponuku Zobraziť",
+    "sc.openHelpMenu": "Otvoriť ponuku Pomocník",
     "sc.newFile": "Nový súbor",
     "sc.openFile": "Otvoriť súbor",
     "sc.save": "Uložiť",
@@ -6057,6 +9729,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Otvoriť odkaz pod kurzorom",
     "sc.copyFullPath": "Kopírovať úplnú cestu",
     "sc.changeMode": "Zmeniť jazykový režim",
+
+    "view.autismTheme": "Motív pre autizmus",
+    "view.autismThemeHint": "Tlmené farby s nízkym kontrastom pre zmyslovú citlivosť",
+    "view.bionicReading": "Bionické čítanie",
+    "help.autismTheme": "Motív pre autizmus",
+    "help.bionicReading": "Bionické čítanie",
+    "toolbar.switchToTheme": "Prepnúť na {theme}",
+
+    "autismHelp.intro":
+      "Tlmený motív s nízkou mierou stimulácie pre zmyslovo citlivých používateľov — autizmus, ADHD, migrénu a iné stavy vizuálneho stresu. Udržiava editor pokojným na pohľad aj počas dlhšieho používania bez toho, aby obetoval čitateľnosť.",
+    "autismHelp.point1":
+      "Žiadna čistá čierna ani biela. Teplé tmavosivé pozadie a jemný krémový text sa vyhýbajú tak oslneniu obrazovky, ako aj efektu glórioly spôsobenému ostrým čiernobielym kontrastom.",
+    "autismHelp.point2":
+      "Nikde žiadna červená ani žltá — dva odtiene, ktoré sa najčastejšie uvádzajú ako preexcitujúce. Chyby používajú tlmenú terakotu a zvýraznenia hľadania tlmenú zlatú namiesto obvyklej poplašnej červenej a jasne žltej.",
+    "autismHelp.point3":
+      "Každá farba má sýtosť výrazne nižšiu ako v tmavom a svetlom motíve, takže nič \"nevibruje\" vedľa susedných prvkov, hoci kontrast voči pozadiu zostáva rovnaký.",
+    "autismHelp.point4":
+      "Upokojujúce odtiene dominujú všade: prašne modrá a šalviová zelená pre väčšinu zvýrazňovania syntaxe, tlmená levanduľová a béžová pre zvyšok.",
+    "autismHelp.footer":
+      "Prepnite naň kedykoľvek cez Zobraziť ▸ Motív pre autizmus, tlačidlom nižšie, alebo stlačením Ctrl+Shift+T na prepínanie medzi Tmavý ▸ Svetlý ▸ Autizmus.",
+    "autismHelp.switch": "Prepnúť na motív pre autizmus",
+    "autismHelp.active": "Toto je váš aktuálny motív.",
+
+    "bionicHelp.intro":
+      "Typografický trik, ktorý stučnie počiatočnú časť každého slova, aby oko potrebovalo menej a kratších fixačných bodov na riadok. Propaguje sa ako pomôcka pri čítaní pri ADHD, dyslexii a niekedy aj autizme.",
+    "bionicHelp.point1":
+      "Stučnie sa približne prvých 40 % každého slova, zvyšok zostáva normálnej hrúbky — myšlienkou je, že mozog rozpozná slovo podľa začiatku a koniec doplní z kontextu.",
+    "bionicHelp.point2":
+      "Dôkazy sú nejednoznačné. Niekoľko kontrolovaných štúdií nezistilo merateľné zlepšenie rýchlosti čítania ani porozumenia oproti bežnému textu a niektorí čitatelia to považujú za viac rušivé, nie menej. Vyskúšajte to sami, namiesto toho, aby ste predpokladali, že to pomôže.",
+    "bionicHelp.point3":
+      "Vzťahuje sa na akýkoľvek dokument na obrazovke, rovnako ako zalamovanie riadkov — nie je obmedzené na prózu, takže jeho zapnutie počas úpravy kódu stučnie aj začiatok identifikátorov a kľúčových slov.",
+    "bionicHelp.footer":
+      "Zapnite ho kedykoľvek cez Zobraziť ▸ Bionické čítanie, tlačidlom nižšie, alebo stlačením Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Zapnúť bionické čítanie",
+    "bionicHelp.turnOff": "Vypnúť bionické čítanie",
+
+    "help.center": "Pomocník a návody",
+    "modal.helpCenterTitle": "Pomocník a návody",
+    "help.searchPlaceholder": "Hľadať v pomocníkovi…",
+    "help.noResults": "Žiadne zodpovedajúce témy",
+
+    "help.overviewTitle": "Prehľad",
+    "help.overviewIntro":
+      "JustCode je malý, rýchly editor pre HTML, CSS, JavaScript a všeobecný text alebo kód — vytvorený tak, aby sa rýchlo otváral a neprekážal, nie aby nahradil úplné IDE.",
+    "help.overviewPoint1":
+      "Súbory sa otvárajú ako karty v jednom okne; neexistuje projekt ani pracovný priestor, ktorý by bolo treba najprv nastaviť.",
+    "help.overviewPoint2": "Kedykoľvek stlačte F1 pre úplný prehľad klávesových skratiek.",
+
+    "help.filesTitle": "Súbory",
+    "help.filesIntro": "Súbory sa otvárajú ako karty; JustCode nepozná koncept projektu ani pracovného priestoru.",
+    "help.filesPoint1":
+      "Nový súbor (Ctrl+N) ponúka počiatočné šablóny pre mnohé jazyky, alebo prázdny dokument; Otvoriť… (Ctrl+O) prijíma viacero súborov naraz.",
+    "help.filesPoint2":
+      "Uložiť (Ctrl+S) a Uložiť ako (Ctrl+Shift+S) zapisujú priamo na disk; Uložiť všetko (Ctrl+Alt+S) pokryje všetky zmenené karty naraz.",
+    "help.filesPoint3": "Súbor ▸ Nedávne súbory si pamätá posledných 15 súborov medzi reštartmi.",
+    "help.filesPoint4":
+      "Súbor ▸ Priradenia súborov… zaregistruje JustCode vo Windows, takže sa objaví ako voľba \"Otvoriť pomocou\" — alebo ako predvolená — pre typy súborov, ktorým rozumie.",
+
+    "help.editingTitle": "Úpravy",
+    "help.editingIntro": "Štandardné úpravy plus niekoľko funkcií navyše okrem vystrihnutia, kopírovania, vloženia, späť a znova.",
+    "help.editingPoint1":
+      "Ctrl+/ prepína komentár pomocou syntaxe aktuálneho jazyka — riadkové komentáre pre jeden riadok, blokové komentáre pre výber.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L menia veľkosť písmen výberu; Ctrl+Alt+G vloží nový GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ presunie aktuálny riadok; Alt+Shift+↑ / Alt+Shift+↓ ho zdvojí nahor alebo nadol.",
+    "help.editingPoint4": "Ctrl+klik pridá ďalší kurzor; Alt+ťahanie vytvorí obdĺžnikový (stĺpcový) výber.",
+
+    "help.searchTitle": "Hľadanie",
+    "help.searchIntro": "Hľadanie a nahrádzanie v rámci aktuálneho súboru, alebo priamy skok na definíciu.",
+    "help.searchPoint1":
+      "Ctrl+F otvorí Hľadať; Ctrl+H otvorí Hľadať a nahradiť. F3 / Shift+F3 opakujú posledné hľadanie vpred alebo vzad.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G otvorí Prejsť na symbol — filtrovateľný zoznam funkcií, tried a ďalších deklarácií v aktuálnom súbore.",
+
+    "help.bookmarksTitle": "Záložky",
+    "help.bookmarksIntro":
+      "Tri číslované sloty záložiek na dokument, na pohyb vo veľkom súbore bez posúvania kvôli nájdeniu svojho miesta.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 nastaví alebo zruší záložku na aktuálnom riadku; Ctrl+1 / 2 / 3 na ňu priamo skočí.",
+
+    "help.splitTabsTitle": "Rozdelené zobrazenie a karty",
+    "help.splitTabsIntro": "Karty možno usporiadať do maximálne štyroch panelov.",
+    "help.splitTabsPoint1":
+      "Ctrl+K a potom šípka rozdelí aktívny panel v tom smere; potiahnutie karty k okraju obrazovky urobí to isté.",
+    "help.splitTabsPoint2":
+      "Potiahnutie karty na lištu kariet iného panela ju tam presunie; potiahnutie poslednej karty von z panela zruší rozdelenie.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab prepínajú medzi kartami; kliknutie stredným tlačidlom kartu zavrie.",
+
+    "help.foldingTitle": "Skladanie kódu",
+    "help.foldingIntro": "Akýkoľvek blok možno zbaliť, aby neprekážal.",
+    "help.foldingPoint1":
+      "Kliknite na šípku v okraji, alebo stlačte Ctrl+Shift+[ / ] na zbalenie alebo rozbalenie bloku pri kurzore.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] zbalí alebo rozbalí naraz všetko v súbore.",
+
+    "help.terminalTitle": "Terminál",
+    "help.terminalIntro": "Integrovaný panel terminálu, nie samostatné okno.",
+    "help.terminalPoint1":
+      "Ctrl+` ho zobrazí alebo skryje; Ctrl+Shift+` otvorí nový vedľa akéhokoľvek už bežiaceho.",
+    "help.terminalPoint2": "Nový terminál sa spustí v priečinku práve upravovaného súboru.",
+    "help.terminalPoint3":
+      "Súbor ▸ Spustiť v termináli (Ctrl+F5) spustí aktuálny skript a následne necháva shell otvorený na príkazovom riadku, takže zlyhanie možno hneď preskúmať.",
+
+    "help.runTitle": "Spustiť",
+    "help.runIntro": "F5 zobrazí aktuálny súbor tak, ako bude v skutočnosti vyzerať alebo sa správať, namiesto zdrojového textu.",
+    "help.runPoint1":
+      "HTML: otvorí sa v predvolenom prehliadači. Opätovné spustenie toho istého súboru obnoví danú kartu namiesto otvorenia ďalšej, pokým zostáva otvorená.",
+    "help.runPoint2": "Markdown: najprv sa vykreslí ako štylizovaný HTML dokument a potom sa rovnako zobrazí náhľad.",
+    "help.runPoint3":
+      "Skripty PowerShell, Batch a Shell: bežia vo vlastnom okne konzoly, ktoré zostane otvorené aj po dokončení skriptu.",
+
+    "help.wordWrapIntro":
+      "Predvolene vypnuté. Zalamovanie udrží dlhé riadky na obrazovke bez vodorovného posúvania, ale naruší zhodu riadok po riadku medzi okrajom a skutočnými číslami riadkov.",
+    "help.wordWrapPoint1":
+      "Prepnite cez Zobraziť ▸ Zalamovanie riadkov alebo Alt+Z. Vzťahuje sa na dokument, ktorý je aktuálne na obrazovke.",
+
+    "help.spellCheckIntro": "Predvolene vypnutá — väčšina identifikátorov v zdrojovom kóde je podľa definície \"s preklepom\".",
+    "help.spellCheckPoint1":
+      "Beží ako linter nad skutočným textom namiesto vstavanej kontroly webového zobrazenia, takže preklepy sa počítajú do celkového počtu problémov a prichádzajú s navrhovanými opravami.",
+    "help.spellCheckPoint2": "Prepnite ju cez Zobraziť ▸ Kontrola pravopisu.",
+
+    "help.languageTitle": "Jazyk rozhrania",
+    "help.languageIntro":
+      "Jazyk vlastných ponúk a dialógov JustCode — nezávislý od obsahu alebo programovacieho jazyka akéhokoľvek súboru.",
+    "help.languagePoint1":
+      "Zobraziť ▸ Jazyk… uvádza každý preklad pod jeho vlastným názvom, nie anglickým, pretože \"German\" nepomôže niekomu, kto číta iba po slovensky.",
+    "help.languagePoint2": "Angličtina je vstavaná; každý iný jazyk sa stiahne pri prvom výbere.",
+
+    "sc.toolbar": "Prepnúť panel s nástrojmi",
+    "sc.statusBar": "Prepnúť stavový riadok",
+    "sc.spellCheck": "Prepnúť kontrolu pravopisu",
+    "sc.bionicReading": "Prepnúť bionické čítanie",
+    "sc.cycleTheme": "Prepínať motívy (Tmavý ▸ Svetlý ▸ Autizmus)",
   },
   es: {
     "menu.file": "Archivo",
@@ -6175,6 +9980,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Un editor de código pequeño y rápido.",
     "about.builtWith": "Creado con Tauri 2 y CodeMirror 6.",
     "about.version": "Versión {version}",
+    "sc.g.menus": "Menús",
     "sc.g.file": "Archivo",
     "sc.g.editing": "Edición",
     "sc.g.bookmarks": "Marcadores",
@@ -6200,6 +10006,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+clic en una URL",
     "sc.k.clickPath": "Hacer clic en la ruta de la barra de estado",
     "sc.k.clickLanguage": "Hacer clic en el lenguaje de la barra de estado",
+    "sc.openFileMenu": "Abrir el menú Archivo",
+    "sc.openEditMenu": "Abrir el menú Editar",
+    "sc.openViewMenu": "Abrir el menú Ver",
+    "sc.openHelpMenu": "Abrir el menú Ayuda",
     "sc.newFile": "Nuevo archivo",
     "sc.openFile": "Abrir archivo",
     "sc.save": "Guardar",
@@ -6273,6 +10083,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Abrir el enlace bajo el cursor",
     "sc.copyFullPath": "Copiar la ruta completa",
     "sc.changeMode": "Cambiar el modo de lenguaje",
+
+    "view.autismTheme": "Tema Autismo",
+    "view.autismThemeHint": "Colores tenues y de bajo contraste para la sensibilidad sensorial",
+    "view.bionicReading": "Lectura biónica",
+    "help.autismTheme": "Tema Autismo",
+    "help.bionicReading": "Lectura biónica",
+    "toolbar.switchToTheme": "Cambiar a {theme}",
+
+    "autismHelp.intro":
+      "Un tema de colores tenues y poco estimulantes para usuarios con sensibilidad sensorial — autismo, TDAH, migraña y otras condiciones de estrés visual. Mantiene el editor tranquilo de mirar durante largos periodos, sin sacrificar la legibilidad.",
+    "autismHelp.point1":
+      "Sin negro puro ni blanco puro. Un fondo gris carbón cálido y un texto crema suave evitan tanto el deslumbramiento de la pantalla como el efecto halo que causa un contraste blanco y negro marcado.",
+    "autismHelp.point2":
+      "Ningún rojo ni amarillo en ningún sitio — los dos tonos más citados como sobreestimulantes. Los errores usan un terracota tenue y los resaltados de búsqueda un dorado tenue, en lugar del habitual rojo de alarma y amarillo brillante.",
+    "autismHelp.point3":
+      "Cada color tiene una saturación muy inferior a la de los temas Oscuro y Claro, de modo que nada \"vibra\" junto a sus vecinos, aunque el contraste con el fondo se mantiene igual.",
+    "autismHelp.point4":
+      "Los tonos calmantes dominan en todas partes: azul apagado y verde salvia para la mayor parte del resaltado de sintaxis, lavanda tenue y beige para el resto.",
+    "autismHelp.footer":
+      "Cambia a él en cualquier momento desde Ver ▸ Tema Autismo, con el botón de abajo, o pulsando Ctrl+Shift+T para rotar entre Oscuro ▸ Claro ▸ Autismo.",
+    "autismHelp.switch": "Cambiar al tema Autismo",
+    "autismHelp.active": "Este es tu tema actual.",
+
+    "bionicHelp.intro":
+      "Un truco tipográfico que pone en negrita la parte inicial de cada palabra, para que el ojo necesite menos puntos de fijación, y más cortos, por línea. Se promociona como ayuda de lectura para TDAH, dislexia y a veces autismo.",
+    "bionicHelp.point1":
+      "Aproximadamente el primer 40% de cada palabra se pone en negrita, y el resto mantiene el peso normal — la idea es que el cerebro reconoce una palabra por su inicio y completa el final a partir del contexto.",
+    "bionicHelp.point2":
+      "La evidencia es mixta. Varios estudios controlados no encontraron una mejora medible en la velocidad de lectura ni en la comprensión frente al texto normal, y algunos lectores lo encuentran más distractor, no menos. Pruébalo en lugar de asumir que ayudará.",
+    "bionicHelp.point3":
+      "Se aplica a cualquier documento en pantalla, igual que el ajuste de línea — no se limita a la prosa, así que activarlo al editar código también pone en negrita el inicio de identificadores y palabras clave.",
+    "bionicHelp.footer":
+      "Actívala en cualquier momento desde Ver ▸ Lectura biónica, con el botón de abajo, o pulsando Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Activar lectura biónica",
+    "bionicHelp.turnOff": "Desactivar lectura biónica",
+
+    "help.center": "Ayuda y guías",
+    "modal.helpCenterTitle": "Ayuda y guías",
+    "help.searchPlaceholder": "Buscar en la ayuda…",
+    "help.noResults": "No hay temas coincidentes",
+
+    "help.overviewTitle": "Resumen",
+    "help.overviewIntro":
+      "JustCode es un editor pequeño y rápido para HTML, CSS, JavaScript y texto o código en general — creado para abrirse rápido y no estorbar, no para sustituir un IDE completo.",
+    "help.overviewPoint1":
+      "Los archivos se abren como pestañas en una sola ventana; no hay proyecto ni espacio de trabajo que configurar antes.",
+    "help.overviewPoint2": "Pulsa F1 en cualquier momento para ver la referencia completa de atajos de teclado.",
+
+    "help.filesTitle": "Archivos",
+    "help.filesIntro": "Los archivos se abren como pestañas; JustCode no tiene concepto de proyecto ni espacio de trabajo.",
+    "help.filesPoint1":
+      "Nuevo archivo (Ctrl+N) ofrece plantillas iniciales para muchos lenguajes, o un documento en blanco; Abrir… (Ctrl+O) acepta varios archivos a la vez.",
+    "help.filesPoint2":
+      "Guardar (Ctrl+S) y Guardar como (Ctrl+Shift+S) escriben directamente en el disco; Guardar todo (Ctrl+Alt+S) cubre todas las pestañas modificadas de una vez.",
+    "help.filesPoint3": "Archivo ▸ Archivos recientes recuerda los últimos 15 archivos entre reinicios.",
+    "help.filesPoint4":
+      "Archivo ▸ Asociaciones de archivo… registra JustCode ante Windows para que aparezca como opción \"Abrir con\" — o predeterminada — para los tipos de archivo que entiende.",
+
+    "help.editingTitle": "Edición",
+    "help.editingIntro": "Edición estándar, además de algunas funciones extra más allá de cortar, copiar, pegar, deshacer y rehacer.",
+    "help.editingPoint1":
+      "Ctrl+/ alterna un comentario usando la sintaxis del lenguaje actual — comentarios de línea para una sola línea, comentarios de bloque para una selección.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L cambian las mayúsculas/minúsculas de la selección; Ctrl+Alt+G inserta un nuevo GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ mueve la línea actual; Alt+Shift+↑ / Alt+Shift+↓ la duplica hacia arriba o hacia abajo.",
+    "help.editingPoint4": "Ctrl+clic añade otro cursor; Alt+arrastrar crea una selección rectangular (en columna).",
+
+    "help.searchTitle": "Búsqueda",
+    "help.searchIntro": "Buscar y reemplazar dentro del archivo actual, o saltar directamente a una definición.",
+    "help.searchPoint1":
+      "Ctrl+F abre Buscar; Ctrl+H abre Buscar y reemplazar. F3 / Shift+F3 repiten la última búsqueda hacia adelante o hacia atrás.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G abre Ir a símbolo — una lista filtrable de funciones, clases y otras declaraciones del archivo actual.",
+
+    "help.bookmarksTitle": "Marcadores",
+    "help.bookmarksIntro":
+      "Tres ranuras de marcadores numeradas por documento, para moverse por un archivo grande sin desplazarse para volver a encontrar tu sitio.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 establece o borra un marcador en la línea actual; Ctrl+1 / 2 / 3 salta directamente a él.",
+
+    "help.splitTabsTitle": "Vista dividida y pestañas",
+    "help.splitTabsIntro": "Las pestañas se pueden organizar en hasta cuatro paneles.",
+    "help.splitTabsPoint1":
+      "Ctrl+K seguido de una tecla de flecha divide el panel activo en esa dirección; arrastrar una pestaña a un borde de la pantalla hace lo mismo.",
+    "help.splitTabsPoint2":
+      "Arrastrar una pestaña a la barra de pestañas de otro panel la mueve allí; arrastrar la última pestaña fuera de un panel deshace la división.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab recorren las pestañas; el clic central en una pestaña la cierra.",
+
+    "help.foldingTitle": "Plegado de código",
+    "help.foldingIntro": "Cualquier bloque se puede plegar para que no estorbe.",
+    "help.foldingPoint1":
+      "Haz clic en la flecha del margen, o pulsa Ctrl+Shift+[ / ] para plegar o desplegar el bloque en el cursor.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] pliega o despliega todo el archivo de una vez.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Un panel de terminal integrado, no una ventana separada.",
+    "help.terminalPoint1":
+      "Ctrl+` lo muestra u oculta; Ctrl+Shift+` abre uno nuevo junto a cualquiera que ya esté en ejecución.",
+    "help.terminalPoint2": "Una terminal nueva se inicia en la carpeta del archivo que se está editando en ese momento.",
+    "help.terminalPoint3":
+      "Archivo ▸ Ejecutar en terminal (Ctrl+F5) ejecuta el script actual y deja el shell abierto en un símbolo del sistema después, para poder investigar un fallo en el acto.",
+
+    "help.runTitle": "Ejecutar",
+    "help.runIntro": "F5 muestra el archivo actual tal como realmente se verá o se comportará, en lugar de como texto fuente.",
+    "help.runPoint1":
+      "HTML: se abre en el navegador predeterminado. Volver a ejecutar el mismo archivo actualiza esa pestaña en lugar de abrir una segunda, mientras siga abierta.",
+    "help.runPoint2": "Markdown: primero se convierte en un documento HTML con estilo, y luego se previsualiza de la misma manera.",
+    "help.runPoint3":
+      "Scripts de PowerShell, Batch y Shell: se ejecutan en su propia ventana de consola, que permanece abierta al terminar el script.",
+
+    "help.wordWrapIntro":
+      "Desactivado de forma predeterminada. El ajuste de línea mantiene las líneas largas en pantalla sin desplazamiento horizontal, pero rompe la correspondencia línea a línea entre el margen y los números de línea reales.",
+    "help.wordWrapPoint1":
+      "Actívalo desde Ver ▸ Ajuste de línea o con Alt+Z. Se aplica al documento que esté actualmente en pantalla.",
+
+    "help.spellCheckIntro": "Desactivada de forma predeterminada — la mayoría de los identificadores en el código fuente están \"mal escritos\" por definición.",
+    "help.spellCheckPoint1":
+      "Funciona como un linter sobre el texto real en lugar del corrector integrado de la vista web, así que las faltas de ortografía se cuentan en el total de Problemas y vienen con correcciones sugeridas.",
+    "help.spellCheckPoint2": "Actívala desde Ver ▸ Corrección ortográfica.",
+
+    "help.languageTitle": "Idioma de la interfaz",
+    "help.languageIntro":
+      "El idioma de los propios menús y diálogos de JustCode — independiente del contenido o del lenguaje de programación de cualquier archivo.",
+    "help.languagePoint1":
+      "Ver ▸ Idioma… enumera cada traducción con su propio nombre en lugar de su nombre en inglés, ya que \"German\" no ayuda a quien solo lee español.",
+    "help.languagePoint2": "El inglés viene incorporado; cualquier otro idioma se descarga la primera vez que se selecciona.",
+
+    "sc.toolbar": "Alternar la barra de herramientas",
+    "sc.statusBar": "Alternar la barra de estado",
+    "sc.spellCheck": "Alternar la corrección ortográfica",
+    "sc.bionicReading": "Alternar lectura biónica",
+    "sc.cycleTheme": "Rotar temas (Oscuro ▸ Claro ▸ Autismo)",
   },
   sv: {
     "menu.file": "Arkiv",
@@ -6391,6 +10334,7 @@ export const TRANSLATIONS = {
     "about.tagline": "En liten, snabb kodredigerare.",
     "about.builtWith": "Byggd med Tauri 2 och CodeMirror 6.",
     "about.version": "Version {version}",
+    "sc.g.menus": "Menyer",
     "sc.g.file": "Arkiv",
     "sc.g.editing": "Redigering",
     "sc.g.bookmarks": "Bokmärken",
@@ -6416,6 +10360,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+klicka på en URL",
     "sc.k.clickPath": "Klicka på sökvägen i statusfältet",
     "sc.k.clickLanguage": "Klicka på språket i statusfältet",
+    "sc.openFileMenu": "Öppna menyn Arkiv",
+    "sc.openEditMenu": "Öppna menyn Redigera",
+    "sc.openViewMenu": "Öppna menyn Visa",
+    "sc.openHelpMenu": "Öppna menyn Hjälp",
     "sc.newFile": "Ny fil",
     "sc.openFile": "Öppna fil",
     "sc.save": "Spara",
@@ -6489,6 +10437,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Öppna länken vid markören",
     "sc.copyFullPath": "Kopiera fullständig sökväg",
     "sc.changeMode": "Ändra språkläge",
+
+    "view.autismTheme": "Autismtema",
+    "view.autismThemeHint": "Dämpade färger med låg kontrast för sensorisk känslighet",
+    "view.bionicReading": "Bionisk läsning",
+    "help.autismTheme": "Autismtema",
+    "help.bionicReading": "Bionisk läsning",
+    "toolbar.switchToTheme": "Byt till {theme}",
+
+    "autismHelp.intro":
+      "Ett dämpat tema med låg stimulans för sensoriskt känsliga användare — autism, ADHD, migrän och andra tillstånd av visuell stress. Det håller redigeraren lugn att titta på under långa stunder, utan att offra läsbarheten.",
+    "autismHelp.point1":
+      "Ingen ren svart eller vit. En varm, mörk kolgrå bakgrund och en mjuk krämfärgad text undviker både skärmbländning och den haloeffekt som skarp svartvit kontrast orsakar.",
+    "autismHelp.point2":
+      "Ingen röd eller gul någonstans — de två nyanser som oftast pekas ut som överstimulerande. Fel använder en dämpad terrakotta och sökmarkeringar en dämpad guld, i stället för det vanliga larmröda och klargula.",
+    "autismHelp.point3":
+      "Varje färg har en mättnad som ligger klart under den i det mörka och ljusa temat, så att ingenting \"vibrerar\" bredvid sina grannar, samtidigt som kontrasten mot bakgrunden förblir densamma.",
+    "autismHelp.point4":
+      "Lugnande nyanser dominerar överallt: dammigt blått och salviagrönt för det mesta av syntaxmarkeringen, dämpad lavendel och beige för resten.",
+    "autismHelp.footer":
+      "Byt till det när som helst från Visa ▸ Autismtema, med knappen nedan, eller genom att trycka Ctrl+Shift+T för att rotera mellan Mörkt ▸ Ljust ▸ Autism.",
+    "autismHelp.switch": "Byt till autismtema",
+    "autismHelp.active": "Det här är ditt nuvarande tema.",
+
+    "bionicHelp.intro":
+      "Ett typografiskt knep som gör den inledande delen av varje ord fetstilt, så att ögat behöver färre och kortare fixeringspunkter per rad. Det marknadsförs som ett läshjälpmedel vid ADHD, dyslexi och ibland autism.",
+    "bionicHelp.point1":
+      "Ungefär de första 40 % av varje ord görs fetstilta, resten behåller normal vikt — tanken är att hjärnan känner igen ett ord från dess början och fyller i slutet utifrån sammanhanget.",
+    "bionicHelp.point2":
+      "Bevisen är blandade. Flera kontrollerade studier fann ingen mätbar förbättring i läshastighet eller förståelse jämfört med vanlig text, och en del läsare tycker att det är mer distraherande, inte mindre. Prova det själv i stället för att anta att det hjälper.",
+    "bionicHelp.point3":
+      "Gäller för vilket dokument som helst på skärmen, precis som radbrytning — det är inte begränsat till löpande text, så att slå på det under kodredigering gör även början av identifierare och nyckelord fetstilta.",
+    "bionicHelp.footer":
+      "Slå på det när som helst från Visa ▸ Bionisk läsning, med knappen nedan, eller genom att trycka Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Slå på bionisk läsning",
+    "bionicHelp.turnOff": "Slå av bionisk läsning",
+
+    "help.center": "Hjälp och guider",
+    "modal.helpCenterTitle": "Hjälp och guider",
+    "help.searchPlaceholder": "Sök i hjälpen…",
+    "help.noResults": "Inga matchande ämnen",
+
+    "help.overviewTitle": "Översikt",
+    "help.overviewIntro":
+      "JustCode är en liten, snabb editor för HTML, CSS, JavaScript och allmän text eller kod — byggd för att öppnas snabbt och inte vara i vägen, inte för att ersätta en fullständig IDE.",
+    "help.overviewPoint1":
+      "Filer öppnas som flikar i ett fönster; det finns inget projekt eller arbetsyta som måste ställas in först.",
+    "help.overviewPoint2": "Tryck på F1 när som helst för den fullständiga referensen över tangentbordsgenvägar.",
+
+    "help.filesTitle": "Filer",
+    "help.filesIntro": "Filer öppnas som flikar; JustCode har inget projekt- eller arbetsytekoncept.",
+    "help.filesPoint1":
+      "Ny fil (Ctrl+N) erbjuder startmallar för många språk, eller ett tomt dokument; Öppna… (Ctrl+O) tar emot flera filer samtidigt.",
+    "help.filesPoint2":
+      "Spara (Ctrl+S) och Spara som (Ctrl+Shift+S) skriver direkt till disk; Spara alla (Ctrl+Alt+S) täcker alla ändrade flikar på en gång.",
+    "help.filesPoint3": "Arkiv ▸ Senaste filer kommer ihåg de senaste 15 filerna mellan omstarter.",
+    "help.filesPoint4":
+      "Arkiv ▸ Filassociationer… registrerar JustCode hos Windows så att det visas som ett \"Öppna med\"-alternativ — eller standardvalet — för de filtyper det förstår.",
+
+    "help.editingTitle": "Redigering",
+    "help.editingIntro": "Standardredigering plus några extra funktioner utöver klipp ut, kopiera, klistra in, ångra och gör om.",
+    "help.editingPoint1":
+      "Ctrl+/ växlar en kommentar med den aktuella språkets syntax — radkommentarer för en enda rad, blockkommentarer över en markering.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L ändrar skiftläge på markeringen; Ctrl+Alt+G infogar ett nytt GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ flyttar den aktuella raden; Alt+Shift+↑ / Alt+Shift+↓ duplicerar den uppåt eller nedåt.",
+    "help.editingPoint4": "Ctrl+klick lägger till ännu en markör; Alt+dra skapar en rektangulär (kolumn-) markering.",
+
+    "help.searchTitle": "Sökning",
+    "help.searchIntro": "Sök och ersätt i den aktuella filen, eller hoppa direkt till en definition.",
+    "help.searchPoint1":
+      "Ctrl+F öppnar Sök; Ctrl+H öppnar Sök och ersätt. F3 / Shift+F3 upprepar den senaste sökningen framåt eller bakåt.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G öppnar Gå till symbol — en filtrerbar lista över funktioner, klasser och andra deklarationer i den aktuella filen.",
+
+    "help.bookmarksTitle": "Bokmärken",
+    "help.bookmarksIntro":
+      "Tre numrerade bokmärkesplatser per dokument, för att förflytta sig i en stor fil utan att behöva bläddra för att hitta sin plats.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 sätter eller rensar ett bokmärke på den aktuella raden; Ctrl+1 / 2 / 3 hoppar direkt till det.",
+
+    "help.splitTabsTitle": "Delad vy och flikar",
+    "help.splitTabsIntro": "Flikar kan ordnas i upp till fyra rutor.",
+    "help.splitTabsPoint1":
+      "Ctrl+K följt av en piltangent delar den aktiva rutan i den riktningen; att dra en flik till en skärmkant gör samma sak.",
+    "help.splitTabsPoint2":
+      "Att dra en flik till en annan rutas flikrad flyttar den dit; att dra ut den sista fliken ur en ruta upphäver delningen.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab bläddrar mellan flikar; mittklick på en flik stänger den.",
+
+    "help.foldingTitle": "Kodvikning",
+    "help.foldingIntro": "Vilket block som helst kan fällas ihop för att inte vara i vägen.",
+    "help.foldingPoint1":
+      "Klicka på pilen i marginalen, eller tryck Ctrl+Shift+[ / ] för att fälla ihop eller fälla ut blocket vid markören.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] fäller ihop eller ut allt i filen på en gång.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "En integrerad terminalpanel, inget separat fönster.",
+    "help.terminalPoint1":
+      "Ctrl+` visar eller döljer den; Ctrl+Shift+` öppnar en ny bredvid alla redan igångvarande.",
+    "help.terminalPoint2": "En ny terminal startar i mappen för filen som redigeras för tillfället.",
+    "help.terminalPoint3":
+      "Arkiv ▸ Kör i terminal (Ctrl+F5) kör det aktuella skriptet och lämnar sedan skalet öppet vid en prompt, så att ett fel kan undersökas direkt på plats.",
+
+    "help.runTitle": "Kör",
+    "help.runIntro": "F5 visar den aktuella filen som den faktiskt kommer att se ut eller bete sig, i stället för som källtext.",
+    "help.runPoint1":
+      "HTML: öppnas i standardwebbläsaren. Att köra samma fil igen uppdaterar den fliken i stället för att öppna en till, så länge den fortfarande är öppen.",
+    "help.runPoint2": "Markdown: renderas först till ett formaterat HTML-dokument och förhandsgranskas sedan på samma sätt.",
+    "help.runPoint3":
+      "PowerShell-, Batch- och Shell-skript: körs i sitt eget konsolfönster, som förblir öppet efter att skriptet är klart.",
+
+    "help.wordWrapIntro":
+      "Avstängd som standard. Radbrytning håller kvar långa rader på skärmen utan horisontell scrollning, men bryter en-till-en-motsvarigheten mellan marginalen och de faktiska radnumren.",
+    "help.wordWrapPoint1":
+      "Slå på/av den från Visa ▸ Radbrytning eller Alt+Z. Den gäller för det dokument som för närvarande visas på skärmen.",
+
+    "help.spellCheckIntro": "Avstängd som standard — de flesta identifierare i källkod är per definition \"felstavade\".",
+    "help.spellCheckPoint1":
+      "Körs som en linter över den faktiska texten i stället för webbvyns inbyggda kontroll, så stavfel räknas in i det totala antalet problem och kommer med föreslagna rättelser.",
+    "help.spellCheckPoint2": "Slå på/av den från Visa ▸ Stavningskontroll.",
+
+    "help.languageTitle": "Gränssnittsspråk",
+    "help.languageIntro":
+      "Språket för JustCodes egna menyer och dialogrutor — oberoende av innehållet eller programmeringsspråket i en fil.",
+    "help.languagePoint1":
+      "Visa ▸ Språk… listar varje översättning under sitt eget namn i stället för det engelska namnet, eftersom \"German\" inte hjälper någon som bara läser svenska.",
+    "help.languagePoint2": "Engelska är inbyggt; alla andra språk laddas ner första gången de väljs.",
+
+    "sc.toolbar": "Slå på/av verktygsfältet",
+    "sc.statusBar": "Slå på/av statusfältet",
+    "sc.spellCheck": "Slå på/av stavningskontroll",
+    "sc.bionicReading": "Slå på/av bionisk läsning",
+    "sc.cycleTheme": "Rotera teman (Mörkt ▸ Ljust ▸ Autism)",
   },
   th: {
     "menu.file": "ไฟล์",
@@ -6607,6 +10688,7 @@ export const TRANSLATIONS = {
     "about.tagline": "โปรแกรมแก้ไขโค้ดที่เล็กและเร็ว",
     "about.builtWith": "สร้างด้วย Tauri 2 และ CodeMirror 6",
     "about.version": "เวอร์ชัน {version}",
+    "sc.g.menus": "เมนู",
     "sc.g.file": "ไฟล์",
     "sc.g.editing": "การแก้ไข",
     "sc.g.bookmarks": "บุ๊กมาร์ก",
@@ -6632,6 +10714,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+คลิกที่ URL",
     "sc.k.clickPath": "คลิกที่พาธในแถบสถานะ",
     "sc.k.clickLanguage": "คลิกที่ภาษาในแถบสถานะ",
+    "sc.openFileMenu": "เปิดเมนูไฟล์",
+    "sc.openEditMenu": "เปิดเมนูแก้ไข",
+    "sc.openViewMenu": "เปิดเมนูมุมมอง",
+    "sc.openHelpMenu": "เปิดเมนูช่วยเหลือ",
     "sc.newFile": "ไฟล์ใหม่",
     "sc.openFile": "เปิดไฟล์",
     "sc.save": "บันทึก",
@@ -6705,6 +10791,136 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "เปิดลิงก์ใต้เคอร์เซอร์",
     "sc.copyFullPath": "คัดลอกพาธแบบเต็ม",
     "sc.changeMode": "เปลี่ยนโหมดภาษา",
+
+    "view.autismTheme": "ธีมออทิสติก",
+    "view.autismThemeHint": "สีนุ่มนวล คอนทราสต์ต่ำ สำหรับความไวต่อการรับความรู้สึก",
+    "view.bionicReading": "การอ่านแบบไบโอนิก",
+    "help.autismTheme": "ธีมออทิสติก",
+    "help.bionicReading": "การอ่านแบบไบโอนิก",
+    "toolbar.switchToTheme": "สลับไปที่ {theme}",
+
+    "autismHelp.intro":
+      "ธีมสีนุ่มนวลที่กระตุ้นน้อย สำหรับผู้ใช้ที่ไวต่อการรับความรู้สึก — ออทิสติก สมาธิสั้น ไมเกรน และภาวะความเครียดทางสายตาอื่น ๆ ช่วยให้ตัวแก้ไขดูสบายตาได้นาน โดยไม่เสียความสามารถในการอ่าน",
+    "autismHelp.point1":
+      "ไม่มีสีดำล้วนหรือขาวล้วน พื้นหลังสีเทาถ่านเข้มโทนอุ่นและตัวอักษรสีครีมนุ่ม ๆ ช่วยหลีกเลี่ยงทั้งแสงจ้าจากหน้าจอและเอฟเฟกต์เรืองรอบที่เกิดจากคอนทราสต์ขาวดำจัด ๆ",
+    "autismHelp.point2":
+      "ไม่มีสีแดงหรือสีเหลืองที่ไหนเลย — สองโทนสีที่ถูกระบุบ่อยที่สุดว่ากระตุ้นมากเกินไป ข้อผิดพลาดใช้สีดินเผานุ่ม ๆ และการเน้นผลค้นหาใช้สีทองนุ่ม ๆ แทนสีแดงเตือนและสีเหลืองสว่างจ้าตามปกติ",
+    "autismHelp.point3":
+      "ทุกสีมีความอิ่มตัวต่ำกว่าธีมมืดและธีมสว่างมาก ทำให้ไม่มีสีใด \"สั่นไหว\" เมื่ออยู่ข้างสีข้างเคียง แม้คอนทราสต์กับพื้นหลังจะยังคงเท่าเดิม",
+    "autismHelp.point4":
+      "โทนสีที่ช่วยให้สงบครอบงำทุกที่: สีฟ้าฝุ่นและสีเขียวเสจสำหรับการเน้นไวยากรณ์ส่วนใหญ่ สีลาเวนเดอร์นุ่ม ๆ และสีแทนสำหรับส่วนที่เหลือ",
+    "autismHelp.footer":
+      "สลับไปใช้ธีมนี้ได้ทุกเมื่อจากมุมมอง ▸ ธีมออทิสติก ด้วยปุ่มด้านล่าง หรือกด Ctrl+Shift+T เพื่อวนสลับระหว่างมืด ▸ สว่าง ▸ ออทิสติก",
+    "autismHelp.switch": "สลับไปที่ธีมออทิสติก",
+    "autismHelp.active": "นี่คือธีมปัจจุบันของคุณ",
+
+    "bionicHelp.intro":
+      "เทคนิคการจัดพิมพ์ที่ทำให้ส่วนต้นของแต่ละคำเป็นตัวหนา เพื่อให้ดวงตาต้องการจุดโฟกัสน้อยลงและสั้นลงต่อบรรทัด ได้รับการโฆษณาว่าเป็นตัวช่วยการอ่านสำหรับสมาธิสั้น ดิสเล็กเซีย และบางครั้งออทิสติก",
+    "bionicHelp.point1":
+      "ประมาณ 40% แรกของแต่ละคำจะเป็นตัวหนา ส่วนที่เหลือยังคงเป็นน้ำหนักปกติ — แนวคิดคือสมองจดจำคำจากจุดเริ่มต้นและเติมส่วนท้ายจากบริบท",
+    "bionicHelp.point2":
+      "หลักฐานยังไม่ชัดเจน การศึกษาแบบควบคุมหลายชิ้นไม่พบการปรับปรุงที่วัดได้ในความเร็วการอ่านหรือความเข้าใจเมื่อเทียบกับข้อความปกติ และผู้อ่านบางคนรู้สึกว่าเบี่ยงเบนความสนใจมากขึ้น ไม่ใช่น้อยลง ลองใช้ดูเองแทนที่จะสันนิษฐานว่ามันจะช่วยได้",
+    "bionicHelp.point3":
+      "ใช้กับเอกสารใด ๆ ที่อยู่บนหน้าจอ เช่นเดียวกับการตัดคำ — ไม่จำกัดเฉพาะข้อความร้อยแก้ว ดังนั้นการเปิดใช้งานขณะแก้ไขโค้ดจะทำให้จุดเริ่มต้นของตัวระบุและคำสำคัญเป็นตัวหนาด้วย",
+    "bionicHelp.footer":
+      "เปิดใช้งานได้ทุกเมื่อจากมุมมอง ▸ การอ่านแบบไบโอนิก ด้วยปุ่มด้านล่าง หรือกด Ctrl+Shift+B",
+    "bionicHelp.turnOn": "เปิดการอ่านแบบไบโอนิก",
+    "bionicHelp.turnOff": "ปิดการอ่านแบบไบโอนิก",
+
+    "help.center": "วิธีใช้และคู่มือ",
+    "modal.helpCenterTitle": "วิธีใช้และคู่มือ",
+    "help.searchPlaceholder": "ค้นหาในวิธีใช้…",
+    "help.noResults": "ไม่พบหัวข้อที่ตรงกัน",
+
+    "help.overviewTitle": "ภาพรวม",
+    "help.overviewIntro":
+      "JustCode เป็นตัวแก้ไขขนาดเล็กและรวดเร็วสำหรับ HTML, CSS, JavaScript และข้อความหรือโค้ดทั่วไป — สร้างมาเพื่อเปิดเร็วและไม่กีดขวาง ไม่ใช่เพื่อแทนที่ IDE แบบเต็มรูปแบบ",
+    "help.overviewPoint1": "ไฟล์จะเปิดเป็นแท็บในหน้าต่างเดียว ไม่มีโปรเจกต์หรือพื้นที่ทำงานที่ต้องตั้งค่าก่อน",
+    "help.overviewPoint2": "กด F1 ได้ทุกเมื่อเพื่อดูรายการปุ่มลัดคีย์บอร์ดแบบเต็ม",
+
+    "help.filesTitle": "ไฟล์",
+    "help.filesIntro": "ไฟล์จะเปิดเป็นแท็บ JustCode ไม่มีแนวคิดเรื่องโปรเจกต์หรือพื้นที่ทำงาน",
+    "help.filesPoint1":
+      "ไฟล์ใหม่ (Ctrl+N) มีเทมเพลตเริ่มต้นสำหรับหลายภาษา หรือเอกสารเปล่า; เปิด… (Ctrl+O) รับได้หลายไฟล์พร้อมกัน",
+    "help.filesPoint2":
+      "บันทึก (Ctrl+S) และบันทึกเป็น (Ctrl+Shift+S) เขียนลงดิสก์โดยตรง; บันทึกทั้งหมด (Ctrl+Alt+S) ครอบคลุมทุกแท็บที่เปลี่ยนแปลงในครั้งเดียว",
+    "help.filesPoint3": "ไฟล์ ▸ ไฟล์ล่าสุด จดจำ 15 ไฟล์ล่าสุดข้ามการเริ่มระบบใหม่",
+    "help.filesPoint4":
+      "ไฟล์ ▸ การเชื่อมโยงไฟล์… ลงทะเบียน JustCode กับ Windows เพื่อให้ปรากฏเป็นตัวเลือก \"เปิดด้วย\" — หรือเป็นค่าเริ่มต้น — สำหรับประเภทไฟล์ที่รองรับ",
+
+    "help.editingTitle": "การแก้ไข",
+    "help.editingIntro": "การแก้ไขมาตรฐาน บวกกับฟีเจอร์เสริมเล็กน้อยนอกเหนือจากตัด คัดลอก วาง เลิกทำ และทำซ้ำ",
+    "help.editingPoint1":
+      "Ctrl+/ สลับความคิดเห็นโดยใช้ไวยากรณ์ของภาษาปัจจุบัน — ความคิดเห็นแบบบรรทัดเดียว หรือความคิดเห็นแบบบล็อกสำหรับส่วนที่เลือก",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L เปลี่ยนตัวพิมพ์ของส่วนที่เลือก; Ctrl+Alt+G แทรก GUID ใหม่",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ ย้ายบรรทัดปัจจุบัน; Alt+Shift+↑ / Alt+Shift+↓ ทำซ้ำขึ้นหรือลง",
+    "help.editingPoint4": "Ctrl+คลิก เพิ่มเคอร์เซอร์อีกตัว; Alt+ลาก สร้างการเลือกแบบสี่เหลี่ยม (คอลัมน์)",
+
+    "help.searchTitle": "การค้นหา",
+    "help.searchIntro": "ค้นหาและแทนที่ภายในไฟล์ปัจจุบัน หรือกระโดดไปยังคำนิยามโดยตรง",
+    "help.searchPoint1":
+      "Ctrl+F เปิดการค้นหา; Ctrl+H เปิดการค้นหาและแทนที่ F3 / Shift+F3 ทำซ้ำการค้นหาล่าสุดไปข้างหน้าหรือย้อนกลับ",
+    "help.searchPoint2":
+      "Ctrl+Shift+G เปิดไปยังสัญลักษณ์ — รายการที่กรองได้ของฟังก์ชัน คลาส และการประกาศอื่น ๆ ในไฟล์ปัจจุบัน",
+
+    "help.bookmarksTitle": "บุ๊กมาร์ก",
+    "help.bookmarksIntro": "มีช่องบุ๊กมาร์กแบบมีหมายเลขสามช่องต่อเอกสาร สำหรับกระโดดไปมาในไฟล์ขนาดใหญ่โดยไม่ต้องเลื่อนหาตำแหน่งของคุณ",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 ตั้งค่าหรือล้างบุ๊กมาร์กที่บรรทัดปัจจุบัน; Ctrl+1 / 2 / 3 กระโดดไปยังบุ๊กมาร์กนั้นโดยตรง",
+
+    "help.splitTabsTitle": "มุมมองแยกและแท็บ",
+    "help.splitTabsIntro": "แท็บสามารถจัดเรียงได้สูงสุดสี่บานหน้าต่าง",
+    "help.splitTabsPoint1":
+      "Ctrl+K ตามด้วยปุ่มลูกศรจะแยกบานหน้าต่างที่ใช้งานอยู่ไปในทิศทางนั้น การลากแท็บไปยังขอบหน้าจอก็ทำแบบเดียวกัน",
+    "help.splitTabsPoint2":
+      "การลากแท็บไปยังแถบแท็บของบานหน้าต่างอื่นจะย้ายไปที่นั่น การลากแท็บสุดท้ายออกจากบานหน้าต่างจะยกเลิกการแยก",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab วนแท็บ; คลิกปุ่มกลางบนแท็บเพื่อปิด",
+
+    "help.foldingTitle": "การพับโค้ด",
+    "help.foldingIntro": "บล็อกใด ๆ สามารถพับเก็บเพื่อไม่ให้กีดขวางได้",
+    "help.foldingPoint1":
+      "คลิกลูกศรที่ร่อง หรือกด Ctrl+Shift+[ / ] เพื่อพับหรือขยายบล็อกที่ตำแหน่งเคอร์เซอร์",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] พับหรือขยายทุกอย่างในไฟล์พร้อมกัน",
+
+    "help.terminalTitle": "เทอร์มินัล",
+    "help.terminalIntro": "แผงเทอร์มินัลแบบรวมในตัว ไม่ใช่หน้าต่างแยกต่างหาก",
+    "help.terminalPoint1":
+      "Ctrl+` แสดงหรือซ่อน; Ctrl+Shift+` เปิดเทอร์มินัลใหม่ควบคู่กับที่ทำงานอยู่แล้ว",
+    "help.terminalPoint2": "เทอร์มินัลใหม่จะเริ่มในโฟลเดอร์ของไฟล์ที่กำลังแก้ไขอยู่",
+    "help.terminalPoint3":
+      "ไฟล์ ▸ เรียกใช้ในเทอร์มินัล (Ctrl+F5) เรียกใช้สคริปต์ปัจจุบันและปล่อยให้เชลล์เปิดอยู่ที่พรอมต์หลังจากนั้น เพื่อให้ตรวจสอบข้อผิดพลาดได้ทันที",
+
+    "help.runTitle": "เรียกใช้",
+    "help.runIntro": "F5 แสดงไฟล์ปัจจุบันตามที่จะปรากฏหรือทำงานจริง แทนที่จะเป็นข้อความต้นฉบับ",
+    "help.runPoint1":
+      "HTML: เปิดในเบราว์เซอร์เริ่มต้น การเรียกใช้ไฟล์เดียวกันอีกครั้งจะรีเฟรชแท็บนั้นแทนการเปิดแท็บที่สอง ตราบใดที่ยังเปิดอยู่",
+    "help.runPoint2": "Markdown: จะถูกแสดงผลเป็นเอกสาร HTML ที่มีสไตล์ก่อน แล้วจึงแสดงตัวอย่างด้วยวิธีเดียวกัน",
+    "help.runPoint3":
+      "สคริปต์ PowerShell, Batch และ Shell: ทำงานในหน้าต่างคอนโซลของตัวเอง ซึ่งจะเปิดค้างไว้หลังสคริปต์เสร็จสิ้น",
+
+    "help.wordWrapIntro":
+      "ปิดโดยค่าเริ่มต้น การตัดคำช่วยให้บรรทัดยาวอยู่บนหน้าจอโดยไม่ต้องเลื่อนแนวนอน แต่จะทำลายความสอดคล้องแบบบรรทัดต่อบรรทัดระหว่างร่องกับหมายเลขบรรทัดจริง",
+    "help.wordWrapPoint1":
+      "สลับได้จากมุมมอง ▸ ตัดคำ หรือ Alt+Z ใช้กับเอกสารที่อยู่บนหน้าจอในขณะนั้น",
+
+    "help.spellCheckIntro": "ปิดโดยค่าเริ่มต้น — ตัวระบุส่วนใหญ่ในซอร์สโค้ดถือว่า \"สะกดผิด\" โดยธรรมชาติ",
+    "help.spellCheckPoint1":
+      "ทำงานเป็นตัวตรวจสอบ (linter) กับข้อความจริง แทนที่จะเป็นตัวตรวจสอบในตัวของเว็บวิว ดังนั้นข้อผิดพลาดการสะกดจะถูกนับรวมในจำนวนปัญหาทั้งหมดและมาพร้อมคำแนะนำการแก้ไข",
+    "help.spellCheckPoint2": "สลับได้จากมุมมอง ▸ ตรวจการสะกด",
+
+    "help.languageTitle": "ภาษาของอินเทอร์เฟซ",
+    "help.languageIntro": "ภาษาของเมนูและกล่องโต้ตอบของ JustCode เอง — ไม่ขึ้นกับเนื้อหาหรือภาษาโปรแกรมของไฟล์ใด ๆ",
+    "help.languagePoint1":
+      "มุมมอง ▸ ภาษา… แสดงรายการคำแปลแต่ละภาษาด้วยชื่อของตัวเอง ไม่ใช่ชื่อภาษาอังกฤษ เพราะ \"German\" ไม่ช่วยผู้ที่อ่านได้แต่ภาษาไทยเท่านั้น",
+    "help.languagePoint2": "ภาษาอังกฤษมีอยู่ในตัว; ภาษาอื่น ๆ จะดาวน์โหลดเมื่อเลือกใช้ครั้งแรก",
+
+    "sc.toolbar": "สลับแถบเครื่องมือ",
+    "sc.statusBar": "สลับแถบสถานะ",
+    "sc.spellCheck": "สลับการตรวจการสะกด",
+    "sc.bionicReading": "สลับการอ่านแบบไบโอนิก",
+    "sc.cycleTheme": "วนธีม (มืด ▸ สว่าง ▸ ออทิสติก)",
   },
   tr: {
     "menu.file": "Dosya",
@@ -6823,6 +11039,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Küçük ve hızlı bir kod düzenleyici.",
     "about.builtWith": "Tauri 2 ve CodeMirror 6 ile geliştirildi.",
     "about.version": "Sürüm {version}",
+    "sc.g.menus": "Menüler",
     "sc.g.file": "Dosya",
     "sc.g.editing": "Düzenleme",
     "sc.g.bookmarks": "Yer imleri",
@@ -6848,6 +11065,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+bir URL'ye tıklama",
     "sc.k.clickPath": "Durum çubuğundaki yola tıklayın",
     "sc.k.clickLanguage": "Durum çubuğundaki dile tıklayın",
+    "sc.openFileMenu": "Dosya menüsünü aç",
+    "sc.openEditMenu": "Düzen menüsünü aç",
+    "sc.openViewMenu": "Görünüm menüsünü aç",
+    "sc.openHelpMenu": "Yardım menüsünü aç",
     "sc.newFile": "Yeni dosya",
     "sc.openFile": "Dosya aç",
     "sc.save": "Kaydet",
@@ -6921,6 +11142,138 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "İmlecin altındaki bağlantıyı aç",
     "sc.copyFullPath": "Tam yolu kopyala",
     "sc.changeMode": "Dil modunu değiştir",
+
+    "view.autismTheme": "Otizm Teması",
+    "view.autismThemeHint": "Duyusal hassasiyet için soluk, düşük kontrastlı renkler",
+    "view.bionicReading": "Biyonik Okuma",
+    "help.autismTheme": "Otizm Teması",
+    "help.bionicReading": "Biyonik Okuma",
+    "toolbar.switchToTheme": "{theme} temasına geç",
+
+    "autismHelp.intro":
+      "Duyusal açıdan hassas kullanıcılar için — otizm, DEHB, migren ve diğer görsel stres durumları — soluk, az uyarıcı bir renk teması. Okunabilirlikten ödün vermeden düzenleyiciyi uzun süre bakmak için sakin tutar.",
+    "autismHelp.point1":
+      "Saf siyah veya saf beyaz yok. Sıcak, koyu kömür grisi arka plan ve yumuşak krem renkli metin, hem ekran parlamasından hem de keskin siyah-beyaz kontrastın neden olduğu halo etkisinden kaçınır.",
+    "autismHelp.point2":
+      "Hiçbir yerde kırmızı veya sarı yok — en sık aşırı uyarıcı olarak belirtilen iki renk tonu. Hatalarda her zamanki alarm kırmızısı ve parlak sarı yerine soluk terracotta, arama vurgularında ise soluk altın kullanılır.",
+    "autismHelp.point3":
+      "Her rengin doygunluğu Koyu ve Açık temalara göre çok daha düşüktür, böylece arka plana karşı kontrast aynı kalırken hiçbir renk komşularının yanında \"titremez\".",
+    "autismHelp.point4":
+      "Sakinleştirici tonlar her yerde baskındır: söz dizimi vurgulamasının çoğunda tozlu mavi ve adaçayı yeşili, geri kalanında ise soluk lavanta ve bej.",
+    "autismHelp.footer":
+      "Görünüm ▸ Otizm Teması üzerinden, aşağıdaki düğmeyle veya Koyu ▸ Açık ▸ Otizm arasında geçiş yapmak için Ctrl+Shift+T tuşlarına basarak istediğiniz zaman geçebilirsiniz.",
+    "autismHelp.switch": "Otizm Temasına geç",
+    "autismHelp.active": "Bu, mevcut temanız.",
+
+    "bionicHelp.intro":
+      "Her kelimenin baş kısmını kalınlaştırarak gözün satır başına daha az ve daha kısa odak noktasına ihtiyaç duymasını sağlayan tipografik bir numara. DEHB, disleksi ve bazen otizm için bir okuma yardımcısı olarak pazarlanır.",
+    "bionicHelp.point1":
+      "Her kelimenin yaklaşık ilk %40'ı kalınlaştırılır, geri kalanı normal kalınlıkta kalır — fikir, beynin bir kelimeyi başından tanıyıp sonunu bağlamdan tamamlamasıdır.",
+    "bionicHelp.point2":
+      "Kanıtlar karışık. Birkaç kontrollü çalışma, normal metne kıyasla okuma hızında veya anlamada ölçülebilir bir iyileşme bulamadı ve bazı okuyucular bunu daha az değil, daha dikkat dağıtıcı buldu. Yardımcı olacağını varsaymak yerine kendiniz deneyin.",
+    "bionicHelp.point3":
+      "Kelime kaydırma gibi ekrandaki herhangi bir belgeye uygulanır — düzyazıyla sınırlı değildir, bu yüzden kod düzenlerken açmak tanımlayıcıların ve anahtar kelimelerin başını da kalınlaştırır.",
+    "bionicHelp.footer":
+      "Görünüm ▸ Biyonik Okuma üzerinden, aşağıdaki düğmeyle veya Ctrl+Shift+B tuşlarına basarak istediğiniz zaman açabilirsiniz.",
+    "bionicHelp.turnOn": "Biyonik Okumayı Aç",
+    "bionicHelp.turnOff": "Biyonik Okumayı Kapat",
+
+    "help.center": "Yardım ve Kılavuzlar",
+    "modal.helpCenterTitle": "Yardım ve Kılavuzlar",
+    "help.searchPlaceholder": "Yardımda ara…",
+    "help.noResults": "Eşleşen konu yok",
+
+    "help.overviewTitle": "Genel Bakış",
+    "help.overviewIntro":
+      "JustCode; HTML, CSS, JavaScript ve genel metin veya kod için küçük, hızlı bir düzenleyicidir — tam bir IDE'nin yerini almak için değil, hızlı açılıp yolunuza çıkmamak için tasarlanmıştır.",
+    "help.overviewPoint1": "Dosyalar tek bir pencerede sekme olarak açılır; önce kurulması gereken bir proje veya çalışma alanı yoktur.",
+    "help.overviewPoint2": "Tam klavye kısayolu referansı için istediğiniz zaman F1'e basın.",
+
+    "help.filesTitle": "Dosyalar",
+    "help.filesIntro": "Dosyalar sekme olarak açılır; JustCode'da proje veya çalışma alanı kavramı yoktur.",
+    "help.filesPoint1":
+      "Yeni Dosya (Ctrl+N) birçok dil için başlangıç şablonları veya boş bir belge sunar; Aç… (Ctrl+O) aynı anda birden fazla dosyayı kabul eder.",
+    "help.filesPoint2":
+      "Kaydet (Ctrl+S) ve Farklı Kaydet (Ctrl+Shift+S) doğrudan diske yazar; Tümünü Kaydet (Ctrl+Alt+S) değişen tüm sekmeleri tek seferde kapsar.",
+    "help.filesPoint3": "Dosya ▸ Son Dosyalar yeniden başlatmalar arasında son 15 dosyayı hatırlar.",
+    "help.filesPoint4":
+      "Dosya ▸ Dosya İlişkilendirmeleri… JustCode'u Windows'a kaydederek anladığı dosya türleri için bir \"Birlikte Aç\" seçeneği — veya varsayılan — olarak görünmesini sağlar.",
+
+    "help.editingTitle": "Düzenleme",
+    "help.editingIntro": "Kes, kopyala, yapıştır, geri al ve yinele dışında birkaç ekstra özellikle standart düzenleme.",
+    "help.editingPoint1":
+      "Ctrl+/ geçerli dilin söz dizimini kullanarak bir yorumu açıp kapatır — tek satır için satır yorumları, seçim üzerinde blok yorumları.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L seçimin büyük/küçük harf durumunu değiştirir; Ctrl+Alt+G yeni bir GUID ekler.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ geçerli satırı taşır; Alt+Shift+↑ / Alt+Shift+↓ onu yukarı veya aşağı çoğaltır.",
+    "help.editingPoint4": "Ctrl+tıklama başka bir imleç ekler; Alt+sürükleme dikdörtgen (sütun) seçimi oluşturur.",
+
+    "help.searchTitle": "Arama",
+    "help.searchIntro": "Geçerli dosya içinde bul ve değiştir, veya doğrudan bir tanıma atlayın.",
+    "help.searchPoint1":
+      "Ctrl+F Bul'u açar; Ctrl+H Bul ve Değiştir'i açar. F3 / Shift+F3 son aramayı ileri veya geri yönde tekrarlar.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G Sembole Git'i açar — geçerli dosyadaki işlevlerin, sınıfların ve diğer bildirimlerin filtrelenebilir bir listesi.",
+
+    "help.bookmarksTitle": "Yer İmleri",
+    "help.bookmarksIntro":
+      "Konumunuzu bulmak için kaydırmadan büyük bir dosyada gezinmek için belge başına üç numaralı yer imi yuvası.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 geçerli satırda bir yer imi ayarlar veya temizler; Ctrl+1 / 2 / 3 doğrudan oraya atlar.",
+
+    "help.splitTabsTitle": "Bölünmüş Görünüm ve Sekmeler",
+    "help.splitTabsIntro": "Sekmeler en fazla dört bölmeye düzenlenebilir.",
+    "help.splitTabsPoint1":
+      "Ctrl+K ardından bir ok tuşu, etkin bölmeyi o yönde böler; bir sekmeyi ekran kenarına sürüklemek de aynısını yapar.",
+    "help.splitTabsPoint2":
+      "Bir sekmeyi başka bir bölmenin sekme çubuğuna sürüklemek onu oraya taşır; son sekmeyi bir bölmeden dışarı sürüklemek bölmeyi geri alır.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab sekmeler arasında döner; bir sekmeye orta tıklama onu kapatır.",
+
+    "help.foldingTitle": "Kod Katlama",
+    "help.foldingIntro": "Herhangi bir blok yoldan çekilmek için katlanabilir.",
+    "help.foldingPoint1":
+      "İmleçteki bloğu katlamak veya açmak için oluk üzerindeki oka tıklayın veya Ctrl+Shift+[ / ] tuşlarına basın.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] dosyadaki her şeyi tek seferde katlar veya açar.",
+
+    "help.terminalTitle": "Uçbirim",
+    "help.terminalIntro": "Ayrı bir pencere değil, tümleşik bir uçbirim paneli.",
+    "help.terminalPoint1":
+      "Ctrl+` onu gösterir veya gizler; Ctrl+Shift+` zaten çalışan herhangi birinin yanına yeni bir tane açar.",
+    "help.terminalPoint2": "Yeni bir uçbirim, şu anda düzenlenmekte olan dosyanın klasöründe başlar.",
+    "help.terminalPoint3":
+      "Dosya ▸ Uçbirimde Çalıştır (Ctrl+F5) geçerli betiği çalıştırır ve ardından bir hatanın hemen yerinde incelenebilmesi için kabuğu bir istemde açık bırakır.",
+
+    "help.runTitle": "Çalıştır",
+    "help.runIntro": "F5, geçerli dosyayı kaynak metin olarak değil, gerçekte nasıl görüneceği veya davranacağı şekilde gösterir.",
+    "help.runPoint1":
+      "HTML: varsayılan tarayıcıda açılır. Aynı dosyayı tekrar çalıştırmak, açık kaldığı sürece ikinci bir sekme açmak yerine o sekmeyi yeniler.",
+    "help.runPoint2": "Markdown: önce biçimlendirilmiş bir HTML belgesine dönüştürülür, ardından aynı şekilde önizlenir.",
+    "help.runPoint3":
+      "PowerShell, Batch ve Shell betikleri: betik bittikten sonra da açık kalan kendi konsol penceresinde çalışır.",
+
+    "help.wordWrapIntro":
+      "Varsayılan olarak kapalıdır. Kaydırma, uzun satırları yatay kaydırma olmadan ekranda tutar, ancak oluk ile gerçek satır numaraları arasındaki satır satır eşleşmeyi bozar.",
+    "help.wordWrapPoint1":
+      "Görünüm ▸ Sözcük Kaydırma veya Alt+Z ile açıp kapatın. Şu anda ekranda olan belgeye uygulanır.",
+
+    "help.spellCheckIntro": "Varsayılan olarak kapalıdır — kaynak koddaki tanımlayıcıların çoğu tanım gereği \"yanlış yazılmıştır\".",
+    "help.spellCheckPoint1":
+      "Web görünümünün yerleşik denetleyicisi yerine gerçek metin üzerinde bir linter olarak çalışır, bu nedenle yazım hataları toplam Sorun sayısına dahil edilir ve önerilen düzeltmelerle birlikte gelir.",
+    "help.spellCheckPoint2": "Görünüm ▸ Yazım Denetimi ile açıp kapatın.",
+
+    "help.languageTitle": "Arayüz Dili",
+    "help.languageIntro":
+      "JustCode'un kendi menülerinin ve iletişim kutularının dili — herhangi bir dosyanın içeriğinden veya programlama dilinden bağımsızdır.",
+    "help.languagePoint1":
+      "Görünüm ▸ Dil… her çeviriyi İngilizce adı yerine kendi adıyla listeler, çünkü \"German\" sadece Türkçe okuyan birine yardımcı olmaz.",
+    "help.languagePoint2": "İngilizce yerleşiktir; diğer tüm diller ilk seçildiğinde indirilir.",
+
+    "sc.toolbar": "Araç Çubuğunu Aç/Kapat",
+    "sc.statusBar": "Durum Çubuğunu Aç/Kapat",
+    "sc.spellCheck": "Yazım Denetimini Aç/Kapat",
+    "sc.bionicReading": "Biyonik Okumayı Aç/Kapat",
+    "sc.cycleTheme": "Temalar arasında geçiş yap (Koyu ▸ Açık ▸ Otizm)",
   },
   uk: {
     "menu.file": "Файл",
@@ -7039,6 +11392,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Маленький швидкий редактор коду.",
     "about.builtWith": "Створено на Tauri 2 і CodeMirror 6.",
     "about.version": "Версія {version}",
+    "sc.g.menus": "Меню",
     "sc.g.file": "Файл",
     "sc.g.editing": "Редагування",
     "sc.g.bookmarks": "Закладки",
@@ -7064,6 +11418,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+клацання URL-адреси",
     "sc.k.clickPath": "Клацання шляху в рядку стану",
     "sc.k.clickLanguage": "Клацання мови в рядку стану",
+    "sc.openFileMenu": "Відкрити меню Файл",
+    "sc.openEditMenu": "Відкрити меню Редагування",
+    "sc.openViewMenu": "Відкрити меню Вигляд",
+    "sc.openHelpMenu": "Відкрити меню Довідка",
     "sc.newFile": "Створити файл",
     "sc.openFile": "Відкрити файл",
     "sc.save": "Зберегти",
@@ -7137,6 +11495,139 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Відкрити посилання під курсором",
     "sc.copyFullPath": "Копіювати повний шлях",
     "sc.changeMode": "Змінити мовний режим",
+
+    "view.autismTheme": "Тема для аутизму",
+    "view.autismThemeHint": "Приглушені кольори з низьким контрастом для сенсорної чутливості",
+    "view.bionicReading": "Біонічне читання",
+    "help.autismTheme": "Тема для аутизму",
+    "help.bionicReading": "Біонічне читання",
+    "toolbar.switchToTheme": "Перемкнути на {theme}",
+
+    "autismHelp.intro":
+      "Приглушена, малостимулююча кольорова тема для сенсорно чутливих користувачів — аутизм, СДУГ, мігрень та інші стани зорового стресу. Вона робить редактор спокійним для перегляду протягом тривалого часу, не жертвуючи читабельністю.",
+    "autismHelp.point1":
+      "Немає ні чистого чорного, ні чистого білого. Теплий темно-вугільний фон і м'який кремовий текст уникають як відблисків екрана, так і ефекту ореолу, який спричиняє різкий чорно-білий контраст.",
+    "autismHelp.point2":
+      "Ніде немає ні червоного, ні жовтого — двох відтінків, які найчастіше вказують як надмірно стимулюючі. Помилки використовують приглушену теракоту, а виділення пошуку — приглушене золото замість звичного тривожного червоного і яскраво-жовтого.",
+    "autismHelp.point3":
+      "Насиченість кожного кольору значно нижча, ніж у темній і світлій темах, тож ніщо не \"вібрує\" поруч із сусідніми елементами, хоча контраст із фоном залишається тим самим.",
+    "autismHelp.point4":
+      "Заспокійливі відтінки переважають всюди: пилясто-синій і шавлієво-зелений для більшості підсвічування синтаксису, приглушена лаванда й бежевий для решти.",
+    "autismHelp.footer":
+      "Перемкніться на неї будь-коли через Вигляд ▸ Тема для аутизму, кнопкою нижче, або натиснувши Ctrl+Shift+T, щоб перемикатися між Темна ▸ Світла ▸ Аутизм.",
+    "autismHelp.switch": "Перемкнути на тему для аутизму",
+    "autismHelp.active": "Це ваша поточна тема.",
+
+    "bionicHelp.intro":
+      "Типографський прийом, який виділяє жирним початкову частину кожного слова, щоб оку потрібно було менше й коротших точок фіксації на рядок. Рекламується як засіб для читання при СДУГ, дислексії та іноді аутизмі.",
+    "bionicHelp.point1":
+      "Приблизно перші 40% кожного слова виділяються жирним, а решта залишається звичайної товщини — ідея полягає в тому, що мозок розпізнає слово за початком і добудовує кінець із контексту.",
+    "bionicHelp.point2":
+      "Докази неоднозначні. Кілька контрольованих досліджень не виявили вимірного покращення швидкості читання чи розуміння порівняно зі звичайним текстом, а деякі читачі вважають це більш відволікаючим, не менш. Спробуйте самі, замість того щоб припускати, що це допоможе.",
+    "bionicHelp.point3":
+      "Застосовується до будь-якого документа на екрані, так само як перенесення слів — не обмежується прозою, тож увімкнення під час редагування коду також виділяє жирним початок ідентифікаторів і ключових слів.",
+    "bionicHelp.footer":
+      "Увімкніть її будь-коли через Вигляд ▸ Біонічне читання, кнопкою нижче, або натиснувши Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Увімкнути біонічне читання",
+    "bionicHelp.turnOff": "Вимкнути біонічне читання",
+
+    "help.center": "Довідка та інструкції",
+    "modal.helpCenterTitle": "Довідка та інструкції",
+    "help.searchPlaceholder": "Пошук у довідці…",
+    "help.noResults": "Немає відповідних тем",
+
+    "help.overviewTitle": "Огляд",
+    "help.overviewIntro":
+      "JustCode — це невеликий, швидкий редактор для HTML, CSS, JavaScript і звичайного тексту чи коду — створений, щоб швидко відкриватися й не заважати, а не замінювати повноцінне середовище розробки.",
+    "help.overviewPoint1":
+      "Файли відкриваються як вкладки в одному вікні; немає проєкту чи робочого простору, який потрібно спершу налаштувати.",
+    "help.overviewPoint2": "Натисніть F1 будь-коли, щоб побачити повний перелік комбінацій клавіш.",
+
+    "help.filesTitle": "Файли",
+    "help.filesIntro": "Файли відкриваються як вкладки; JustCode не має поняття проєкту чи робочого простору.",
+    "help.filesPoint1":
+      "Новий файл (Ctrl+N) пропонує початкові шаблони для багатьох мов або порожній документ; Відкрити… (Ctrl+O) приймає кілька файлів одночасно.",
+    "help.filesPoint2":
+      "Зберегти (Ctrl+S) і Зберегти як (Ctrl+Shift+S) записують безпосередньо на диск; Зберегти все (Ctrl+Alt+S) охоплює всі змінені вкладки за раз.",
+    "help.filesPoint3": "Файл ▸ Останні файли запам'ятовує останні 15 файлів між перезапусками.",
+    "help.filesPoint4":
+      "Файл ▸ Асоціації файлів… реєструє JustCode у Windows, щоб він з'являвся як варіант \"Відкрити за допомогою\" — або типовий — для типів файлів, які він розуміє.",
+
+    "help.editingTitle": "Редагування",
+    "help.editingIntro": "Стандартне редагування плюс кілька додаткових функцій крім вирізання, копіювання, вставлення, скасування та повтору.",
+    "help.editingPoint1":
+      "Ctrl+/ перемикає коментар, використовуючи синтаксис поточної мови — рядкові коментарі для одного рядка, блокові коментарі для виділення.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L змінюють регістр виділення; Ctrl+Alt+G вставляє новий GUID.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ переміщує поточний рядок; Alt+Shift+↑ / Alt+Shift+↓ дублює його вгору або вниз.",
+    "help.editingPoint4": "Ctrl+клац додає ще один курсор; Alt+перетягування створює прямокутне (стовпчикове) виділення.",
+
+    "help.searchTitle": "Пошук",
+    "help.searchIntro": "Пошук і заміна в поточному файлі, або прямий перехід до визначення.",
+    "help.searchPoint1":
+      "Ctrl+F відкриває Пошук; Ctrl+H відкриває Пошук і заміну. F3 / Shift+F3 повторюють останній пошук вперед або назад.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G відкриває Перейти до символу — фільтрований список функцій, класів та інших оголошень у поточному файлі.",
+
+    "help.bookmarksTitle": "Закладки",
+    "help.bookmarksIntro":
+      "Три пронумеровані слоти закладок на документ, щоб переміщатися у великому файлі без прокручування в пошуках свого місця.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 встановлює або очищає закладку на поточному рядку; Ctrl+1 / 2 / 3 переходить прямо до неї.",
+
+    "help.splitTabsTitle": "Розділений вигляд і вкладки",
+    "help.splitTabsIntro": "Вкладки можна розташувати щонайбільше в чотирьох панелях.",
+    "help.splitTabsPoint1":
+      "Ctrl+K, а потім клавіша зі стрілкою розділяє активну панель у цьому напрямку; перетягування вкладки до краю екрана робить те саме.",
+    "help.splitTabsPoint2":
+      "Перетягування вкладки на панель вкладок іншої панелі переміщує її туди; перетягування останньої вкладки за межі панелі скасовує поділ.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab перемикають вкладки; клацання середньою кнопкою на вкладці закриває її.",
+
+    "help.foldingTitle": "Згортання коду",
+    "help.foldingIntro": "Будь-який блок можна згорнути, щоб він не заважав.",
+    "help.foldingPoint1":
+      "Клацніть стрілку на полях, або натисніть Ctrl+Shift+[ / ], щоб згорнути чи розгорнути блок біля курсора.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] згортає або розгортає все у файлі за раз.",
+
+    "help.terminalTitle": "Термінал",
+    "help.terminalIntro": "Вбудована панель термінала, а не окреме вікно.",
+    "help.terminalPoint1":
+      "Ctrl+` показує або приховує його; Ctrl+Shift+` відкриває новий поруч із будь-яким уже запущеним.",
+    "help.terminalPoint2": "Новий термінал запускається в папці файлу, що редагується наразі.",
+    "help.terminalPoint3":
+      "Файл ▸ Запустити в терміналі (Ctrl+F5) запускає поточний скрипт і залишає оболонку відкритою в командному рядку після цього, щоб збій можна було відразу дослідити.",
+
+    "help.runTitle": "Запуск",
+    "help.runIntro": "F5 показує поточний файл таким, яким він насправді виглядатиме чи поводитиметься, а не як вихідний текст.",
+    "help.runPoint1":
+      "HTML: відкривається у типовому браузері. Повторний запуск того самого файлу оновлює цю вкладку замість відкриття другої, доки вона залишається відкритою.",
+    "help.runPoint2": "Markdown: спершу перетворюється на стилізований HTML-документ, а потім переглядається так само.",
+    "help.runPoint3":
+      "Скрипти PowerShell, Batch і Shell: виконуються у власному вікні консолі, яке залишається відкритим після завершення скрипту.",
+
+    "help.wordWrapIntro":
+      "Типово вимкнено. Перенесення утримує довгі рядки на екрані без горизонтального прокручування, але порушує відповідність рядок-у-рядок між полями та реальними номерами рядків.",
+    "help.wordWrapPoint1":
+      "Перемкніть це через Вигляд ▸ Перенесення рядків або Alt+Z. Застосовується до документа, який наразі на екрані.",
+
+    "help.spellCheckIntro": "Типово вимкнено — більшість ідентифікаторів у вихідному коді \"з помилками\" за визначенням.",
+    "help.spellCheckPoint1":
+      "Працює як лінтер над реальним текстом, а не вбудована перевірка веб-перегляду, тож орфографічні помилки враховуються в загальній кількості проблем і супроводжуються запропонованими виправленнями.",
+    "help.spellCheckPoint2": "Перемкніть це через Вигляд ▸ Перевірка орфографії.",
+
+    "help.languageTitle": "Мова інтерфейсу",
+    "help.languageIntro":
+      "Мова власних меню та діалогових вікон JustCode — незалежна від вмісту чи мови програмування будь-якого файлу.",
+    "help.languagePoint1":
+      "Вигляд ▸ Мова… перелічує кожен переклад під його власною назвою, а не англійською, оскільки \"German\" не допоможе тому, хто читає лише українською.",
+    "help.languagePoint2": "Англійська вбудована; будь-яка інша мова завантажується під час першого вибору.",
+
+    "sc.toolbar": "Перемкнути панель інструментів",
+    "sc.statusBar": "Перемкнути рядок стану",
+    "sc.spellCheck": "Перемкнути перевірку орфографії",
+    "sc.bionicReading": "Перемкнути біонічне читання",
+    "sc.cycleTheme": "Перемикати теми (Темна ▸ Світла ▸ Аутизм)",
   },
   ur: {
     "menu.file": "فائل",
@@ -7255,6 +11746,7 @@ export const TRANSLATIONS = {
     "about.tagline": "ایک چھوٹا، تیز کوڈ ایڈیٹر۔",
     "about.builtWith": "‏Tauri 2 اور CodeMirror 6 سے بنایا گیا۔",
     "about.version": "ورژن {version}",
+    "sc.g.menus": "مینو",
     "sc.g.file": "فائل",
     "sc.g.editing": "تدوین",
     "sc.g.bookmarks": "بُک مارکس",
@@ -7280,6 +11772,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+کسی URL پر کلک",
     "sc.k.clickPath": "اسٹیٹس بار میں راستے پر کلک کریں",
     "sc.k.clickLanguage": "اسٹیٹس بار میں زبان پر کلک کریں",
+    "sc.openFileMenu": "فائل مینو کھولیں",
+    "sc.openEditMenu": "ترمیم مینو کھولیں",
+    "sc.openViewMenu": "منظر مینو کھولیں",
+    "sc.openHelpMenu": "مدد مینو کھولیں",
     "sc.newFile": "نئی فائل",
     "sc.openFile": "فائل کھولیں",
     "sc.save": "محفوظ کریں",
@@ -7353,6 +11849,137 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "کرسر کے نیچے لنک کھولیں",
     "sc.copyFullPath": "مکمل راستہ کاپی کریں",
     "sc.changeMode": "زبان کا موڈ تبدیل کریں",
+
+    "view.autismTheme": "آٹزم تھیم",
+    "view.autismThemeHint": "حسی حساسیت کے لیے دھیمے، کم تضاد والے رنگ",
+    "view.bionicReading": "بایونک ریڈنگ",
+    "help.autismTheme": "آٹزم تھیم",
+    "help.bionicReading": "بایونک ریڈنگ",
+    "toolbar.switchToTheme": "{theme} پر سوئچ کریں",
+
+    "autismHelp.intro":
+      "حسی طور پر حساس صارفین — آٹزم، ADHD، مائیگرین اور دیگر بصری تناؤ کی کیفیات — کے لیے ایک دھیما، کم محرک رنگین تھیم۔ یہ خوانائی پر سمجھوتہ کیے بغیر ایڈیٹر کو طویل عرصے تک دیکھنے میں پرسکون رکھتا ہے۔",
+    "autismHelp.point1":
+      "نہ خالص سیاہ اور نہ خالص سفید۔ ایک گرم، گہرا چارکول گرے پس منظر اور ایک نرم کریمی متن، اسکرین کی چمک اور تیز سیاہ و سفید تضاد سے پیدا ہونے والے ہالہ اثر، دونوں سے بچتے ہیں۔",
+    "autismHelp.point2":
+      "کہیں بھی سرخ یا پیلا رنگ نہیں — یہ دونوں رنگ سب سے زیادہ حد سے زیادہ محرک قرار دیے جاتے ہیں۔ خرابیوں میں معمول کے چیتاؤنی سرخ اور چمکیلے پیلے کی بجائے دھیمی ٹیراکوٹا اور تلاش کی نشاندہی میں دھیما سنہری استعمال ہوتا ہے۔",
+    "autismHelp.point3":
+      "ہر رنگ کی سنترپتی ڈارک اور لائٹ تھیمز کے مقابلے میں کافی کم رکھی گئی ہے، تاکہ پس منظر کے تضاد کو وہی رکھتے ہوئے کوئی بھی رنگ اپنے پڑوسیوں کے ساتھ \"لرزتا\" نہ رہے۔",
+    "autismHelp.point4":
+      "پرسکون رنگ ہر جگہ غالب ہیں: زیادہ تر نحوی نمایاں کاری کے لیے دھول آلود نیلا اور سیج سبز، باقی کے لیے دھیما لیوینڈر اور ٹین۔",
+    "autismHelp.footer":
+      "آپ کسی بھی وقت ملاحظہ ▸ آٹزم تھیم سے، نیچے دیے گئے بٹن سے، یا ڈارک ▸ لائٹ ▸ آٹزم کے درمیان گھمانے کے لیے Ctrl+Shift+T دبا کر اس پر سوئچ کر سکتے ہیں۔",
+    "autismHelp.switch": "آٹزم تھیم پر سوئچ کریں",
+    "autismHelp.active": "یہ آپ کا موجودہ تھیم ہے۔",
+
+    "bionicHelp.intro":
+      "ایک ٹائپوگرافک ترکیب جو ہر لفظ کے ابتدائی حصے کو بولڈ کر دیتی ہے، تاکہ آنکھ کو ہر سطر میں کم اور مختصر توجہ کے مقامات درکار ہوں۔ اسے ADHD، ڈسلیکسیا اور کبھی کبھار آٹزم کے لیے پڑھنے میں مددگار کے طور پر پیش کیا جاتا ہے۔",
+    "bionicHelp.point1":
+      "ہر لفظ کے تقریباً پہلے 40% حصے کو بولڈ کیا جاتا ہے اور باقی حصہ عام رہتا ہے — خیال یہ ہے کہ دماغ کسی لفظ کو اس کے آغاز سے پہچان لیتا ہے اور اختتام کو سیاق و سباق سے مکمل کر لیتا ہے۔",
+    "bionicHelp.point2":
+      "شواہد ملے جلے ہیں۔ کئی کنٹرول شدہ مطالعات میں عام متن کے مقابلے میں پڑھنے کی رفتار یا فہم میں کوئی قابل پیمائش بہتری نہیں ملی، اور کچھ قارئین نے اسے کم نہیں بلکہ زیادہ توجہ ہٹانے والا پایا۔ یہ فائدہ دے گا یہ سمجھنے کے بجائے خود آزما کر دیکھیں۔",
+    "bionicHelp.point3":
+      "یہ اسکرین پر موجود کسی بھی دستاویز پر لاگو ہوتا ہے، بالکل ورڈ ریپ کی طرح — یہ صرف نثر تک محدود نہیں، اس لیے کوڈ میں ترمیم کرتے وقت اسے آن کرنا شناختی ناموں اور کلیدی الفاظ کے آغاز کو بھی بولڈ کر دیتا ہے۔",
+    "bionicHelp.footer":
+      "آپ اسے کسی بھی وقت ملاحظہ ▸ بایونک ریڈنگ سے، نیچے دیے گئے بٹن سے، یا Ctrl+Shift+B دبا کر آن کر سکتے ہیں۔",
+    "bionicHelp.turnOn": "بایونک ریڈنگ آن کریں",
+    "bionicHelp.turnOff": "بایونک ریڈنگ آف کریں",
+
+    "help.center": "مدد اور رہنمائی",
+    "modal.helpCenterTitle": "مدد اور رہنمائی",
+    "help.searchPlaceholder": "مدد میں تلاش کریں…",
+    "help.noResults": "کوئی مماثل موضوع نہیں",
+
+    "help.overviewTitle": "جائزہ",
+    "help.overviewIntro":
+      "JustCode ایک چھوٹا، تیز ایڈیٹر ہے HTML، CSS، JavaScript اور عمومی متن یا کوڈ کے لیے — یہ تیزی سے کھلنے اور راستے میں حائل نہ ہونے کے لیے بنایا گیا ہے، نہ کہ ایک مکمل IDE کی جگہ لینے کے لیے۔",
+    "help.overviewPoint1": "فائلیں ایک ہی ونڈو میں ٹیبز کے طور پر کھلتی ہیں؛ کوئی پروجیکٹ یا ورک اسپیس نہیں جسے پہلے ترتیب دینا پڑے۔",
+    "help.overviewPoint2": "مکمل کی بورڈ شارٹ کٹ حوالہ دیکھنے کے لیے کسی بھی وقت F1 دبائیں۔",
+
+    "help.filesTitle": "فائلیں",
+    "help.filesIntro": "فائلیں ٹیبز کے طور پر کھلتی ہیں؛ JustCode میں پروجیکٹ یا ورک اسپیس کا کوئی تصور نہیں۔",
+    "help.filesPoint1":
+      "نئی فائل (Ctrl+N) بہت سی زبانوں کے لیے ابتدائی سانچے، یا ایک خالی دستاویز پیش کرتی ہے؛ کھولیں… (Ctrl+O) بیک وقت کئی فائلیں قبول کرتا ہے۔",
+    "help.filesPoint2":
+      "محفوظ کریں (Ctrl+S) اور بطور محفوظ کریں (Ctrl+Shift+S) براہ راست ڈسک پر لکھتے ہیں؛ سب محفوظ کریں (Ctrl+Alt+S) تمام تبدیل شدہ ٹیبز کو ایک ساتھ محیط کرتا ہے۔",
+    "help.filesPoint3": "فائل ▸ حالیہ فائلیں دوبارہ آغاز کے دوران آخری 15 فائلیں یاد رکھتی ہے۔",
+    "help.filesPoint4":
+      "فائل ▸ فائل ایسوسی ایشنز… JustCode کو Windows کے ساتھ رجسٹر کرتا ہے تاکہ یہ ان فائل اقسام کے لیے \"اس کے ساتھ کھولیں\" آپشن — یا ڈیفالٹ — کے طور پر ظاہر ہو جنہیں یہ سمجھتا ہے۔",
+
+    "help.editingTitle": "ترمیم",
+    "help.editingIntro": "معیاری ترمیم، کاٹنے، کاپی کرنے، چسپاں کرنے، واپس لینے اور دوبارہ کرنے کے علاوہ چند اضافی خصوصیات کے ساتھ۔",
+    "help.editingPoint1":
+      "Ctrl+/ موجودہ زبان کے نحو کا استعمال کرتے ہوئے تبصرے کو آن یا آف کرتا ہے — ایک لائن کے لیے لائن تبصرے، انتخاب پر بلاک تبصرے۔",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L انتخاب کے حروف کی جسامت تبدیل کرتے ہیں؛ Ctrl+Alt+G ایک نیا GUID داخل کرتا ہے۔",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ موجودہ لائن کو منتقل کرتا ہے؛ Alt+Shift+↑ / Alt+Shift+↓ اسے اوپر یا نیچے دہراتا ہے۔",
+    "help.editingPoint4": "Ctrl+کلک ایک اور کرسر شامل کرتا ہے؛ Alt+گھسیٹنا ایک مستطیل (کالمی) انتخاب بناتا ہے۔",
+
+    "help.searchTitle": "تلاش",
+    "help.searchIntro": "موجودہ فائل میں تلاش اور تبدیلی، یا کسی تعریف پر براہ راست جانا۔",
+    "help.searchPoint1":
+      "Ctrl+F تلاش کھولتا ہے؛ Ctrl+H تلاش اور تبدیلی کھولتا ہے۔ F3 / Shift+F3 آخری تلاش کو آگے یا پیچھے دہراتے ہیں۔",
+    "help.searchPoint2":
+      "Ctrl+Shift+G علامت پر جائیں کھولتا ہے — موجودہ فائل میں فنکشنز، کلاسز اور دیگر اعلانات کی ایک فلٹر کے قابل فہرست۔",
+
+    "help.bookmarksTitle": "بک مارکس",
+    "help.bookmarksIntro":
+      "فی دستاویز تین نمبر شدہ بک مارک خانے، تاکہ اپنی جگہ تلاش کرنے کے لیے اسکرول کیے بغیر ایک بڑی فائل میں گھوما جا سکے۔",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 موجودہ لائن پر ایک بک مارک سیٹ یا صاف کرتا ہے؛ Ctrl+1 / 2 / 3 براہ راست اس پر چھلانگ لگاتا ہے۔",
+
+    "help.splitTabsTitle": "تقسیم شدہ منظر اور ٹیبز",
+    "help.splitTabsIntro": "ٹیبز کو زیادہ سے زیادہ چار پینز میں ترتیب دیا جا سکتا ہے۔",
+    "help.splitTabsPoint1":
+      "Ctrl+K کے بعد ایک ایرو کی، فعال پین کو اس سمت میں تقسیم کرتی ہے؛ ٹیب کو اسکرین کے کنارے تک گھسیٹنا بھی وہی کام کرتا ہے۔",
+    "help.splitTabsPoint2":
+      "ٹیب کو کسی دوسرے پین کی ٹیب بار پر گھسیٹنا اسے وہاں منتقل کر دیتا ہے؛ کسی پین سے آخری ٹیب کو باہر گھسیٹنا تقسیم کو منسوخ کر دیتا ہے۔",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab ٹیبز کے درمیان گھومتے ہیں؛ کسی ٹیب پر درمیانی کلک اسے بند کر دیتا ہے۔",
+
+    "help.foldingTitle": "کوڈ فولڈنگ",
+    "help.foldingIntro": "کسی بھی بلاک کو راستے سے ہٹانے کے لیے فولڈ کیا جا سکتا ہے۔",
+    "help.foldingPoint1":
+      "کرسر پر موجود بلاک کو فولڈ یا کھولنے کے لیے گٹر میں تیر پر کلک کریں، یا Ctrl+Shift+[ / ] دبائیں۔",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] فائل میں سب کچھ ایک ساتھ فولڈ یا کھولتا ہے۔",
+
+    "help.terminalTitle": "ٹرمینل",
+    "help.terminalIntro": "ایک مربوط ٹرمینل پینل، الگ ونڈو نہیں۔",
+    "help.terminalPoint1":
+      "Ctrl+` اسے دکھاتا یا چھپاتا ہے؛ Ctrl+Shift+` کسی بھی پہلے سے چلنے والے کے ساتھ ایک نیا کھولتا ہے۔",
+    "help.terminalPoint2": "ایک نیا ٹرمینل اس فائل کے فولڈر میں شروع ہوتا ہے جس میں فی الحال ترمیم کی جا رہی ہے۔",
+    "help.terminalPoint3":
+      "فائل ▸ ٹرمینل میں چلائیں (Ctrl+F5) موجودہ اسکرپٹ چلاتا ہے اور اس کے بعد شیل کو ایک پرامپٹ پر کھلا چھوڑ دیتا ہے، تاکہ کسی ناکامی کو فوری طور پر جانچا جا سکے۔",
+
+    "help.runTitle": "چلائیں",
+    "help.runIntro": "F5 موجودہ فائل کو ماخذی متن کی بجائے اس طرح دکھاتا ہے جیسا وہ حقیقت میں نظر آئے گی یا برتاؤ کرے گی۔",
+    "help.runPoint1":
+      "HTML: ڈیفالٹ براؤزر میں کھلتی ہے۔ اسی فائل کو دوبارہ چلانا، جب تک وہ کھلی رہے، دوسرا ٹیب کھولنے کی بجائے اسی ٹیب کو تازہ کرتا ہے۔",
+    "help.runPoint2": "Markdown: پہلے ایک اسٹائل شدہ HTML دستاویز میں پیش کی جاتی ہے، پھر اسی طرح پیش نظارہ کی جاتی ہے۔",
+    "help.runPoint3":
+      "PowerShell، Batch اور Shell اسکرپٹس: اپنی الگ کنسول ونڈو میں چلتی ہیں، جو اسکرپٹ ختم ہونے کے بعد بھی کھلی رہتی ہے۔",
+
+    "help.wordWrapIntro":
+      "بطور ڈیفالٹ آف۔ ریپنگ لمبی لائنوں کو افقی اسکرولنگ کے بغیر اسکرین پر رکھتی ہے، لیکن گٹر اور اصل لائن نمبروں کے درمیان لائن بہ لائن مطابقت کو توڑ دیتی ہے۔",
+    "help.wordWrapPoint1":
+      "اسے ملاحظہ ▸ لفظ لپیٹ یا Alt+Z سے تبدیل کریں۔ یہ اس دستاویز پر لاگو ہوتا ہے جو فی الحال اسکرین پر ہے۔",
+
+    "help.spellCheckIntro": "بطور ڈیفالٹ آف — ماخذی کوڈ میں زیادہ تر شناختی نام تعریف کے لحاظ سے \"غلط ہجے\" والے ہوتے ہیں۔",
+    "help.spellCheckPoint1":
+      "ویب ویو کے بلٹ ان چیکر کی بجائے اصل متن پر ایک لنٹر کے طور پر چلتا ہے، اس لیے ہجے کی غلطیاں مسائل کی کل تعداد میں شمار ہوتی ہیں اور تجویز کردہ تصحیحات کے ساتھ آتی ہیں۔",
+    "help.spellCheckPoint2": "اسے ملاحظہ ▸ ہجے کی جانچ سے تبدیل کریں۔",
+
+    "help.languageTitle": "انٹرفیس زبان",
+    "help.languageIntro": "JustCode کے اپنے مینوز اور ڈائیلاگز کی زبان — کسی بھی فائل کے مواد یا پروگرامنگ زبان سے آزاد۔",
+    "help.languagePoint1":
+      "ملاحظہ ▸ زبان… ہر ترجمے کو اس کے اپنے نام کے تحت درج کرتا ہے، اس کے انگریزی نام کے تحت نہیں، کیونکہ \"German\" کسی ایسے شخص کی مدد نہیں کرتا جو صرف اردو پڑھتا ہے۔",
+    "help.languagePoint2": "انگریزی پہلے سے شامل ہے؛ کوئی بھی دوسری زبان پہلی بار منتخب ہونے پر ڈاؤن لوڈ ہوتی ہے۔",
+
+    "sc.toolbar": "ٹول بار کو تبدیل کریں",
+    "sc.statusBar": "اسٹیٹس بار کو تبدیل کریں",
+    "sc.spellCheck": "ہجے کی جانچ کو تبدیل کریں",
+    "sc.bionicReading": "بایونک ریڈنگ کو تبدیل کریں",
+    "sc.cycleTheme": "تھیمز کے درمیان گھمائیں (ڈارک ▸ لائٹ ▸ آٹزم)",
   },
   vi: {
     "menu.file": "Tệp",
@@ -7471,6 +12098,7 @@ export const TRANSLATIONS = {
     "about.tagline": "Trình soạn thảo mã nhỏ gọn và nhanh.",
     "about.builtWith": "Xây dựng với Tauri 2 và CodeMirror 6.",
     "about.version": "Phiên bản {version}",
+    "sc.g.menus": "Menu",
     "sc.g.file": "Tệp",
     "sc.g.editing": "Chỉnh sửa",
     "sc.g.bookmarks": "Dấu trang",
@@ -7496,6 +12124,10 @@ export const TRANSLATIONS = {
     "sc.k.ctrlClickUrl": "Ctrl+nhấp vào URL",
     "sc.k.clickPath": "Nhấp đường dẫn trên thanh trạng thái",
     "sc.k.clickLanguage": "Nhấp ngôn ngữ trên thanh trạng thái",
+    "sc.openFileMenu": "Mở menu Tệp",
+    "sc.openEditMenu": "Mở menu Chỉnh sửa",
+    "sc.openViewMenu": "Mở menu Xem",
+    "sc.openHelpMenu": "Mở menu Trợ giúp",
     "sc.newFile": "Tệp mới",
     "sc.openFile": "Mở tệp",
     "sc.save": "Lưu",
@@ -7569,5 +12201,134 @@ export const TRANSLATIONS = {
     "sc.openLinkAtCaret": "Mở liên kết tại con trỏ",
     "sc.copyFullPath": "Sao chép đường dẫn đầy đủ",
     "sc.changeMode": "Đổi chế độ ngôn ngữ",
+
+    "view.autismTheme": "Chủ đề Tự kỷ",
+    "view.autismThemeHint": "Màu sắc dịu, tương phản thấp cho sự nhạy cảm giác quan",
+    "view.bionicReading": "Đọc Bionic",
+    "help.autismTheme": "Chủ đề Tự kỷ",
+    "help.bionicReading": "Đọc Bionic",
+    "toolbar.switchToTheme": "Chuyển sang {theme}",
+
+    "autismHelp.intro":
+      "Một chủ đề màu dịu, ít kích thích dành cho người dùng nhạy cảm giác quan — tự kỷ, ADHD, đau nửa đầu và các tình trạng căng thẳng thị giác khác. Nó giữ cho trình soạn thảo trông dịu mắt trong thời gian dài mà không làm giảm khả năng đọc.",
+    "autismHelp.point1":
+      "Không có màu đen thuần hay trắng thuần. Nền xám than ấm và chữ màu kem mềm mại giúp tránh cả chói màn hình lẫn hiệu ứng quầng sáng do độ tương phản đen trắng gay gắt gây ra.",
+    "autismHelp.point2":
+      "Không có màu đỏ hay vàng ở bất kỳ đâu — hai tông màu thường được cho là gây kích thích quá mức nhất. Lỗi sử dụng màu đất nung dịu và điểm nổi bật khi tìm kiếm sử dụng màu vàng kim dịu thay vì màu đỏ cảnh báo và vàng sáng thông thường.",
+    "autismHelp.point3":
+      "Mỗi màu đều có độ bão hòa thấp hơn nhiều so với chủ đề Tối và Sáng, vì vậy không màu nào \"rung\" cạnh các màu lân cận, dù độ tương phản với nền vẫn giữ nguyên.",
+    "autismHelp.point4":
+      "Các tông màu êm dịu chiếm ưu thế khắp nơi: xanh lam mờ bụi và xanh lá xô thơm cho phần lớn phần đánh dấu cú pháp, oải hương dịu và nâu be cho phần còn lại.",
+    "autismHelp.footer":
+      "Chuyển sang chủ đề này bất cứ lúc nào từ Xem ▸ Chủ đề Tự kỷ, bằng nút bên dưới, hoặc nhấn Ctrl+Shift+T để xoay vòng giữa Tối ▸ Sáng ▸ Tự kỷ.",
+    "autismHelp.switch": "Chuyển sang Chủ đề Tự kỷ",
+    "autismHelp.active": "Đây là chủ đề hiện tại của bạn.",
+
+    "bionicHelp.intro":
+      "Một thủ thuật kiểu chữ làm đậm phần đầu của mỗi từ, để mắt cần ít điểm cố định hơn và ngắn hơn trên mỗi dòng. Nó được quảng bá như một công cụ hỗ trợ đọc cho ADHD, chứng khó đọc và đôi khi là tự kỷ.",
+    "bionicHelp.point1":
+      "Khoảng 40% đầu tiên của mỗi từ được làm đậm, phần còn lại giữ độ đậm bình thường — ý tưởng là bộ não nhận ra một từ từ phần đầu và tự hoàn thiện phần cuối dựa vào ngữ cảnh.",
+    "bionicHelp.point2":
+      "Bằng chứng còn trái chiều. Một số nghiên cứu có đối chứng không tìm thấy cải thiện đáng kể nào về tốc độ đọc hay khả năng hiểu so với văn bản thông thường, và một số độc giả thấy nó gây xao nhãng hơn, chứ không phải ít hơn. Hãy tự thử thay vì cho rằng nó sẽ hữu ích.",
+    "bionicHelp.point3":
+      "Áp dụng cho bất kỳ tài liệu nào đang hiển thị, giống như ngắt dòng — nó không giới hạn ở văn xuôi, vì vậy bật tính năng này khi chỉnh sửa mã cũng làm đậm phần đầu của định danh và từ khóa.",
+    "bionicHelp.footer":
+      "Bật tính năng này bất cứ lúc nào từ Xem ▸ Đọc Bionic, bằng nút bên dưới, hoặc nhấn Ctrl+Shift+B.",
+    "bionicHelp.turnOn": "Bật Đọc Bionic",
+    "bionicHelp.turnOff": "Tắt Đọc Bionic",
+
+    "help.center": "Trợ giúp & Hướng dẫn",
+    "modal.helpCenterTitle": "Trợ giúp & Hướng dẫn",
+    "help.searchPlaceholder": "Tìm trong trợ giúp…",
+    "help.noResults": "Không có chủ đề phù hợp",
+
+    "help.overviewTitle": "Tổng quan",
+    "help.overviewIntro":
+      "JustCode là một trình soạn thảo nhỏ, nhanh cho HTML, CSS, JavaScript và văn bản hoặc mã nói chung — được tạo ra để mở nhanh và không gây vướng víu, không phải để thay thế một IDE đầy đủ.",
+    "help.overviewPoint1": "Tệp mở dưới dạng thẻ trong một cửa sổ; không có dự án hay không gian làm việc nào cần thiết lập trước.",
+    "help.overviewPoint2": "Nhấn F1 bất cứ lúc nào để xem đầy đủ danh sách phím tắt.",
+
+    "help.filesTitle": "Tệp",
+    "help.filesIntro": "Tệp mở dưới dạng thẻ; JustCode không có khái niệm dự án hay không gian làm việc.",
+    "help.filesPoint1":
+      "Tệp mới (Ctrl+N) cung cấp mẫu khởi đầu cho nhiều ngôn ngữ, hoặc tài liệu trống; Mở… (Ctrl+O) chấp nhận nhiều tệp cùng lúc.",
+    "help.filesPoint2":
+      "Lưu (Ctrl+S) và Lưu dưới dạng (Ctrl+Shift+S) ghi trực tiếp vào ổ đĩa; Lưu tất cả (Ctrl+Alt+S) bao phủ mọi thẻ đã thay đổi cùng một lúc.",
+    "help.filesPoint3": "Tệp ▸ Tệp gần đây ghi nhớ 15 tệp gần nhất qua các lần khởi động lại.",
+    "help.filesPoint4":
+      "Tệp ▸ Liên kết tệp… đăng ký JustCode với Windows để nó xuất hiện như một tùy chọn \"Mở bằng\" — hoặc mặc định — cho các loại tệp mà nó hiểu.",
+
+    "help.editingTitle": "Chỉnh sửa",
+    "help.editingIntro": "Chỉnh sửa tiêu chuẩn, cộng thêm một vài tính năng bổ sung ngoài cắt, sao chép, dán, hoàn tác và làm lại.",
+    "help.editingPoint1":
+      "Ctrl+/ bật/tắt chú thích bằng cú pháp của ngôn ngữ hiện tại — chú thích dòng cho một dòng, chú thích khối cho một vùng chọn.",
+    "help.editingPoint2":
+      "Ctrl+Shift+U / Ctrl+Shift+L đổi chữ hoa/thường của vùng chọn; Ctrl+Alt+G chèn một GUID mới.",
+    "help.editingPoint3":
+      "Alt+↑ / Alt+↓ di chuyển dòng hiện tại; Alt+Shift+↑ / Alt+Shift+↓ nhân đôi dòng đó lên trên hoặc xuống dưới.",
+    "help.editingPoint4": "Ctrl+nhấp thêm một con trỏ khác; Alt+kéo tạo vùng chọn hình chữ nhật (theo cột).",
+
+    "help.searchTitle": "Tìm kiếm",
+    "help.searchIntro": "Tìm và thay thế trong tệp hiện tại, hoặc nhảy thẳng đến một định nghĩa.",
+    "help.searchPoint1":
+      "Ctrl+F mở Tìm; Ctrl+H mở Tìm và thay thế. F3 / Shift+F3 lặp lại tìm kiếm gần nhất tiến hoặc lùi.",
+    "help.searchPoint2":
+      "Ctrl+Shift+G mở Đi đến ký hiệu — danh sách có thể lọc các hàm, lớp và khai báo khác trong tệp hiện tại.",
+
+    "help.bookmarksTitle": "Đánh dấu trang",
+    "help.bookmarksIntro": "Ba vị trí đánh dấu trang được đánh số cho mỗi tài liệu, để di chuyển quanh một tệp lớn mà không cần cuộn để tìm lại vị trí của bạn.",
+    "help.bookmarksPoint1":
+      "Ctrl+Shift+1 / 2 / 3 đặt hoặc xóa dấu trang tại dòng hiện tại; Ctrl+1 / 2 / 3 nhảy thẳng đến đó.",
+
+    "help.splitTabsTitle": "Chia màn hình & Thẻ",
+    "help.splitTabsIntro": "Các thẻ có thể được sắp xếp thành tối đa bốn khung.",
+    "help.splitTabsPoint1":
+      "Ctrl+K theo sau bởi một phím mũi tên sẽ chia khung đang hoạt động theo hướng đó; kéo một thẻ đến cạnh màn hình cũng làm điều tương tự.",
+    "help.splitTabsPoint2":
+      "Kéo một thẻ vào thanh thẻ của khung khác sẽ di chuyển nó đến đó; kéo thẻ cuối cùng ra khỏi một khung sẽ hủy việc chia.",
+    "help.splitTabsPoint3": "Ctrl+Tab / Ctrl+Shift+Tab lần lượt chuyển qua các thẻ; nhấp chuột giữa vào một thẻ để đóng nó.",
+
+    "help.foldingTitle": "Thu gọn mã",
+    "help.foldingIntro": "Bất kỳ khối nào cũng có thể được thu gọn để không gây vướng víu.",
+    "help.foldingPoint1":
+      "Nhấp vào mũi tên trong lề, hoặc nhấn Ctrl+Shift+[ / ] để thu gọn hoặc mở rộng khối tại con trỏ.",
+    "help.foldingPoint2": "Ctrl+Alt+[ / ] thu gọn hoặc mở rộng mọi thứ trong tệp cùng một lúc.",
+
+    "help.terminalTitle": "Terminal",
+    "help.terminalIntro": "Một bảng terminal tích hợp, không phải cửa sổ riêng.",
+    "help.terminalPoint1":
+      "Ctrl+` hiển thị hoặc ẩn nó; Ctrl+Shift+` mở một terminal mới bên cạnh bất kỳ terminal nào đang chạy.",
+    "help.terminalPoint2": "Một terminal mới bắt đầu trong thư mục của tệp đang được chỉnh sửa.",
+    "help.terminalPoint3":
+      "Tệp ▸ Chạy trong terminal (Ctrl+F5) chạy tập lệnh hiện tại và sau đó để shell mở tại dấu nhắc, để có thể kiểm tra lỗi ngay tại chỗ.",
+
+    "help.runTitle": "Chạy",
+    "help.runIntro": "F5 hiển thị tệp hiện tại đúng như cách nó thực sự trông như thế nào hoặc hoạt động ra sao, thay vì dưới dạng văn bản nguồn.",
+    "help.runPoint1":
+      "HTML: mở trong trình duyệt mặc định. Chạy lại cùng một tệp sẽ làm mới thẻ đó thay vì mở thẻ thứ hai, miễn là nó vẫn đang mở.",
+    "help.runPoint2": "Markdown: trước tiên được kết xuất thành tài liệu HTML có định dạng, sau đó xem trước theo cùng cách.",
+    "help.runPoint3":
+      "Tập lệnh PowerShell, Batch và Shell: chạy trong cửa sổ console riêng, cửa sổ này vẫn mở sau khi tập lệnh kết thúc.",
+
+    "help.wordWrapIntro":
+      "Mặc định tắt. Ngắt dòng giữ các dòng dài trên màn hình mà không cần cuộn ngang, nhưng phá vỡ sự tương ứng từng dòng giữa lề và số dòng thực tế.",
+    "help.wordWrapPoint1": "Bật/tắt từ Xem ▸ Ngắt dòng hoặc Alt+Z. Áp dụng cho tài liệu hiện đang hiển thị trên màn hình.",
+
+    "help.spellCheckIntro": "Mặc định tắt — hầu hết các định danh trong mã nguồn đều \"sai chính tả\" theo định nghĩa.",
+    "help.spellCheckPoint1":
+      "Chạy như một linter trên văn bản thực tế thay vì trình kiểm tra tích hợp của khung nhìn web, vì vậy lỗi chính tả được tính vào tổng số Vấn đề và đi kèm với các đề xuất sửa lỗi.",
+    "help.spellCheckPoint2": "Bật/tắt từ Xem ▸ Kiểm tra chính tả.",
+
+    "help.languageTitle": "Ngôn ngữ giao diện",
+    "help.languageIntro": "Ngôn ngữ của các menu và hộp thoại riêng của JustCode — độc lập với nội dung hoặc ngôn ngữ lập trình của bất kỳ tệp nào.",
+    "help.languagePoint1":
+      "Xem ▸ Ngôn ngữ… liệt kê mỗi bản dịch bằng tên riêng của nó thay vì tên tiếng Anh, vì \"German\" không giúp ích gì cho người chỉ đọc được tiếng Việt.",
+    "help.languagePoint2": "Tiếng Anh được tích hợp sẵn; mọi ngôn ngữ khác sẽ được tải xuống khi được chọn lần đầu.",
+
+    "sc.toolbar": "Bật/tắt thanh công cụ",
+    "sc.statusBar": "Bật/tắt thanh trạng thái",
+    "sc.spellCheck": "Bật/tắt kiểm tra chính tả",
+    "sc.bionicReading": "Bật/tắt Đọc Bionic",
+    "sc.cycleTheme": "Xoay vòng chủ đề (Tối ▸ Sáng ▸ Tự kỷ)",
   },
 };

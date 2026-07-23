@@ -9,8 +9,10 @@ import {
   dropCursor,
   rectangularSelection,
   crosshairCursor,
+  Decoration,
+  ViewPlugin,
 } from "@codemirror/view";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, RangeSetBuilder } from "@codemirror/state";
 import {
   defaultKeymap,
   history,
@@ -51,6 +53,7 @@ const themeConf = new Compartment();
 const fontSizeConf = new Compartment();
 const spellcheckConf = new Compartment();
 const wrapConf = new Compartment();
+const bionicConf = new Compartment();
 
 export const DEFAULT_FONT_SIZE = 14;
 let currentFontSize = DEFAULT_FONT_SIZE;
@@ -85,6 +88,66 @@ let currentWordWrap = false;
 export function wordWrapEffect(enabled) {
   currentWordWrap = enabled;
   return wrapConf.reconfigure(enabled ? EditorView.lineWrapping : []);
+}
+
+/**
+ * Bionic Reading: bolds the leading portion of each word so the eye can
+ * anchor on fewer fixation points per line. Evidence that this actually
+ * speeds up reading is mixed, but it costs nothing to offer as a toggle —
+ * see the Help ▸ Bionic Reading page for the caveat shown to users.
+ *
+ * Applies to whatever document is on screen, the same as word wrap — it is
+ * not restricted to prose-like languages, since a code identifier is still
+ * made of words a reader is scanning.
+ */
+const BIONIC_WORD = /[A-Za-z][A-Za-z'’]*/g;
+
+/** How much of a word to bold. Short words end up fully bold; longer words
+ * keep a readable tail — the same shape most Bionic Reading implementations
+ * use, though the exact ratio is not standardised anywhere. */
+function bionicBoldLength(wordLength) {
+  return Math.max(1, Math.ceil(wordLength * 0.4));
+}
+
+const bionicMark = Decoration.mark({ class: "cm-bionic-bold" });
+
+/** Only the visible ranges are scanned — cheap enough to redo on every
+ * viewport change, and correct even for documents too large to decorate
+ * in full. */
+function bionicDecorations(view) {
+  const builder = new RangeSetBuilder();
+  for (const { from, to } of view.visibleRanges) {
+    const text = view.state.doc.sliceString(from, to);
+    BIONIC_WORD.lastIndex = 0;
+    let match;
+    while ((match = BIONIC_WORD.exec(text))) {
+      const start = from + match.index;
+      builder.add(start, start + bionicBoldLength(match[0].length), bionicMark);
+    }
+  }
+  return builder.finish();
+}
+
+const bionicPlugin = ViewPlugin.fromClass(
+  class {
+    constructor(view) {
+      this.decorations = bionicDecorations(view);
+    }
+    update(update) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = bionicDecorations(update.view);
+      }
+    }
+  },
+  { decorations: (instance) => instance.decorations },
+);
+
+let currentBionicReading = false;
+
+/** Effect that turns Bionic Reading on or off; also the mode new states start in. */
+export function bionicReadingEffect(enabled) {
+  currentBionicReading = enabled;
+  return bionicConf.reconfigure(enabled ? [bionicPlugin] : []);
 }
 
 let currentSpellcheck = false;
@@ -202,6 +265,7 @@ function baseExtensions(listeners) {
       indentWithTab,
     ]),
     EditorView.theme({ "&": { height: "100%" } }),
+    EditorView.baseTheme({ ".cm-bionic-bold": { fontWeight: "700" } }),
     EditorView.updateListener.of((update) => {
       // Every pane shares one listener object and one status bar, so a pane
       // that is not focused must stay quiet — otherwise scrolling a background
@@ -255,6 +319,7 @@ export function createState(text, languageId, listeners, themeId, { readOnly = f
       // spell linter itself is installed unconditionally in baseExtensions.
       spellcheckConf.of([]),
       wrapConf.of(currentWordWrap ? EditorView.lineWrapping : []),
+      bionicConf.of(currentBionicReading ? [bionicPlugin] : []),
       // The placeholder shown when no tab is open must not accept edits — they
       // would belong to no tab and be lost on the next action.
       readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],

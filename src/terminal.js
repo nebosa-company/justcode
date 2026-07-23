@@ -104,6 +104,9 @@ function buildPanel(app, before) {
     element.className = "terminal-action";
     element.type = "button";
     element.title = title;
+    // Icon only, no visible text — the accessible name has to come from
+    // here rather than relying on the `title` fallback.
+    element.setAttribute("aria-label", title);
     element.innerHTML = iconMarkup(icon);
     element.addEventListener("click", run);
     return element;
@@ -196,7 +199,9 @@ function renderTabs() {
 
     const close = document.createElement("button");
     close.className = "close";
+    close.type = "button";
     close.title = t("terminal.close");
+    close.setAttribute("aria-label", t("terminal.close"));
     close.append(iconElement("close"));
     close.addEventListener("mousedown", (event) => {
       if (event.button !== 0) return;

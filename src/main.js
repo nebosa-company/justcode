@@ -10,8 +10,8 @@ import { deleteLine, undo, redo } from "@codemirror/commands";
 import { setLinkHandler } from "./links.js";
 import { toggleBookmark, toggleNextBookmark, gotoBookmark, BOOKMARK_SLOTS } from "./bookmarks.js";
 import {
-  showShortcuts,
   showAbout,
+  showHelpCenter,
   showLanguageDialog,
   showSymbolPicker,
   askSaveChanges,
@@ -33,11 +33,13 @@ import {
   fontSizeEffect,
   spellcheckEffect,
   wordWrapEffect,
+  bionicReadingEffect,
   toggleCommentSmart,
   cursorPosition,
   countDiagnostics,
   DEFAULT_FONT_SIZE,
 } from "./editor.js";
+import { THEMES } from "./theme.js";
 import {
   languageIdFor,
   LANGUAGE_LABELS,
@@ -90,6 +92,7 @@ const STORAGE = {
   locale: "justcode.locale",
   recent: "justcode.recent",
   wordWrap: "justcode.wordWrap",
+  bionicReading: "justcode.bionicReading",
   newFavourites: "justcode.newFavourites",
 };
 
@@ -138,6 +141,9 @@ let spellcheck = false;
 // Off by default: wrapping makes long lines readable but breaks the one-row-
 // per-line correspondence that the gutter and column numbers rely on.
 let wordWrap = false;
+// Off by default: it is a personal reading aid, not something a document
+// should suddenly look like for every other file the user happens to open.
+let bionicReading = false;
 
 const listeners = {
   // Only the focused pane drives the shared status bar.
@@ -591,7 +597,8 @@ function renderTabsFor(pane) {
     const close = document.createElement("button");
     close.className = "close";
     close.innerHTML = iconMarkup("close");
-    close.title = "Close (Ctrl+W)";
+    close.title = `${t("file.closeTab")} (Ctrl+W)`;
+    close.setAttribute("aria-label", t("file.closeTab"));
     // Acts on mousedown, not click: closing re-renders this bar, so by mouseup
     // this button may no longer exist and the click would never fire.
     close.addEventListener("mousedown", (event) => {
@@ -856,10 +863,10 @@ function showLanguagePicker() {
 
 // ------------------------------------------------------------------- commands
 
-/** Creates an untitled file of `languageId`, or a blank .html when null. */
+/** Creates an untitled file of `languageId`, or a blank plain-text one when null. */
 function createFile(languageId) {
   untitledCount++;
-  const extension = languageId ? primaryExtension(languageId) : "html";
+  const extension = primaryExtension(languageId || "text");
   const name = `untitled-${untitledCount}.${extension}`;
   openTab({ path: null, name, text: languageId ? templateFor(languageId, name) : "" });
   renderStatus();
@@ -922,8 +929,27 @@ function samePathKey(path) {
 /** Paths with a read in flight, so two opens cannot both create a tab. */
 const opening = new Set();
 
+/**
+ * Moves the caret to `line` (1-based, `column` optional and also 1-based) and
+ * centres it — the `path:line[:column]` half of what a command-line argument
+ * or an "Open with" launch can ask for.
+ */
+function revealLine(view, line, column) {
+  if (!view || !line) return;
+  const doc = view.state.doc;
+  const clamped = Math.min(Math.max(line, 1), doc.lines);
+  const lineInfo = doc.line(clamped);
+  const col = column ? Math.min(Math.max(column - 1, 0), lineInfo.length) : 0;
+  const pos = lineInfo.from + col;
+  view.dispatch({
+    selection: { anchor: pos },
+    effects: EditorView.scrollIntoView(pos, { y: "center" }),
+  });
+  view.focus();
+}
+
 /** Opens one path, focusing it instead if it is already open. */
-async function openPath(path, { quiet = false } = {}) {
+async function openPath(path, { quiet = false, line = null, column = null } = {}) {
   // Windows paths differ only by case and separator; compare them normalised so
   // C:/a.txt and c:\a.txt do not open as two tabs on the same file.
   const key = samePathKey(path);
@@ -932,6 +958,7 @@ async function openPath(path, { quiet = false } = {}) {
     activateTab(existing.id);
     // Re-opening should still bump the file up the recent list.
     rememberRecentFile(existing.path);
+    revealLine(paneOfTab(existing.id)?.view, line, column);
     return true;
   }
   // Two overlapping opens (a forwarded open-files event arriving while
@@ -940,8 +967,9 @@ async function openPath(path, { quiet = false } = {}) {
   opening.add(key);
   try {
     const text = await invoke("read_text_file", { path });
-    openTab({ path, name: baseName(path), text });
+    const tab = openTab({ path, name: baseName(path), text });
     rememberRecentFile(path);
+    revealLine(paneOfTab(tab.id)?.view, line, column);
     return true;
   } catch (error) {
     if (!quiet) {
@@ -965,12 +993,14 @@ async function openFile() {
 /**
  * Opens files handed over by the OS — either on the command line at launch or
  * forwarded by the single-instance plugin when Explorer opens another document
- * while the app is already running.
+ * while the app is already running. Each target is `{ path, line, column }`;
+ * `line`/`column` come from a `path:line[:column]` argument and are `null`
+ * otherwise.
  */
-async function openExternalFiles(paths) {
+async function openExternalFiles(targets) {
   let opened = false;
-  for (const path of paths) {
-    if (await openPath(path, { quiet: true })) opened = true;
+  for (const { path, line, column } of targets) {
+    if (await openPath(path, { quiet: true, line, column })) opened = true;
   }
   if (opened) {
     // A file arriving from Explorer replaces the placeholder blank document.
@@ -1560,23 +1590,44 @@ function setFontSize(size) {
   localStorage.setItem(STORAGE.fontSize, String(fontSize));
 }
 
+// One icon and one label key per theme, in menu/toolbar-facing order — used
+// both for the toolbar button and for computing what it cycles to next.
+const THEME_ICONS = { dark: "moon", light: "sun", autism: "leaf" };
+const THEME_LABEL_KEYS = { dark: "view.darkTheme", light: "view.lightTheme", autism: "view.autismTheme" };
+
 /**
  * Applies a theme to the app chrome and to every open document. Tabs that are
  * not on screen have no view to dispatch through, so their stored states are
  * advanced directly.
  */
 function setTheme(next) {
-  theme = next === "light" ? "light" : "dark";
+  theme = THEMES.includes(next) ? next : "dark";
   document.documentElement.dataset.theme = theme;
 
   applyEffectsEverywhere(themeEffect(theme));
 
-  dom.themeButton.innerHTML = iconMarkup(theme === "dark" ? "sun" : "moon");
-  dom.themeButton.title = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+  // The toolbar button shows the *current* theme's icon — with three themes,
+  // "which one would clicking give me" is no longer obvious from a binary
+  // sun/moon, but "which one am I looking at right now" always is. The
+  // tooltip instead names what a click switches *to*, so the predictive
+  // half of the old design survives in the one place text can carry it.
+  const nextTheme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  dom.themeButton.innerHTML = iconMarkup(THEME_ICONS[theme] ?? "sun");
+  dom.themeButton.title = t("toolbar.switchToTheme", { theme: t(THEME_LABEL_KEYS[nextTheme]) });
+  // The button has no visible text of its own — icon only — so the
+  // accessible name has to be set explicitly rather than relying on the
+  // `title` fallback, which is what most screen reader/browser pairings
+  // read reliably.
+  dom.themeButton.setAttribute("aria-label", dom.themeButton.title);
   localStorage.setItem(STORAGE.theme, theme);
   // The terminals read their colours from the same CSS variables, but xterm
   // caches them, so it has to be told the palette changed.
   refreshTerminalTheme();
+}
+
+/** Rotates Dark ▸ Light ▸ Autism ▸ Dark — the toolbar button and Ctrl+Shift+T. */
+function cycleTheme() {
+  setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
 }
 
 function setToolbarVisible(visible) {
@@ -1642,6 +1693,14 @@ function setWordWrap(enabled) {
   wordWrap = enabled;
   applyEffectsEverywhere(wordWrapEffect(enabled));
   localStorage.setItem(STORAGE.wordWrap, String(enabled));
+  if (view) view.focus();
+}
+
+/** Turns Bionic Reading on or off for every open document. */
+function setBionicReading(enabled) {
+  bionicReading = enabled;
+  applyEffectsEverywhere(bionicReadingEffect(enabled));
+  localStorage.setItem(STORAGE.bionicReading, String(enabled));
   if (view) view.focus();
 }
 
@@ -1782,9 +1841,11 @@ function editorContextMenu(event) {
  * from `t()` at build time rather than being baked in once at startup.
  */
 function buildMenus() {
+  const nextTheme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
   return [
   {
     label: t("menu.file"),
+    mnemonic: "f",
     items: [
       { label: t("file.new"), icon: "file", accel: "Ctrl+N", run: newFile },
       { label: t("file.open"), icon: "folder", accel: "Ctrl+O", run: openFile },
@@ -1875,6 +1936,7 @@ function buildMenus() {
   },
   {
     label: t("menu.edit"),
+    mnemonic: "e",
     items: [
       // `enabled` on everything that writes: with no tab open the editor shows
       // a read-only placeholder belonging to no file, and a direct dispatch
@@ -1929,6 +1991,7 @@ function buildMenus() {
   },
   {
     label: t("menu.view"),
+    mnemonic: "v",
     items: [
       { label: t("view.zoomIn"), icon: "zoomIn", accel: "Ctrl++", run: () => setFontSize(fontSize + 1) },
       { label: t("view.zoomOut"), icon: "zoomOut", accel: "Ctrl+-", run: () => setFontSize(fontSize - 1) },
@@ -1942,12 +2005,14 @@ function buildMenus() {
       {
         label: t("view.toolbar"),
         icon: "toolbar",
+        accel: "Alt+T",
         checked: () => showToolbar,
         run: () => setToolbarVisible(!showToolbar),
       },
       {
         label: t("view.statusBar"),
         icon: "statusbar",
+        accel: "Alt+S",
         checked: () => showStatusbar,
         run: () => setStatusbarVisible(!showStatusbar),
       },
@@ -1955,14 +2020,23 @@ function buildMenus() {
       {
         label: t("view.wordWrap"),
         icon: "wordWrap",
+        accel: "Alt+Z",
         checked: () => wordWrap,
         run: () => setWordWrap(!wordWrap),
       },
       {
         label: t("view.spellCheck"),
         icon: "spellcheck",
+        accel: "F7",
         checked: () => spellcheck,
         run: () => setSpellcheck(!spellcheck),
+      },
+      {
+        label: t("view.bionicReading"),
+        icon: "bold",
+        accel: "Ctrl+Shift+B",
+        checked: () => bionicReading,
+        run: () => setBionicReading(!bionicReading),
       },
       { separator: true },
       {
@@ -1994,17 +2068,30 @@ function buildMenus() {
         run: () => splitActive("right"),
       },
       { separator: true },
+      // Ctrl+Shift+T rotates dark ▸ light ▸ autism ▸ dark; shown only on
+      // whichever of the three is next in that rotation, so the hint stays
+      // accurate to what pressing it right now actually does.
       {
         label: t("view.darkTheme"),
         icon: "moon",
+        accel: nextTheme === "dark" ? "Ctrl+Shift+T" : undefined,
         checked: () => theme === "dark",
         run: () => setTheme("dark"),
       },
       {
         label: t("view.lightTheme"),
         icon: "sun",
+        accel: nextTheme === "light" ? "Ctrl+Shift+T" : undefined,
         checked: () => theme === "light",
         run: () => setTheme("light"),
+      },
+      {
+        label: t("view.autismTheme"),
+        icon: "leaf",
+        hint: t("view.autismThemeHint"),
+        accel: nextTheme === "autism" ? "Ctrl+Shift+T" : undefined,
+        checked: () => theme === "autism",
+        run: () => setTheme("autism"),
       },
       { separator: true },
       {
@@ -2047,8 +2134,9 @@ function buildMenus() {
   },
   {
     label: t("menu.help"),
+    mnemonic: "h",
     items: [
-      { label: t("help.shortcuts"), icon: "keyboard", accel: "F1", run: showShortcuts },
+      { label: t("help.center"), icon: "help", accel: "F1", run: showHelp },
       { separator: true },
       { label: t("help.about"), icon: "info", run: showAboutDialog },
     ],
@@ -2095,6 +2183,20 @@ async function showAboutDialog() {
   showAbout(version);
 }
 
+/**
+ * Live state for the two Help Centre pages with an action button. Getters
+ * rather than plain values, since the Help Centre re-reads them after its
+ * own button clicks instead of closing and reopening.
+ */
+function showHelp() {
+  showHelpCenter({
+    autismTheme: () => theme === "autism",
+    setAutismTheme: () => setTheme("autism"),
+    bionicReading: () => bionicReading,
+    toggleBionicReading: () => setBionicReading(!bionicReading),
+  });
+}
+
 // ------------------------------------------------------------------- wiring
 
 function decorate(id, icon) {
@@ -2109,7 +2211,7 @@ decorate("btn-save", "save").addEventListener("click", () => saveTab(activeTab()
 decorate("btn-run", "play").addEventListener("click", run);
 decorate("btn-zoom-in", "zoomIn").addEventListener("click", () => setFontSize(fontSize + 1));
 decorate("btn-zoom-out", "zoomOut").addEventListener("click", () => setFontSize(fontSize - 1));
-dom.themeButton.addEventListener("click", () => setTheme(theme === "dark" ? "light" : "dark"));
+dom.themeButton.addEventListener("click", cycleTheme);
 dom.statusProblems.addEventListener("click", showProblems);
 dom.statusLang.addEventListener("click", showLanguagePicker);
 dom.statusPath.addEventListener("click", copyPathToClipboard);
@@ -2182,7 +2284,37 @@ window.addEventListener(
     }
     if (event.key === "F1" && !ctrl) {
       event.preventDefault();
-      showShortcuts();
+      showHelp();
+      return;
+    }
+    // Alt+Z for word wrap, the same binding VS Code uses. Plain Alt rather
+    // than a Ctrl combo: every Ctrl+Alt+<letter> is indistinguishable from
+    // AltGr typing a special character (see the `altGr` note below), so it
+    // is not safe ground for a new binding.
+    if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      setWordWrap(!wordWrap);
+      return;
+    }
+    // F7 for spell check: the Word/Outlook convention, close enough even
+    // though those run a one-off pass rather than toggling a live checker.
+    if (event.key === "F7" && !ctrl) {
+      event.preventDefault();
+      setSpellcheck(!spellcheck);
+      return;
+    }
+    // Alt+T / Alt+S for the toolbar and status bar. Same reasoning as Alt+Z
+    // above — plain Alt avoids the Ctrl+Alt/AltGr ambiguity — chosen to match
+    // Word Wrap and Bionic Reading already having a binding, so every View
+    // toggle behaves consistently rather than some being mouse/menu-only.
+    if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "t") {
+      event.preventDefault();
+      setToolbarVisible(!showToolbar);
+      return;
+    }
+    if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      setStatusbarVisible(!showStatusbar);
       return;
     }
     if (!ctrl) return;
@@ -2287,6 +2419,12 @@ window.addEventListener(
       } else {
         goToSymbol();
       }
+    } else if (!altGr && event.shiftKey && key === "b") {
+      event.preventDefault();
+      setBionicReading(!bionicReading);
+    } else if (!altGr && event.shiftKey && key === "t") {
+      event.preventDefault();
+      cycleTheme();
     }
   },
   true,
@@ -2315,7 +2453,8 @@ window.addEventListener("contextmenu", (event) => {
 
 // The stored theme has to be known before the first state is built, because
 // setTheme dispatches into a compartment that only exists once one is.
-theme = localStorage.getItem(STORAGE.theme) === "light" ? "light" : "dark";
+const storedTheme = localStorage.getItem(STORAGE.theme);
+theme = THEMES.includes(storedTheme) ? storedTheme : "dark";
 const firstPane = createPane();
 activePaneId = firstPane.id;
 view = firstPane.view;
@@ -2328,6 +2467,7 @@ setStatusbarVisible(localStorage.getItem(STORAGE.statusbar) !== "false");
 // Opt-in: only a stored "true" turns these on.
 setSpellcheck(localStorage.getItem(STORAGE.spellcheck) === "true");
 setWordWrap(localStorage.getItem(STORAGE.wordWrap) === "true");
+setBionicReading(localStorage.getItem(STORAGE.bionicReading) === "true");
 renderTabs();
 renderStatus();
 

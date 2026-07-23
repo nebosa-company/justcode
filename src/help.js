@@ -12,6 +12,15 @@ import { LOCALES, t } from "./i18n.js";
  */
 const SHORTCUTS = [
   {
+    group: "sc.g.menus",
+    items: [
+      ["Alt+F", "sc.openFileMenu"],
+      ["Alt+E", "sc.openEditMenu"],
+      ["Alt+V", "sc.openViewMenu"],
+      ["Alt+H", "sc.openHelpMenu"],
+    ],
+  },
+  {
     group: "sc.g.file",
     items: [
       ["Ctrl+N", "sc.newFile"],
@@ -110,7 +119,12 @@ const SHORTCUTS = [
       ["F8", "sc.showProblems"],
       ["Ctrl+Shift+M", "sc.problemsPanel"],
       ["Ctrl+Shift+G", "sc.goToSymbol"],
-      ["sc.k.wordWrap", "sc.wordWrap"],
+      ["Alt+T", "sc.toolbar"],
+      ["Alt+S", "sc.statusBar"],
+      ["Alt+Z", "sc.wordWrap"],
+      ["F7", "sc.spellCheck"],
+      ["Ctrl+Shift+B", "sc.bionicReading"],
+      ["Ctrl+Shift+T", "sc.cycleTheme"],
       ["Ctrl+`", "sc.terminal"],
       ["Ctrl+Shift+`", "terminal.new"],
       ["Ctrl+F5", "file.runInTerminal"],
@@ -154,6 +168,9 @@ function closeOverlay() {
   overlay.remove();
   overlay = null;
   document.removeEventListener("keydown", onOverlayKey, true);
+  // Un-inerts the app behind the dialog — see the note in openOverlay.
+  const app = document.getElementById("app");
+  if (app) app.inert = false;
 
   const restore = focusBeforeOverlay;
   focusBeforeOverlay = null;
@@ -193,15 +210,21 @@ function openOverlay(title, wide, onClosed) {
 
   const dialog = document.createElement("div");
   dialog.className = `modal${wide ? " modal-wide" : ""}`;
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
 
   const header = document.createElement("div");
   header.className = "modal-header";
   const heading = document.createElement("h2");
+  heading.id = "modal-heading";
   heading.textContent = title;
+  dialog.setAttribute("aria-labelledby", heading.id);
   const close = document.createElement("button");
   close.className = "modal-close";
+  close.type = "button";
   close.innerHTML = iconMarkup("close");
   close.title = t("modal.close");
+  close.setAttribute("aria-label", t("modal.close"));
   close.addEventListener("click", closeOverlay);
   header.append(heading, close);
 
@@ -212,6 +235,13 @@ function openOverlay(title, wide, onClosed) {
   overlay.append(dialog);
   document.body.append(overlay);
   document.addEventListener("keydown", onOverlayKey, true);
+  // Only one dialog is ever open at a time (openOverlay always closes the
+  // previous one first), so the rest of the app can be made inert rather
+  // than just visually covered — Tab and a screen reader's virtual cursor
+  // can no longer wander into it while this is up, and it is undone in
+  // closeOverlay.
+  const app = document.getElementById("app");
+  if (app) app.inert = true;
   close.focus();
   return body;
 }
@@ -502,6 +532,9 @@ export function showNewFile(types, favourites, onPick, onFavouritesChanged) {
         star.className = `newfile-star${on ? " on" : ""}`;
         star.title = t(on ? "newFile.unfavourite" : "newFile.favourite");
         star.setAttribute("aria-pressed", String(on));
+        // The glyph itself isn't a meaningful name for a screen reader to read
+        // out — it would announce the character, not "favourite"/"unfavourite".
+        star.setAttribute("aria-label", star.title);
         star.textContent = on ? "★" : "☆";
         star.addEventListener("click", (event) => {
           event.stopPropagation();
@@ -701,8 +734,9 @@ export function showAssociations(groups, checkedNow, onApply) {
   body.append(buttons);
 }
 
-export function showShortcuts() {
-  const body = openOverlay(t("modal.shortcutsTitle"), true);
+/** Builds the shortcut-reference columns into any container — the standalone
+ * F1 dialog and the Help Centre's own Shortcuts page both call this. */
+function renderShortcutsInto(container) {
   const columns = document.createElement("div");
   columns.className = "shortcut-columns";
   for (const { group, items } of SHORTCUTS) {
@@ -724,7 +758,242 @@ export function showShortcuts() {
     section.append(heading, table);
     columns.append(section);
   }
-  body.append(columns);
+  container.append(columns);
+}
+
+/**
+ * One entry per Help Centre sidebar item. Most are plain prose (an intro plus
+ * a few bullet points); `feature` marks the two with a live on/off action
+ * button, and `custom` marks the one (Shortcuts) with its own layout instead
+ * of prose.
+ */
+const HELP_TOPICS = [
+  { id: "overview", icon: "info", titleKey: "help.overviewTitle" },
+  { id: "files", icon: "file", titleKey: "help.filesTitle" },
+  { id: "editing", icon: "comment", titleKey: "help.editingTitle" },
+  { id: "search", icon: "search", titleKey: "help.searchTitle" },
+  { id: "bookmarks", icon: "bookmark", titleKey: "help.bookmarksTitle" },
+  { id: "splitTabs", icon: "splitRight", titleKey: "help.splitTabsTitle" },
+  { id: "folding", icon: "chevronRight", titleKey: "help.foldingTitle" },
+  { id: "terminal", icon: "terminal", titleKey: "help.terminalTitle" },
+  { id: "run", icon: "play", titleKey: "help.runTitle" },
+  { id: "wordWrap", icon: "wordWrap", titleKey: "view.wordWrap" },
+  { id: "spellCheck", icon: "spellcheck", titleKey: "view.spellCheck" },
+  { id: "autismTheme", icon: "leaf", titleKey: "help.autismTheme", feature: "autismTheme" },
+  { id: "bionicReading", icon: "bold", titleKey: "help.bionicReading", feature: "bionicReading" },
+  { id: "language", icon: "globe", titleKey: "help.languageTitle" },
+  { id: "shortcuts", icon: "keyboard", titleKey: "help.shortcuts", custom: true },
+];
+
+/** The intro/points/footer keys for a topic, and — for the two with one — the
+ * action button's live state. Kept apart from `HELP_TOPICS` since it needs
+ * `ctx` (current theme/Bionic Reading state) to compute the button. */
+function topicContent(topic, ctx) {
+  switch (topic.id) {
+    case "overview":
+      return { intro: t("help.overviewIntro"), points: [t("help.overviewPoint1"), t("help.overviewPoint2")] };
+    case "files":
+      return {
+        intro: t("help.filesIntro"),
+        points: [
+          t("help.filesPoint1"),
+          t("help.filesPoint2"),
+          t("help.filesPoint3"),
+          t("help.filesPoint4"),
+        ],
+      };
+    case "editing":
+      return {
+        intro: t("help.editingIntro"),
+        points: [
+          t("help.editingPoint1"),
+          t("help.editingPoint2"),
+          t("help.editingPoint3"),
+          t("help.editingPoint4"),
+        ],
+      };
+    case "search":
+      return { intro: t("help.searchIntro"), points: [t("help.searchPoint1"), t("help.searchPoint2")] };
+    case "bookmarks":
+      return { intro: t("help.bookmarksIntro"), points: [t("help.bookmarksPoint1")] };
+    case "splitTabs":
+      return {
+        intro: t("help.splitTabsIntro"),
+        points: [t("help.splitTabsPoint1"), t("help.splitTabsPoint2"), t("help.splitTabsPoint3")],
+      };
+    case "folding":
+      return { intro: t("help.foldingIntro"), points: [t("help.foldingPoint1"), t("help.foldingPoint2")] };
+    case "terminal":
+      return {
+        intro: t("help.terminalIntro"),
+        points: [t("help.terminalPoint1"), t("help.terminalPoint2"), t("help.terminalPoint3")],
+      };
+    case "run":
+      return {
+        intro: t("help.runIntro"),
+        points: [t("help.runPoint1"), t("help.runPoint2"), t("help.runPoint3")],
+      };
+    case "wordWrap":
+      return { intro: t("help.wordWrapIntro"), points: [t("help.wordWrapPoint1")] };
+    case "spellCheck":
+      return {
+        intro: t("help.spellCheckIntro"),
+        points: [t("help.spellCheckPoint1"), t("help.spellCheckPoint2")],
+      };
+    case "language":
+      return {
+        intro: t("help.languageIntro"),
+        points: [t("help.languagePoint1"), t("help.languagePoint2")],
+      };
+    case "autismTheme":
+      return {
+        intro: t("autismHelp.intro"),
+        points: [
+          t("autismHelp.point1"),
+          t("autismHelp.point2"),
+          t("autismHelp.point3"),
+          t("autismHelp.point4"),
+        ],
+        footer: t("autismHelp.footer"),
+        action: {
+          label: t(ctx.autismTheme() ? "autismHelp.active" : "autismHelp.switch"),
+          disabled: ctx.autismTheme(),
+          onClick: ctx.setAutismTheme,
+        },
+      };
+    case "bionicReading":
+      return {
+        intro: t("bionicHelp.intro"),
+        points: [t("bionicHelp.point1"), t("bionicHelp.point2"), t("bionicHelp.point3")],
+        footer: t("bionicHelp.footer"),
+        action: {
+          label: t(ctx.bionicReading() ? "bionicHelp.turnOff" : "bionicHelp.turnOn"),
+          onClick: ctx.toggleBionicReading,
+        },
+      };
+    default:
+      return {};
+  }
+}
+
+/**
+ * The Help Centre: a search box and a sidebar of topics on the left, the
+ * chosen topic's content on the right — one modal instead of a separate
+ * dialog per feature. `ctx` supplies the live state (and setters) behind the
+ * two pages with an action button; everything else is static prose.
+ */
+export function showHelpCenter(ctx, initialId = "overview") {
+  const body = openOverlay(t("modal.helpCenterTitle"), true);
+  body.classList.add("help-body");
+
+  const search = document.createElement("input");
+  search.className = "help-search";
+  search.type = "text";
+  search.placeholder = t("help.searchPlaceholder");
+  search.spellcheck = false;
+  body.append(search);
+
+  const layout = document.createElement("div");
+  layout.className = "help-layout";
+  const sidebar = document.createElement("div");
+  sidebar.className = "help-sidebar";
+  const content = document.createElement("div");
+  content.className = "help-content";
+  layout.append(sidebar, content);
+  body.append(layout);
+
+  let activeId = initialId;
+
+  const renderContent = () => {
+    const topic = HELP_TOPICS.find((entry) => entry.id === activeId) ?? HELP_TOPICS[0];
+    content.textContent = "";
+
+    const head = document.createElement("div");
+    head.className = "about-head";
+    const heading = document.createElement("h1");
+    heading.textContent = t(topic.titleKey);
+    head.append(iconElement(topic.icon, { size: "32px" }), heading);
+    content.append(head);
+
+    if (topic.custom) {
+      renderShortcutsInto(content);
+      return;
+    }
+
+    const { intro, points, footer, action } = topicContent(topic, ctx);
+    if (intro) {
+      const introEl = document.createElement("p");
+      introEl.textContent = intro;
+      content.append(introEl);
+    }
+    if (points?.length) {
+      const list = document.createElement("ul");
+      list.className = "feature-help-list";
+      for (const point of points) {
+        const item = document.createElement("li");
+        item.textContent = point;
+        list.append(item);
+      }
+      content.append(list);
+    }
+    if (footer) {
+      const footerEl = document.createElement("p");
+      footerEl.className = "muted";
+      footerEl.textContent = footer;
+      content.append(footerEl);
+    }
+    if (action) {
+      const buttons = document.createElement("div");
+      buttons.className = "dialog-buttons";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dialog-button primary";
+      button.textContent = action.label;
+      if (action.disabled) {
+        button.disabled = true;
+      } else {
+        // Re-renders in place rather than closing the Help Centre — flipping
+        // a setting from here shouldn't dump the user back out of it.
+        button.addEventListener("click", () => {
+          action.onClick();
+          renderContent();
+        });
+      }
+      buttons.append(button);
+      content.append(buttons);
+    }
+  };
+
+  const renderSidebar = () => {
+    const query = search.value.trim().toLowerCase();
+    sidebar.textContent = "";
+    const matches = HELP_TOPICS.filter((topic) => t(topic.titleKey).toLowerCase().includes(query));
+    if (!matches.length) {
+      const empty = document.createElement("div");
+      empty.className = "help-empty muted";
+      empty.textContent = t("help.noResults");
+      sidebar.append(empty);
+      return;
+    }
+    for (const topic of matches) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = `help-sidebar-item${topic.id === activeId ? " active" : ""}`;
+      item.append(iconElement(topic.icon), document.createTextNode(t(topic.titleKey)));
+      item.addEventListener("click", () => {
+        activeId = topic.id;
+        renderSidebar();
+        renderContent();
+      });
+      sidebar.append(item);
+    }
+  };
+
+  search.addEventListener("input", renderSidebar);
+
+  renderSidebar();
+  renderContent();
+  search.focus();
 }
 
 export function showAbout(version) {
