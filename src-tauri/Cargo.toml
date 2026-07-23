@@ -1,6 +1,6 @@
 [package]
 name = "justcode"
-version = "0.2.0"
+version = "0.2.1"
 description = "A small HTML/CSS/JS editor"
 authors = ["you"]
 edition = "2021"
