@@ -354,6 +354,7 @@ button.primary:hover {
 }
 
 .pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
@@ -370,6 +371,29 @@ button.primary:hover {
 #panes.column .pane + .pane {
   border-left: none;
   border-top: 1px solid var(--border);
+}
+
+/* Drag handle on the leading edge of every pane but the first. */
+.pane-grip {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+#panes.column .pane-grip {
+  top: -3px;
+  left: 0;
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+}
+
+#panes .pane:first-child .pane-grip {
+  display: none;
 }
 
 .pane-editor {
@@ -973,6 +997,8 @@ button.primary:hover {
 
 .terminal-tabs {
   display: flex;
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }

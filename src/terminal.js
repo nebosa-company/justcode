@@ -117,6 +117,25 @@ function buildPanel(app, before) {
     button("close", t("terminal.hide"), () => setVisible(false)),
   );
 
+  // Double-clicking empty space in the strip opens a new terminal, mirroring
+  // the editor pane tab bar's double-click-for-new-file gesture.
+  tabsEl.addEventListener("dblclick", (event) => {
+    if (event.target !== tabsEl) return;
+    openTerminal();
+  });
+  // A plain wheel over the strip scrolls it horizontally, so tabs that have
+  // scrolled out of view are reachable without the thin scrollbar.
+  tabsEl.addEventListener(
+    "wheel",
+    (event) => {
+      if (event.ctrlKey || event.deltaY === 0) return;
+      if (tabsEl.scrollWidth <= tabsEl.clientWidth) return;
+      event.preventDefault();
+      tabsEl.scrollLeft += event.deltaY;
+    },
+    { passive: false },
+  );
+
   header.append(tabsEl, actions);
 
   viewsEl = document.createElement("div");

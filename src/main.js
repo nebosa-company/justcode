@@ -261,11 +261,15 @@ function createPane(index = panes.length) {
     view: createView(editorEl),
     tabIds: [],
     activeTabId: null,
+    // Explicit pixel size along the split axis, once the user has dragged its
+    // grip; null means "share the remaining space equally with the others".
+    size: null,
   };
   // Clicking anywhere in a pane makes it the target for menus and shortcuts.
   root.addEventListener("focusin", () => focusPane(pane.id));
   root.addEventListener("mousedown", () => focusPane(pane.id));
   attachPaneDropZones(pane);
+  attachPaneGrip(pane);
   panes.splice(index, 0, pane);
   renderPanes();
   return pane;
@@ -277,9 +281,75 @@ function removePane(pane) {
   pane.view.destroy();
   pane.root.remove();
   panes.splice(index, 1);
-  if (panes.length === 1) layoutDirection = "row"; // free to re-split any way
+  if (panes.length === 1) setLayoutDirection("row"); // free to re-split any way
   if (activePaneId === pane.id) focusPane(panes[Math.max(0, index - 1)].id);
   renderPanes();
+}
+
+/** Changes the split axis, clearing sizes a drag on the other axis wouldn't apply to. */
+function setLayoutDirection(direction) {
+  layoutDirection = direction;
+  for (const pane of panes) pane.size = null;
+}
+
+/** Applies each pane's explicit size (if dragged) or lets it share the rest equally. */
+function applyPaneSizes() {
+  for (const pane of panes) {
+    pane.root.style.flex = pane.size != null ? `0 0 ${pane.size}px` : "1 1 0";
+  }
+}
+
+/**
+ * The grip sits on the leading edge of every pane but the first, letting the
+ * user drag the boundary between it and its previous sibling — the same
+ * mousedown/window-mousemove/window-mouseup shape as the terminal panel's.
+ */
+function attachPaneGrip(pane) {
+  const grip = document.createElement("div");
+  grip.className = "pane-grip";
+  pane.root.prepend(grip);
+
+  const minSize = 80;
+  let dragging = false;
+  let prevPane = null;
+  let startPos = 0;
+  let startPrevSize = 0;
+  let startSize = 0;
+
+  grip.addEventListener("mousedown", (event) => {
+    const index = panes.indexOf(pane);
+    prevPane = panes[index - 1];
+    if (!prevPane) return;
+    dragging = true;
+    const column = layoutDirection === "column";
+    startPos = column ? event.clientY : event.clientX;
+    startPrevSize = column
+      ? prevPane.root.getBoundingClientRect().height
+      : prevPane.root.getBoundingClientRect().width;
+    startSize = column ? pane.root.getBoundingClientRect().height : pane.root.getBoundingClientRect().width;
+    event.preventDefault();
+  });
+  window.addEventListener("mousemove", (event) => {
+    if (!dragging) return;
+    // Releasing outside the webview delivers no mouseup, which used to leave
+    // the pane resizing on every later mouse move with no button held.
+    if (!(event.buttons & 1)) {
+      dragging = false;
+      return;
+    }
+    const column = layoutDirection === "column";
+    const pos = column ? event.clientY : event.clientX;
+    const total = startPrevSize + startSize;
+    const newPrevSize = Math.min(Math.max(startPrevSize + (pos - startPos), minSize), total - minSize);
+    prevPane.size = newPrevSize;
+    pane.size = total - newPrevSize;
+    applyPaneSizes();
+    prevPane.view.requestMeasure();
+    pane.view.requestMeasure();
+  });
+  window.addEventListener("mouseup", () => {
+    dragging = false;
+  });
 }
 
 function renderPanes() {
@@ -291,6 +361,7 @@ function renderPanes() {
     if (dom.panes.children[index] !== pane.root) dom.panes.append(pane.root);
     pane.root.classList.toggle("active", pane.id === activePaneId);
   });
+  applyPaneSizes();
   for (const pane of panes) {
     renderTabsFor(pane);
     // The panes have just been resized by the flex layout; re-read heights so
@@ -435,7 +506,7 @@ function moveTabToPane(tabId, target, edge = "center") {
     // but with two panes it is an unambiguous request to flip the split from
     // side-by-side to stacked (or back), which previously did nothing at all.
     if (panes.length !== 2) return;
-    layoutDirection = wantsColumn ? "column" : "row";
+    setLayoutDirection(wantsColumn ? "column" : "row");
     const other = panes.find((pane) => pane !== target);
     panes.splice(panes.indexOf(target), 1);
     panes.splice(panes.indexOf(other) + (after ? 1 : 0), 0, target);
@@ -448,7 +519,7 @@ function moveTabToPane(tabId, target, edge = "center") {
   if (edge !== "center") {
     // The direction may change whenever the result is a plain two-pane split —
     // `from` disappears if the tab was its last one, so count that in.
-    if (panes.length + (solo ? 0 : 1) <= 2) layoutDirection = wantsColumn ? "column" : "row";
+    if (panes.length + (solo ? 0 : 1) <= 2) setLayoutDirection(wantsColumn ? "column" : "row");
     const at = panes.indexOf(target) + (after ? 1 : 0);
     destination = createPane(at);
   }
@@ -731,6 +802,19 @@ function attachPaneDropZones(pane) {
     focusPane(pane.id);
     setTimeout(newFile, 0);
   });
+
+  // A plain wheel over the strip scrolls it horizontally, so tabs that have
+  // scrolled out of view are reachable without the thin scrollbar.
+  pane.tabsEl.addEventListener(
+    "wheel",
+    (event) => {
+      if (event.ctrlKey || event.deltaY === 0) return;
+      if (pane.tabsEl.scrollWidth <= pane.tabsEl.clientWidth) return;
+      event.preventDefault();
+      pane.tabsEl.scrollLeft += event.deltaY;
+    },
+    { passive: false },
+  );
 }
 
 // --------------------------------------------------------------- language mode
