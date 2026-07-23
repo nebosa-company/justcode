@@ -187,6 +187,11 @@ body {
   border: none;
   padding: 5px 12px;
   cursor: pointer;
+  /* Override the generic `button` rule's icon/label gap — the mnemonic
+     underline splits the label into multiple inline nodes, and without this
+     the flex gap lands between the underlined letter and the rest of the
+     word (e.g. "F ile"). */
+  gap: 0;
 }
 
 .menu-title:hover,

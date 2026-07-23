@@ -212,11 +212,27 @@ const autismHighlightStyle = HighlightStyle.define([
   { tag: [t.invalid], color: "#bd8672" },
 ]);
 
+// oneDark's own selection highlight (#3E4451 on a #282c34 background) is
+// only ~1.4:1 contrast — barely distinguishable. This overrides just the
+// selection color to something actually visible, matching the highlight
+// color the terminal already uses (see `--selection` in terminal.js).
+// `!important` is needed because oneDark's own focused-selection rule
+// (`&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`)
+// is at least as specific as anything we can write here without depending
+// on that same internal DOM structure.
+const darkSelectionOverride = EditorView.theme(
+  {
+    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
+      { backgroundColor: "rgba(120, 150, 255, 0.35) !important" },
+  },
+  { dark: true },
+);
+
 export const THEMES = ["dark", "light", "autism"];
 
 /** The CodeMirror extensions that make up one theme. */
 export function themeExtensions(themeId) {
   if (themeId === "light") return [lightTheme, syntaxHighlighting(lightHighlightStyle)];
   if (themeId === "autism") return [autismTheme, syntaxHighlighting(autismHighlightStyle)];
-  return [oneDark];
+  return [oneDark, darkSelectionOverride];
 }
