@@ -178,6 +178,7 @@ body {
 
 .menu {
   position: relative;
+  user-select: none;
 }
 
 .menu-title {
@@ -216,6 +217,7 @@ body {
   border-radius: 6px;
   box-shadow: var(--shadow);
   z-index: 30;
+  user-select: none;
 }
 
 /* The editor context menu is the same dropdown, placed at the pointer. */
@@ -480,6 +482,7 @@ button.primary:hover {
 }
 
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -489,6 +492,32 @@ button.primary:hover {
   white-space: nowrap;
   color: var(--fg-dim);
   background: transparent;
+  user-select: none;
+}
+
+/* Reorder-drop indicator: a thin bar on whichever edge the dragged tab would
+   land next to. A pseudo-element rather than a border/box-shadow so it does
+   not fight with the active tab's own top-edge indicator. */
+.tab.drop-before::before,
+.tab.drop-after::after,
+.terminal-tab.drop-before::before,
+.terminal-tab.drop-after::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+}
+
+.tab.drop-before::before,
+.terminal-tab.drop-before::before {
+  left: 0;
+}
+
+.tab.drop-after::after,
+.terminal-tab.drop-after::after {
+  right: 0;
 }
 
 .tab:hover {
@@ -733,6 +762,7 @@ button.primary:hover {
   color: var(--fg-dim);
   flex: none;
   font-size: 12px;
+  user-select: none;
 }
 
 #statusbar button {
@@ -1008,6 +1038,7 @@ button.primary:hover {
 }
 
 .terminal-tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1017,6 +1048,7 @@ button.primary:hover {
   border-right: 1px solid var(--border);
   cursor: pointer;
   white-space: nowrap;
+  user-select: none;
 }
 
 .terminal-tab.active {

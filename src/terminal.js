@@ -56,6 +56,8 @@ let cwdProvider = () => null;
 const terminals = new Map(); // id -> { id, title, term, fit, element, exited }
 let activeId = null;
 let nextId = 1;
+// The tab currently being dragged for reordering, if any.
+let draggedId = null;
 // The in-flight (or completed) listener registration. A boolean flag here meant
 // a single failed `listen()` left it permanently "done", so every later
 // terminal ran with no output listener — alive but silent, with no way back.
@@ -211,6 +213,7 @@ function renderTabs() {
     tab.className = `terminal-tab${terminal.id === activeId ? " active" : ""}${
       terminal.exited ? " exited" : ""
     }`;
+    tab.draggable = true;
 
     const label = document.createElement("span");
     label.textContent = terminal.title;
@@ -238,8 +241,53 @@ function renderTabs() {
         activate(terminal.id);
       }
     });
+
+    tab.addEventListener("dragstart", (event) => {
+      draggedId = terminal.id;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(terminal.id));
+    });
+    tab.addEventListener("dragend", () => {
+      draggedId = null;
+    });
+    // Which half of the tab the pointer is over decides whether the dragged
+    // tab lands before or after it, the same gesture the editor tabs use.
+    tab.addEventListener("dragover", (event) => {
+      if (draggedId == null || draggedId === terminal.id) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const before = event.clientX - tab.getBoundingClientRect().left < tab.offsetWidth / 2;
+      tab.classList.toggle("drop-before", before);
+      tab.classList.toggle("drop-after", !before);
+    });
+    tab.addEventListener("dragleave", () => {
+      tab.classList.remove("drop-before", "drop-after");
+    });
+    tab.addEventListener("drop", (event) => {
+      if (draggedId == null) return;
+      event.preventDefault();
+      const before = event.clientX - tab.getBoundingClientRect().left < tab.offsetWidth / 2;
+      const targetIndex = [...terminals.keys()].indexOf(terminal.id) + (before ? 0 : 1);
+      const id = draggedId;
+      draggedId = null;
+      reorderTerminal(id, targetIndex);
+    });
+
     tabsEl.append(tab);
   }
+}
+
+/** Moves a terminal's tab to `index` among the others, reordering in place. */
+function reorderTerminal(id, index) {
+  const keys = [...terminals.keys()];
+  const currentIndex = keys.indexOf(id);
+  if (currentIndex === -1 || currentIndex === index) return;
+  keys.splice(currentIndex, 1);
+  keys.splice(currentIndex < index ? index - 1 : index, 0, id);
+  const reordered = keys.map((key) => [key, terminals.get(key)]);
+  terminals.clear();
+  for (const [key, value] of reordered) terminals.set(key, value);
+  renderTabs();
 }
 
 function activate(id) {

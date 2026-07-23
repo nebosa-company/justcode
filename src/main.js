@@ -488,12 +488,24 @@ function moveTab(delta) {
 /**
  * Moves a tab into `target`. `edge` splits: dropping on a side creates a new
  * pane there, dropping in the middle (or on a tab bar) joins the existing one.
+ * `atIndex`, when given, places it at that position in the destination's tabs
+ * instead of at the end — how dropping directly on another tab reorders it.
  */
-function moveTabToPane(tabId, target, edge = "center") {
+function moveTabToPane(tabId, target, edge = "center", atIndex = null) {
   const from = paneOfTab(tabId);
   if (!from) return;
-  // A lone tab dragged out of its own pane would just swap places with itself.
-  if (from === target && edge === "center") return;
+  // A lone tab dragged out of its own pane would just swap places with itself,
+  // unless a specific slot was requested — reordering within one pane goes
+  // through this same "center" path.
+  if (from === target && edge === "center") {
+    if (atIndex == null) return;
+    const currentIndex = from.tabIds.indexOf(tabId);
+    if (currentIndex === -1 || currentIndex === atIndex) return;
+    from.tabIds.splice(currentIndex, 1);
+    from.tabIds.splice(currentIndex < atIndex ? atIndex - 1 : atIndex, 0, tabId);
+    renderTabsFor(from);
+    return;
+  }
 
   const wantsColumn = edge === "top" || edge === "bottom";
   const after = edge === "right" || edge === "bottom";
@@ -534,7 +546,7 @@ function moveTabToPane(tabId, target, edge = "center") {
       from.view.setState(createState("", "text", listeners, theme, { readOnly: true }));
     }
   }
-  destination.tabIds.push(tabId);
+  destination.tabIds.splice(atIndex ?? destination.tabIds.length, 0, tabId);
   if (from.tabIds.length === 0) removePane(from);
   renderPanes();
   activateTab(tabId);
@@ -657,6 +669,30 @@ function renderTabsFor(pane) {
       event.dataTransfer.setData("text/plain", String(tab.id));
     });
     element.addEventListener("dragend", endTabDrag);
+    // Dropping on a tab (rather than empty tab-bar space) reorders: which half
+    // of it the pointer is over decides whether the dragged tab lands before
+    // or after it, in this pane or a different one.
+    element.addEventListener("dragover", (event) => {
+      if (draggedTabId == null || draggedTabId === tab.id) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const before = event.clientX - element.getBoundingClientRect().left < element.offsetWidth / 2;
+      element.classList.toggle("drop-before", before);
+      element.classList.toggle("drop-after", !before);
+    });
+    element.addEventListener("dragleave", () => {
+      element.classList.remove("drop-before", "drop-after");
+    });
+    element.addEventListener("drop", (event) => {
+      if (draggedTabId == null) return;
+      event.preventDefault();
+      const before = event.clientX - element.getBoundingClientRect().left < element.offsetWidth / 2;
+      element.classList.remove("drop-before", "drop-after");
+      const targetIndex = pane.tabIds.indexOf(tab.id) + (before ? 0 : 1);
+      const id = draggedTabId;
+      endTabDrag();
+      moveTabToPane(id, pane, "center", targetIndex);
+    });
 
     const label = document.createElement("span");
     label.textContent = tab.name;
