@@ -2,7 +2,6 @@ import {
   EditorView,
   keymap,
   lineNumbers,
-  highlightActiveLine,
   highlightActiveLineGutter,
   highlightSpecialChars,
   drawSelection,
@@ -150,6 +149,53 @@ export function bionicReadingEffect(enabled) {
   return bionicConf.reconfigure(enabled ? [bionicPlugin] : []);
 }
 
+/**
+ * Active-line highlight that steps aside for a selection.
+ *
+ * `drawSelection` paints the selection into a layer behind `.cm-content`, so a
+ * line background drawn on top of it wins. CodeMirror's own active-line colour
+ * is nearly transparent and lets the selection through; ours are opaque (see
+ * theme.js), which meant text selected on the line the cursor was already on
+ * was covered up and looked as though nothing had been selected at all.
+ *
+ * Dropping the highlight for as long as a selection exists is what other
+ * editors do, and keeps the active line readable rather than washing it out to
+ * a colour faint enough to see through.
+ */
+const activeLineDeco = Decoration.line({ class: "cm-activeLine" });
+
+function activeLineDecorations(view) {
+  const { ranges } = view.state.selection;
+  // One non-empty range is enough to stand down: a line background would hide
+  // a secondary cursor's selection just as readily as the main one's.
+  if (ranges.some((range) => !range.empty)) return Decoration.none;
+  const deco = [];
+  let lastLineStart = -1;
+  for (const range of ranges) {
+    const line = view.lineBlockAt(range.head);
+    // Several cursors on one line must not decorate it twice.
+    if (line.from > lastLineStart) {
+      deco.push(activeLineDeco.range(line.from));
+      lastLineStart = line.from;
+    }
+  }
+  return Decoration.set(deco, true);
+}
+
+const activeLinePlugin = ViewPlugin.fromClass(
+  class {
+    constructor(view) {
+      this.decorations = activeLineDecorations(view);
+    }
+    update(update) {
+      if (update.docChanged || update.selectionSet) {
+        this.decorations = activeLineDecorations(update.view);
+      }
+    }
+  },
+  { decorations: (instance) => instance.decorations },
+);
+
 let currentSpellcheck = false;
 
 /**
@@ -244,7 +290,7 @@ function baseExtensions(listeners) {
     autocompletion({ activateOnTyping: true, closeOnBlur: false }),
     rectangularSelection(),
     crosshairCursor(),
-    highlightActiveLine(),
+    activeLinePlugin,
     highlightSelectionMatches(),
     lintGutter(),
     searchExtensions(),
