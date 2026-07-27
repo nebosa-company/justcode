@@ -1845,8 +1845,8 @@ let closingWindow = false;
  */
 async function closeWindow() {
   if (!underTauri()) return;
-  // Last chance to record where the carets were left; a queued save would die
-  // with the window.
+  // Belt and braces — the close paths below flush before their dialogs, but a
+  // route that reaches here another way still gets one last write in.
   flushSessionSave();
   const window_ = getCurrentWindow();
   try {
@@ -1881,6 +1881,11 @@ function minimizeWindow() {
 /** Offers to save unsaved work, then closes the window. */
 async function exitApp() {
   try {
+    // Before anything else: `destroy()` tears the webview down the instant it
+    // is called, and a localStorage write made in that last moment can be lost
+    // before the engine has put it on disk. Writing here leaves the whole
+    // prompt-and-shutdown sequence for it to be persisted in.
+    flushSessionSave();
     if (!(await confirmClose())) return;
     await closeAllTerminals();
     await closeWindow();
@@ -1898,6 +1903,9 @@ if (underTauri()) {
     if (closingWindow) return;
     event.preventDefault();
     try {
+      // Same reasoning as in exitApp: get the session onto disk while there is
+      // still a shutdown's worth of time for the write to land.
+      flushSessionSave();
       if (!(await confirmClose())) return;
       // Kill the shells before the window goes, or they linger as orphans.
       await closeAllTerminals();
