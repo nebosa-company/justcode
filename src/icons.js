@@ -25,6 +25,10 @@ const PATHS = {
   chevronRight: '<path d="m9 6 6 6-6 6"/>',
   arrowUp: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
   arrowDown: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  arrowLeft: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+  arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  // An arrow up against a wall: the tab goes all the way to the front.
+  moveToStart: '<path d="M5 5v14"/><path d="M20 12H9"/><path d="m14 7-5 5 5 5"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.2-4.2"/>',
   cut: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88"/><path d="M14.47 14.48 20 20"/><path d="M8.12 8.12 12 12"/>',
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
@@ -32,6 +36,8 @@ const PATHS = {
   selectAll: '<path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9h8"/><path d="M8 13h6"/>',
   comment: '<path d="M4 5h16"/><path d="M4 12h10"/><path d="M4 19h16"/><path d="M17 10l3 2-3 2"/>',
   exit: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+  // The bar every title-bar minimise button uses, over the window it drops to.
+  minimize: '<path d="M6 6h12"/><rect x="4" y="12" width="16" height="8" rx="2"/>',
   upper: '<path d="M4 18 8 6l4 12"/><path d="M5.2 14h5.6"/><path d="M16 8h5"/><path d="M18.5 8v10"/>',
   lower: '<path d="M4 18 7 9l3 9"/><path d="M4.9 15h4.2"/><path d="M20 11a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M20 11v5"/>',
   guid: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10v4"/><path d="M11 10v4"/><path d="M15 10v4"/><path d="M19 10v4"/>',

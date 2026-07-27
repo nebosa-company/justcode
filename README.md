@@ -20,10 +20,12 @@ buttons, and keyboard shortcuts.
 | Un-split | drag the tab back onto another pane's tab bar |
 | Close all but current | **File → Close All But Current** |
 | Close all | `Ctrl+Shift+W` / **File → Close All** |
+| Minimize | `Alt+M` / **File → Minimize** |
 | Exit | `Alt+F4` / **File → Exit** |
 | Cut / Copy / Paste | `Ctrl+X` / `Ctrl+C` / `Ctrl+V` / **Edit** menu |
 | Select all | `Ctrl+A` / **Edit → Select All** |
 | Delete line | `Ctrl+Shift+K` / **Edit → Delete Line** |
+| Move line up / down | `Alt+↑` / `Alt+↓` / **Edit → Move Line Up/Down** |
 | Toggle comment | `Ctrl+/` / **Edit → Toggle Comment** |
 | Uppercase / Lowercase | `Ctrl+Shift+U` / `Ctrl+Shift+L` (selection, or the word at the caret) |
 | Generate GUID | `Ctrl+Shift+G` (inserts a v4 UUID) |
@@ -33,7 +35,8 @@ buttons, and keyboard shortcuts.
 | Switch tab | `Ctrl+Tab` / `Ctrl+Shift+Tab`, or `Ctrl+PageUp` / `Ctrl+PageDown` (wraps) |
 | Copy file path | click the path in the status bar, or **File → Copy File Path** |
 | Reveal the file | **File → Show in Explorer / Finder / File Manager** |
-| Move tab | `Ctrl+Shift+PageUp` / `Ctrl+Shift+PageDown` |
+| Move tab | `Ctrl+Shift+PageUp` / `Ctrl+Shift+PageDown` / **View → Move Tab Left/Right** |
+| Move tab to the front | `Alt+Home` / **View → Move Tab to Beginning** |
 
 Standard editor navigation works throughout: double-click selects a word,
 `Ctrl+Shift+←/→` extends by word, `Shift+Home/End` selects to the line
@@ -50,12 +53,24 @@ start/end, and `PageUp`/`PageDown` (with `Shift` to extend) move by a page.
 | Keyboard shortcuts | `F1` / **Help → Shortcuts** |
 | Version | **Help → About JustCode** |
 | Find / replace | `Ctrl+F` / `Ctrl+H` |
-| Problems panel | `F8` / **View → Problems**, or click the problem count in the status bar |
+| Problems panel | `F8` opens and closes it / **View → Problems**, or click the problem count in the status bar |
+| Next / previous problem | `F4` / `Shift+F4` / **View → Next/Previous Problem** (wraps) |
 
 The menu bar is always visible, so the toolbar and status bar can be brought
 back after hiding them. Theme, zoom level and bar visibility all persist between
 sessions. Menu items list their keyboard shortcut and repeat it as a hover
 tooltip.
+
+### Reopening the last session
+
+The files that were open when you left are reopened at the next launch, back in
+the panes they were spread across and at the line each caret was on. Only saved
+files come back — an untitled buffer has nothing on disk to reopen, and the
+unsaved-changes prompt on the way out has already settled what happens to it.
+Files deleted in the meantime are skipped without a word.
+
+A document opened from Explorer joins that restored workspace and takes the
+focus, rather than replacing it.
 
 ### Status bar
 
@@ -255,6 +270,15 @@ Terminal** picks the profile. Each one is a real pseudo-terminal (PowerShell or
 Command Prompt on Windows) whose output is streamed to xterm.js, so interactive
 programs, colours and resizing all behave. New terminals start in the folder of
 the file being edited. xterm.js is loaded on demand, so it costs nothing at boot.
+
+Terminals are set in the editor's font size and follow it: `Ctrl+±` zooms both
+halves of the window together, so the shell never ends up smaller than the code
+above it.
+
+The panel docks to the bottom, the left or the right: drag its header to that
+edge of the workspace, or pick one from **View ▸ Terminal Position**. Docked to a
+side it becomes a column beside the code, with its own drag handle on the edge
+that faces the editor. The choice persists between sessions.
 
 Administrator shells open in their own window rather than in the panel. That is
 not a shortcut: a process that is not elevated cannot read an elevated child's

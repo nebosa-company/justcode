@@ -11,6 +11,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { iconMarkup, iconElement } from "./icons.js";
 import { t } from "./i18n.js";
+import { DEFAULT_FONT_SIZE } from "./editor.js";
 
 /**
  * Profiles offered in the "new terminal" menu, most idiomatic first — the
@@ -46,11 +47,21 @@ export const PROFILES = profilesFor(navigator.userAgent);
 /** The shell Ctrl+Shift+` opens — named in the menu so the binding is obvious. */
 export const DEFAULT_PROFILE = PROFILES[0];
 
+// Kept in step with the editor's zoom by setFontSize below; the default only
+// applies until the app has read the stored zoom level at startup.
+let fontSize = DEFAULT_FONT_SIZE;
+
+/** The edges the panel can be docked to; the first is the default. */
+export const DOCKS = ["bottom", "left", "right"];
+
 let xterm = null;
 let panel = null;
+let workspace = null;
+let dock = DOCKS[0];
 let tabsEl = null;
 let viewsEl = null;
 let onVisibilityChange = () => {};
+let onDockChange = () => {};
 let cwdProvider = () => null;
 
 const terminals = new Map(); // id -> { id, title, term, fit, element, exited }
@@ -87,7 +98,7 @@ function themeColours() {
   };
 }
 
-function buildPanel(app, before) {
+function buildPanel() {
   panel = document.createElement("div");
   panel.className = "terminal-panel";
   panel.hidden = true;
@@ -144,10 +155,13 @@ function buildPanel(app, before) {
   viewsEl.className = "terminal-views";
 
   panel.append(header, viewsEl);
-  // Sits between the editor panes and the status bar.
-  app.insertBefore(panel, before);
+  // Shares the workspace with the editor panes; which side of them it lands on
+  // is the dock, applied below.
+  workspace.append(panel);
+  applyDock();
 
-  // The panel is resizable by dragging its top edge.
+  // The panel is resizable by dragging the edge that faces the code — its top
+  // when docked along the bottom, its inner side when docked to left or right.
   const grip = document.createElement("div");
   grip.className = "terminal-grip";
   panel.prepend(grip);
@@ -164,19 +178,113 @@ function buildPanel(app, before) {
       dragging = false;
       return;
     }
-    const height = Math.min(Math.max(window.innerHeight - event.clientY, 80), window.innerHeight - 160);
-    panel.style.height = `${height}px`;
+    if (dock === "bottom") {
+      const height = Math.min(Math.max(window.innerHeight - event.clientY, 80), window.innerHeight - 160);
+      panel.style.height = `${height}px`;
+    } else {
+      const from = dock === "left" ? event.clientX : window.innerWidth - event.clientX;
+      panel.style.width = `${Math.min(Math.max(from, 140), window.innerWidth - 240)}px`;
+    }
     fitActive();
   });
   window.addEventListener("mouseup", () => {
     dragging = false;
   });
+
+  attachDockDrag(header);
+}
+
+/**
+ * Dragging the header moves the panel to another edge. A plain mouse drag
+ * rather than HTML5 drag-and-drop: the tabs inside the same header are already
+ * draggable for reordering, and a second draggable wrapped around them makes
+ * every tab drag ambiguous.
+ */
+function attachDockDrag(header) {
+  let moving = false;
+
+  header.addEventListener("mousedown", (event) => {
+    // Only the empty parts of the header are a handle. A tab or a button in it
+    // has its own job, and stealing their press would break both.
+    if (event.button !== 0) return;
+    if (event.target !== header && event.target !== tabsEl) return;
+    moving = true;
+    panel.classList.add("docking");
+    event.preventDefault();
+  });
+
+  window.addEventListener("mousemove", (event) => {
+    if (!moving) return;
+    if (!(event.buttons & 1)) {
+      moving = false;
+      panel.classList.remove("docking");
+      delete workspace.dataset.dockHint;
+      return;
+    }
+    workspace.dataset.dockHint = edgeAt(event);
+  });
+
+  window.addEventListener("mouseup", (event) => {
+    if (!moving) return;
+    moving = false;
+    panel.classList.remove("docking");
+    delete workspace.dataset.dockHint;
+    setDock(edgeAt(event));
+  });
+}
+
+/**
+ * The edge a pointer is asking for: whichever side of the workspace it is
+ * nearest, measured as a fraction of the box so it behaves the same in a small
+ * window as in a maximised one. The middle keeps the current dock, so a drag
+ * that ends nowhere in particular changes nothing.
+ */
+function edgeAt(event) {
+  const box = workspace.getBoundingClientRect();
+  const x = (event.clientX - box.left) / box.width;
+  const y = (event.clientY - box.top) / box.height;
+  if (y > 0.7) return "bottom";
+  if (x < 0.3) return "left";
+  if (x > 0.7) return "right";
+  return dock;
+}
+
+/** Puts the dock class on the workspace and clears sizes from the other one. */
+function applyDock() {
+  if (!workspace) return;
+  workspace.classList.toggle("dock-left", dock === "left");
+  workspace.classList.toggle("dock-right", dock === "right");
+  if (!panel) return;
+  // A height dragged while docked at the bottom would otherwise survive as an
+  // inline style and fix the column's height once it moved to a side.
+  panel.style.height = "";
+  panel.style.width = "";
+}
+
+/** Which edge the panel is docked to: "bottom", "left" or "right". */
+export function dockEdge() {
+  return dock;
+}
+
+/** Moves the panel to `edge`, reporting whether that was a change. */
+export function setDock(edge) {
+  if (!DOCKS.includes(edge) || edge === dock) return false;
+  dock = edge;
+  applyDock();
+  // The panel has changed shape, so xterm needs to be re-measured and the shell
+  // told its new size — the same reason a resize drag calls this.
+  relayout();
+  onDockChange(dock);
+  return true;
 }
 
 /** Attaches the panel to the layout. Call once, at startup. */
-export function initTerminals({ container, before, onVisibility, currentDirectory }) {
-  buildPanel(container, before);
+export function initTerminals({ workspace: host, dock: initialDock, onVisibility, onDock, currentDirectory }) {
+  workspace = host;
+  if (DOCKS.includes(initialDock)) dock = initialDock;
+  buildPanel();
   onVisibilityChange = onVisibility || (() => {});
+  onDockChange = onDock || (() => {});
   cwdProvider = currentDirectory || (() => null);
 }
 
@@ -369,7 +477,7 @@ export async function openTerminal(profile = PROFILES[0].id, options = {}) {
 
   const term = new Terminal({
     fontFamily: 'Consolas, "Cascadia Mono", "Courier New", monospace',
-    fontSize: 13,
+    fontSize,
     cursorBlink: true,
     theme: themeColours(),
     scrollback: 5000,
@@ -461,6 +569,18 @@ export async function openExternalTerminal(profile, elevated) {
 export function refreshTheme() {
   const colours = themeColours();
   for (const terminal of terminals.values()) terminal.term.options.theme = colours;
+}
+
+/**
+ * Matches the terminals to the editor's zoom level, so both halves of the
+ * window read at one size and Ctrl+± moves them together. The relayout is not
+ * optional: a font change alters the cell size, and without a re-fit the shell
+ * keeps being told the old column count and wraps its output at the wrong width.
+ */
+export function setFontSize(size) {
+  fontSize = size;
+  for (const terminal of terminals.values()) terminal.term.options.fontSize = size;
+  relayout();
 }
 
 let relayoutPending = 0;

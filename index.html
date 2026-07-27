@@ -63,8 +63,12 @@
         ></button>
       </div>
 
-      <!-- One or more panes, each with its own tab bar and editor. -->
-      <div id="panes"></div>
+      <!-- The panes and the terminal panel share this row/column: which of the
+           two it is depends on the edge the terminal is docked to. -->
+      <div id="workspace">
+        <!-- One or more panes, each with its own tab bar and editor. -->
+        <div id="panes"></div>
+      </div>
 
       <div id="statusbar">
         <span id="status-path">No file</span>

@@ -343,6 +343,26 @@ button.primary:hover {
 
 /* ---------- split panes ---------- */
 
+/* Holds the editor panes and the terminal panel. A column when the terminal is
+   docked along the bottom, a row when it is docked to a side; `order` on the
+   panel is what puts it before the panes for a left dock. */
+#workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+#workspace.dock-left,
+#workspace.dock-right {
+  flex-direction: row;
+}
+
+#workspace.dock-left .terminal-panel {
+  order: -1;
+}
+
 #panes {
   display: flex;
   flex-direction: row;
@@ -1005,6 +1025,26 @@ button.primary:hover {
   display: none;
 }
 
+/* Side docks: a column beside the panes rather than a strip beneath them. The
+   height set by a bottom-dock drag is cleared in script when the dock changes,
+   so these widths are not fighting an inline style. */
+.dock-left .terminal-panel,
+.dock-right .terminal-panel {
+  height: auto;
+  width: 380px;
+  min-width: 140px;
+  min-height: 0;
+  border-top: none;
+}
+
+.dock-right .terminal-panel {
+  border-left: 1px solid var(--border);
+}
+
+.dock-left .terminal-panel {
+  border-right: 1px solid var(--border);
+}
+
 /* Drag handle along the top edge. */
 .terminal-grip {
   position: absolute;
@@ -1014,6 +1054,70 @@ button.primary:hover {
   height: 6px;
   cursor: ns-resize;
   z-index: 2;
+}
+
+/* Side docks put the handle on the edge that faces the code. */
+.dock-right .terminal-grip {
+  top: 0;
+  left: -3px;
+  right: auto;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.dock-left .terminal-grip {
+  top: 0;
+  left: auto;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+/* Where the panel would land, shown while its header is dragged. Sized as a
+   band along the target edge, the same language as the pane drop indicators. */
+#workspace[data-dock-hint]::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#workspace {
+  position: relative;
+}
+
+#workspace[data-dock-hint="bottom"]::after {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 30%;
+}
+
+#workspace[data-dock-hint="left"]::after {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+}
+
+#workspace[data-dock-hint="right"]::after {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 30%;
+}
+
+/* The header is the handle for moving the panel between edges. */
+.terminal-header {
+  cursor: default;
+}
+
+.terminal-panel.docking .terminal-header {
+  cursor: grabbing;
 }
 
 .terminal-header {

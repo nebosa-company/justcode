@@ -1494,8 +1494,14 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let files = files_from_args(argv);
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_focus();
+                // Opening a document from Explorer should land you in the
+                // editor the same way starting the app does — which is
+                // maximised (see `reveal`). Unminimising alone left a window
+                // that had been dropped to the taskbar restored to whatever
+                // small size it last had, with the new file somewhere inside it.
                 let _ = window.unminimize();
+                let _ = window.maximize();
+                let _ = window.set_focus();
             }
             if !files.is_empty() {
                 let _ = app.emit("open-files", files);

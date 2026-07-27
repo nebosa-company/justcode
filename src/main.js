@@ -4,9 +4,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openDialog, save as saveDialog, ask, message } from "@tauri-apps/plugin-dialog";
 import { readText as clipboardReadText, writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager";
-import { openLintPanel } from "@codemirror/lint";
+import { openLintPanel, closeLintPanel, nextDiagnostic, previousDiagnostic } from "@codemirror/lint";
 import { loadDictionary, requestSpellcheck, refreshSpelling } from "./spellcheck.js";
-import { deleteLine, undo, redo } from "@codemirror/commands";
+import { deleteLine, undo, redo, moveLineUp, moveLineDown } from "@codemirror/commands";
 import { setLinkHandler } from "./links.js";
 import { toggleBookmark, toggleNextBookmark, gotoBookmark, BOOKMARK_SLOTS } from "./bookmarks.js";
 import {
@@ -57,6 +57,9 @@ import {
   isVisible as terminalsVisible,
   openExternalTerminal,
   refreshTheme as refreshTerminalTheme,
+  setFontSize as setTerminalFontSize,
+  setDock as setTerminalDock,
+  dockEdge as terminalDock,
   relayout as relayoutTerminals,
   closeAllTerminals,
   PROFILES as TERMINAL_PROFILES,
@@ -94,13 +97,25 @@ const STORAGE = {
   wordWrap: "justcode.wordWrap",
   bionicReading: "justcode.bionicReading",
   newFavourites: "justcode.newFavourites",
+  session: "justcode.session",
+  terminalDock: "justcode.terminalDock",
 };
 
 const MAX_RECENT_FILES = 15;
 
+// A cap on the files carried across a restart. Every one of them is read from
+// disk before the window is shown, so an enormous session would be paid for as
+// a slow launch, every launch.
+const MAX_SESSION_FILES = 50;
+
+// Long enough that opening ten files writes once rather than ten times, short
+// enough to survive the app being killed a moment later.
+const SESSION_SAVE_DELAY = 400;
+
 const dom = {
   app: document.getElementById("app"),
   menubar: document.getElementById("menubar"),
+  workspace: document.getElementById("workspace"),
   panes: document.getElementById("panes"),
   zoomLevel: document.getElementById("zoom-level"),
   themeButton: document.getElementById("btn-theme"),
@@ -474,6 +489,17 @@ function switchTab(delta) {
   activateTab(pane.tabIds[next]);
 }
 
+/** Moves the active tab to the front of its pane's strip. */
+function moveTabToStart() {
+  const pane = activePane();
+  if (!pane) return;
+  const index = pane.tabIds.indexOf(pane.activeTabId);
+  if (index <= 0) return;
+  const [id] = pane.tabIds.splice(index, 1);
+  pane.tabIds.unshift(id);
+  renderTabs();
+}
+
 /** Reorders the active tab within its pane. */
 function moveTab(delta) {
   const pane = activePane();
@@ -625,6 +651,10 @@ const closeOtherTabs = () => {
 
 function renderTabs() {
   for (const pane of panes) renderTabsFor(pane);
+  // Every change to what is open — opening, closing, reordering, splitting,
+  // Save As — ends up here, which makes it the one place the session has to be
+  // written from.
+  queueSessionSave();
 }
 
 /** Draws one pane's tab bar, including the drag handles that drive splitting. */
@@ -1038,12 +1068,150 @@ function rememberRecentFile(path) {
   localStorage.setItem(STORAGE.recent, JSON.stringify(next.slice(0, MAX_RECENT_FILES)));
 }
 
+// ----------------------------------------------------------------- session
+//
+// The files that were open last time, reopened at the next launch. Only saved
+// documents are listed: an untitled buffer has nothing on disk to reopen, and
+// the unsaved-changes prompt on the way out has already settled what happens
+// to it. Panes are recorded too, so a split layout comes back as a split.
+
+// Saves are suppressed until startup has finished deciding what is open —
+// otherwise the empty editor that exists for the first moments of a launch
+// would overwrite the very session being restored.
+let sessionReady = false;
+let sessionSaveTimer = null;
+
+function readSession() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE.session) || "null");
+    return stored && Array.isArray(stored.panes) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A tab's caret as the 1-based line/column `revealLine` takes. */
+function caretOf(tab) {
+  const owner = paneOfTab(tab.id);
+  // On screen the live view is authoritative; the stashed state is only current
+  // for tabs sitting in the background.
+  const state = owner && owner.activeTabId === tab.id ? owner.view.state : tab.state;
+  if (!state) return {};
+  const head = state.selection.main.head;
+  const line = state.doc.lineAt(head);
+  return { line: line.number, column: head - line.from + 1 };
+}
+
+/**
+ * Writes the open files to storage. Called on every tab change rather than only
+ * on the way out, so a session that ends in a crash or a kill is still there at
+ * the next launch.
+ */
+function rememberSession() {
+  if (!sessionReady) return;
+  let budget = MAX_SESSION_FILES;
+  const entries = [];
+  for (const pane of panes) {
+    const files = [];
+    for (const id of pane.tabIds) {
+      const tab = tabById(id);
+      if (!tab?.path) continue;
+      if (budget-- <= 0) break;
+      files.push({ path: tab.path, ...caretOf(tab) });
+    }
+    // A pane holding nothing but untitled buffers has nothing to reopen, and
+    // restoring it as an empty split would be worse than not restoring it.
+    if (files.length) {
+      entries.push({ paneId: pane.id, active: tabById(pane.activeTabId)?.path || null, files });
+    }
+  }
+  localStorage.setItem(
+    STORAGE.session,
+    JSON.stringify({
+      version: 1,
+      layout: layoutDirection,
+      // An index rather than an id: pane ids are handed out fresh every launch.
+      activePane: Math.max(
+        entries.findIndex((entry) => entry.paneId === activePaneId),
+        0,
+      ),
+      panes: entries.map(({ active, files }) => ({ active, files })),
+    }),
+  );
+}
+
+/** Coalesces the burst of tab changes that one command can produce. */
+function queueSessionSave() {
+  clearTimeout(sessionSaveTimer);
+  sessionSaveTimer = setTimeout(rememberSession, SESSION_SAVE_DELAY);
+}
+
+/** Writes the session immediately — for the way out, where a timer would not fire. */
+function flushSessionSave() {
+  clearTimeout(sessionSaveTimer);
+  rememberSession();
+}
+
+/**
+ * Reopens the last session, rebuilding the panes it was spread across and the
+ * caret each file was left at. Returns whether anything was actually opened, so
+ * a first run — or a session whose files have all since been deleted — still
+ * falls back to the usual blank document.
+ *
+ * Files that no longer exist are skipped without a word: a launch is the wrong
+ * moment to be told about a file deleted days ago.
+ */
+async function restoreSession() {
+  const session = readSession();
+  if (!session?.panes?.length) return false;
+  if (session.layout === "column") setLayoutDirection("column");
+
+  let opened = false;
+  for (const [index, entry] of session.panes.entries()) {
+    if (!Array.isArray(entry?.files)) continue;
+    // The first pane is the one the app always starts with; the rest are the
+    // split the user left behind. `focusPane` is what makes new tabs land here,
+    // since `openTab` appends to whichever pane is focused.
+    const pane = index === 0 ? panes[0] : createPane();
+    focusPane(pane.id);
+    for (const file of entry.files) {
+      if (!file?.path) continue;
+      if (await openPath(file.path, { quiet: true, line: file.line, column: file.column })) {
+        opened = true;
+      }
+    }
+    // Each file activates as it opens, so the pane ends up showing the last one
+    // rather than the one that was on screen.
+    const wanted = entry.active && findTabByPath(entry.active);
+    if (wanted && paneOfTab(wanted.id) === pane) activateTab(wanted.id);
+  }
+
+  // Panes whose files have all gone missing would otherwise linger as empty
+  // splits with no way to tell what they were for.
+  for (const pane of [...panes]) {
+    if (!pane.tabIds.length) removePane(pane);
+  }
+
+  const target = panes[Math.min(session.activePane ?? 0, panes.length - 1)];
+  if (target) {
+    focusPane(target.id);
+    if (target.activeTabId != null) activateTab(target.activeTabId);
+  }
+  return opened;
+}
+
 /**
  * A comparable form of a path. Windows treats paths case-insensitively and
  * accepts either separator, so the raw string is not a safe identity.
  */
 function samePathKey(path) {
   return path.replace(/\//g, "\\").toLowerCase();
+}
+
+/** The open tab for a path, if there is one. */
+function findTabByPath(path) {
+  const key = samePathKey(path);
+  return tabs.find((tab) => tab.path && samePathKey(tab.path) === key) || null;
 }
 
 /** Paths with a read in flight, so two opens cannot both create a tab. */
@@ -1073,7 +1241,7 @@ async function openPath(path, { quiet = false, line = null, column = null } = {}
   // Windows paths differ only by case and separator; compare them normalised so
   // C:/a.txt and c:\a.txt do not open as two tabs on the same file.
   const key = samePathKey(path);
-  const existing = tabs.find((tab) => tab.path && samePathKey(tab.path) === key);
+  const existing = findTabByPath(path);
   if (existing) {
     activateTab(existing.id);
     // Re-opening should still bump the file up the recent list.
@@ -1292,8 +1460,31 @@ async function run() {
   }
 }
 
+/** Whether the lint panel is showing under the focused editor. */
+function problemsOpen() {
+  return Boolean(view?.dom.querySelector(".cm-panel-lint"));
+}
+
+/**
+ * F8 both opens and closes the panel. It takes a fixed slice off the bottom of
+ * the editor, so the key that summons it is also the obvious way to get the
+ * space back — the alternative is reaching for the panel's own × with the mouse.
+ */
 function showProblems() {
-  openLintPanel(view);
+  if (problemsOpen()) closeLintPanel(view);
+  else openLintPanel(view);
+  view.focus();
+}
+
+/**
+ * Walks the caret through the problems, wrapping at the ends. Independent of
+ * the panel: stepping between two warnings does not need a list of them open,
+ * though the panel does follow along when it is.
+ */
+function goToProblem(direction) {
+  if (!view) return;
+  if (direction < 0) previousDiagnostic(view);
+  else nextDiagnostic(view);
   view.focus();
 }
 
@@ -1489,6 +1680,19 @@ function editRedo() {
   view.focus();
 }
 
+// Alt+↑/↓ come from CodeMirror's own keymap; these exist so the commands are
+// also reachable from the Edit menu, which is where someone who does not know
+// the shortcut will look for them.
+function editMoveLineUp() {
+  moveLineUp(view);
+  view.focus();
+}
+
+function editMoveLineDown() {
+  moveLineDown(view);
+  view.focus();
+}
+
 /** Saves every file that has unsaved changes. Returns false if one was cancelled. */
 async function saveAllTabs() {
   stashAllPanes();
@@ -1641,6 +1845,9 @@ let closingWindow = false;
  */
 async function closeWindow() {
   if (!underTauri()) return;
+  // Last chance to record where the carets were left; a queued save would die
+  // with the window.
+  flushSessionSave();
   const window_ = getCurrentWindow();
   try {
     await window_.destroy();
@@ -1656,6 +1863,19 @@ async function closeWindow() {
       });
     }
   }
+}
+
+/**
+ * Drops the window to the taskbar. Needs `core:window:allow-minimize`; a
+ * failure is reported in the status bar rather than swallowed, since nothing
+ * visible happens on success either and a silent no-op reads as a dead key.
+ */
+function minimizeWindow() {
+  // Nothing to minimise when the page is served to a plain browser.
+  if (!underTauri()) return;
+  getCurrentWindow()
+    .minimize()
+    .catch((error) => flashStatus(String(error?.message || error)));
 }
 
 /** Offers to save unsaved work, then closes the window. */
@@ -1706,6 +1926,9 @@ function setFontSize(size) {
   // asks it to re-read line heights once the new styles have been applied, so
   // the gutter rows are rebuilt at the new spacing rather than the old.
   for (const pane of panes) pane.view.requestMeasure();
+  // The terminals are part of the same window and read at the same distance, so
+  // they zoom with the editor rather than staying at a fixed size.
+  setTerminalFontSize(fontSize);
   dom.zoomLevel.textContent = `${fontSize}px`;
   localStorage.setItem(STORAGE.fontSize, String(fontSize));
 }
@@ -1784,10 +2007,17 @@ function setSpellcheck(enabled) {
 // ---------------------------------------------------------------- terminals
 
 initTerminals({
-  container: dom.app,
-  before: document.getElementById("statusbar"),
+  workspace: dom.workspace,
+  dock: localStorage.getItem(STORAGE.terminalDock),
   onVisibility: () => {
     for (const pane of panes) pane.view.requestMeasure();
+  },
+  onDock: (edge) => {
+    localStorage.setItem(STORAGE.terminalDock, edge);
+    // The panes have just been given more or less room; their gutters are
+    // measured from the old width until they are asked to look again.
+    for (const pane of panes) pane.view.requestMeasure();
+    createMenuBar(dom.menubar, buildMenus());
   },
   // New terminals start beside the file being edited, which is nearly always
   // where a build or a git command wants to run.
@@ -2051,6 +2281,7 @@ function buildMenus() {
         run: closeAllTabs,
       },
       { separator: true },
+      { label: t("file.minimize"), icon: "minimize", accel: "Alt+M", run: minimizeWindow },
       { label: t("file.exit"), icon: "exit", accel: "Alt+F4", run: exitApp },
     ],
   },
@@ -2070,6 +2301,20 @@ function buildMenus() {
       { separator: true },
       { label: t("edit.selectAll"), icon: "selectAll", accel: "Ctrl+A", run: editSelectAll, enabled: hasTab },
       { label: t("edit.deleteLine"), icon: "deleteLine", accel: "Ctrl+Shift+K", run: deleteCurrentLine, enabled: hasTab },
+      {
+        label: t("edit.moveLineUp"),
+        icon: "arrowUp",
+        accel: "Alt+↑",
+        run: editMoveLineUp,
+        enabled: hasTab,
+      },
+      {
+        label: t("edit.moveLineDown"),
+        icon: "arrowDown",
+        accel: "Alt+↓",
+        run: editMoveLineDown,
+        enabled: hasTab,
+      },
       { separator: true },
       { label: t("edit.find"), icon: "search", accel: "Ctrl+F", run: openFind, enabled: hasTab },
       { label: t("edit.replace"), icon: "search", accel: "Ctrl+H", run: openReplace, enabled: hasTab },
@@ -2160,6 +2405,28 @@ function buildMenus() {
       },
       { separator: true },
       {
+        label: t("tabs.moveLeft"),
+        icon: "arrowLeft",
+        accel: "Ctrl+Shift+PageUp",
+        enabled: hasTab,
+        run: () => moveTab(-1),
+      },
+      {
+        label: t("tabs.moveRight"),
+        icon: "arrowRight",
+        accel: "Ctrl+Shift+PageDown",
+        enabled: hasTab,
+        run: () => moveTab(1),
+      },
+      {
+        label: t("tabs.moveToStart"),
+        icon: "moveToStart",
+        accel: "Alt+Home",
+        enabled: hasTab,
+        run: moveTabToStart,
+      },
+      { separator: true },
+      {
         label: t("view.splitUp"),
         icon: "splitUp",
         accel: "Ctrl+K ↑",
@@ -2222,6 +2489,32 @@ function buildMenus() {
         run: () => toggleTerminals(),
       },
       {
+        // Dragging the panel's header to an edge does the same thing; this is
+        // for finding out that it can be moved at all.
+        label: t("terminal.position"),
+        icon: "terminal",
+        submenu: () => [
+          {
+            label: t("terminal.dockLeft"),
+            icon: "splitLeft",
+            checked: () => terminalDock() === "left",
+            run: () => setTerminalDock("left"),
+          },
+          {
+            label: t("terminal.dockBottom"),
+            icon: "splitDown",
+            checked: () => terminalDock() === "bottom",
+            run: () => setTerminalDock("bottom"),
+          },
+          {
+            label: t("terminal.dockRight"),
+            icon: "splitRight",
+            checked: () => terminalDock() === "right",
+            run: () => setTerminalDock("right"),
+          },
+        ],
+      },
+      {
         label: t("terminal.newIn"),
         icon: "terminalAdd",
         submenu: () => [
@@ -2250,6 +2543,20 @@ function buildMenus() {
       { label: t("view.language"), icon: "globe", run: chooseAppLanguage },
       { separator: true },
       { label: t("view.problems"), icon: "warning", accel: "F8", run: showProblems },
+      {
+        label: t("view.nextProblem"),
+        icon: "arrowDown",
+        accel: "F4",
+        enabled: hasTab,
+        run: () => goToProblem(1),
+      },
+      {
+        label: t("view.previousProblem"),
+        icon: "arrowUp",
+        accel: "Shift+F4",
+        enabled: hasTab,
+        run: () => goToProblem(-1),
+      },
     ],
   },
   {
@@ -2397,9 +2704,21 @@ window.addEventListener(
       else run();
       return;
     }
+    // stopPropagation as well as preventDefault: CodeMirror's lint keymap also
+    // claims F8, for "go to next problem". Left to run, it moved the caret on
+    // every toggle — including the press that closes the panel again.
     if (event.key === "F8" && !ctrl) {
       event.preventDefault();
+      event.stopPropagation();
       showProblems();
+      return;
+    }
+    // Walking the problems is F4, Shift+F4 backwards — the Visual Studio
+    // convention, and it leaves F8 free to mean one thing.
+    if (event.key === "F4" && !ctrl) {
+      event.preventDefault();
+      event.stopPropagation();
+      goToProblem(event.shiftKey ? -1 : 1);
       return;
     }
     if (event.key === "F1" && !ctrl) {
@@ -2435,6 +2754,29 @@ window.addEventListener(
     if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "s") {
       event.preventDefault();
       setStatusbarVisible(!showStatusbar);
+      return;
+    }
+    // Alt+M drops the window to the taskbar — plain Alt for the same reason as
+    // the toggles above, and M for the word every platform uses. Windows' own
+    // Win+Down needs two presses from a maximised window (restore, then
+    // minimise), which is exactly the case this is for. stopPropagation on top
+    // of preventDefault: a focused terminal would otherwise still forward the
+    // key to the shell as an escape sequence, so restoring the window would
+    // show a stray `m` on the prompt.
+    if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "m") {
+      event.preventDefault();
+      event.stopPropagation();
+      minimizeWindow();
+      return;
+    }
+    // Alt+Home sends the tab to the front of the strip. Ctrl+Shift+Home, the
+    // obvious pairing with the Ctrl+Shift+PageUp/PageDown that move it one
+    // step, is already "select to the start of the document" — a binding worth
+    // far more than this one.
+    if (!ctrl && event.altKey && !event.shiftKey && event.key === "Home") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveTabToStart();
       return;
     }
     if (!ctrl) return;
@@ -2618,12 +2960,23 @@ async function loadStartupState() {
   }
 
   if (paths.length) {
+    // The session comes back first, so a file opened from Explorer joins the
+    // workspace it interrupted — and lands on top of it — rather than replacing
+    // it. Only a cold start reaches here: while the app is running, the
+    // single-instance plugin forwards the file to the open window instead.
+    await restoreSession();
     await openExternalFiles(paths);
-  } else {
+  } else if (!(await restoreSession())) {
     // A blank document directly, not through the New File chooser — that
     // dialog is for an explicit File ▸ New, not a greeting at every launch.
     createFile(null);
   }
+
+  // What is on screen is now settled, so saving it can no longer overwrite the
+  // session being restored. The immediate write records anything that arrived
+  // on the command line as part of this session.
+  sessionReady = true;
+  rememberSession();
 
   if (localeReady) await localeReady;
 
@@ -2652,7 +3005,12 @@ async function loadStartupState() {
 const startupReady = Promise.race([
   loadStartupState().catch(() => {}),
   new Promise((resolve) => setTimeout(resolve, 2500)),
-]);
+]).then(() => {
+  // A backstop for the two ways `loadStartupState` can end without having set
+  // this itself — the 2.5s cap winning the race, or a throw on the way through.
+  // Without it a launch that went wrong would also stop remembering anything.
+  sessionReady = true;
+});
 
 // The window is created hidden so the first thing on screen is the finished
 // editor, not an empty frame. `report_ready` shows it and records the boot time.
