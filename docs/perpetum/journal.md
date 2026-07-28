@@ -487,3 +487,92 @@ Branch `perp/c1/b4`. Eight requirements: `G-1` `G-2` `G-3` `G-4` `G-6` `G-10`
 
 **Batch 4 status:** 7 of 8 delivered, 1 conflicting, 0 blocked. Plus `V-2`
 closed from batch 2. Gates green: 109 tests.
+
+---
+
+## Phase D — Batch 5, the honesty machinery
+
+Branch `perp/c1/b5`. Eight requirements: `V-1` `V-3` `V-4` `V-7` `V-8` `V-9`
+`G-7` `G-8`. The product thesis, and the last batch before Phase D's exit.
+
+### c1/b5/s01–s05 — Write it
+- **outcome:** `verify.rs`, plus four additions to `git.rs` (`history_mentions`,
+  `tree_mentions`, `commits_for_step`, `with_stashed`).
+- **`V-1`** looks in the working tree *and* the history: a grep answers "is it
+  here", `git log -S` answers "was it here and taken out", and the second
+  question is why a feature gets rebuilt after someone deliberately removed it.
+  `may_implement` refuses to start without a recorded check.
+- **`V-3`** returns a verdict, not a boolean: *earned*, *proves nothing*, *still
+  broken*, or *the tree was never actually different* — the last one being
+  `V-10` from batch 3, now a first-class outcome rather than a lesson.
+- **`V-4`** reads a unified diff, because that is the artefact that exists while
+  the change is still reversible. Deliberately blunt: a false positive costs a
+  sentence, a false negative costs the point of the harness.
+- **`V-7`** derives markers from evidence — an outcome that says "green" and
+  carries no transcript is a claim, and lands as 🟡, not ✅.
+- **`V-8`** counts gated and conflicting in their own columns, forever. There is
+  no `done / total` anywhere in the type.
+- **`with_stashed`** returns the stash ref even on success, and on a failed pop
+  the error *names the ref* rather than leaving the operator to find their work.
+
+### c1/b5/s06 — Gates and red run
+- **gates:** green. 123 unit + 5 integration = 128 tests.
+- **red run:** seven mutations. Five red first time; two inconclusive, and both
+  for reasons worth writing down:
+  - one mutation disabled only one of three conditions inside `is_assertion`, so
+    the test legitimately still passed. **The mutation was too weak, not the
+    test.** Re-run against the counter itself: red.
+  - one mutation contained a `|`, which was the `sed` delimiter — it silently
+    produced nothing. `V-10`'s diff check caught it and reported *"MUTATION DID
+    NOT APPLY"* instead of a false green. Re-run with a different delimiter: red.
+
+  This is the second time the `V-10` check has earned itself in two batches.
+
+### c1/b5/s07 — Build gate FAILED: the harness cannot rebuild itself
+- **outcome:** `perp gate all` → lint green, **build exit 101**.
+
+  ```
+  $ cargo build --workspace
+  cwd: ..\crates
+  error: failed to remove file `D:\repos\justcode\crates\target\debug\perp.exe`
+  Caused by:
+    Access is denied. (os error 5)
+  ```
+
+- **diagnosis:** the gates were being run *by* `crates/target/debug/perp.exe`,
+  and Windows will not let `cargo` replace a running executable. Nothing was
+  wrong with the code; the harness was standing on the file it was told to
+  rebuild.
+- **fix:** run from a copy outside the tree under build. Confirmed green
+  immediately afterwards, same sha, in `c1/b5/s08`.
+- **filed as `T-18`**, because a workaround an operator has to remember is a
+  defect: the engine must not hold a lock on anything its own gates rebuild.
+  This is the kind of requirement that only exists because the loop was run on
+  itself.
+- **attempt 1 of 2.**
+
+### c1/b5/s08 — Gates, green, and `V-9` against the real documents
+- **outcome:**
+
+  ```
+  gate: lint   sha: ffe5618…  exit 0 in 189ms
+  gate: build  sha: ffe5618…  exit 0 in 578ms
+  gate: test   sha: ffe5618…  exit 0 in 1153ms
+  all 3 gates green
+
+  $ perp check ids --root ..
+  source:    ..\docs/perpetum.md
+  defined:   147
+  documents: 18
+  no stray ids — everything cited is defined
+  ```
+
+  Every requirement id cited across eighteen documents in this cycle is defined
+  in the requirements source. Perpetum 0.8 held for the whole cycle, and now
+  there is a command that proves it rather than a habit that claims it.
+
+**Batch 5 status:** 8 of 8 delivered, 0 blocked. Gates green: 128 tests.
+One requirement discovered and filed (`T-18`).
+
+**Phase D exit:** 5 batches delivered. 38 requirements done, 2 in progress,
+3 conflicting, 1 approval-gated, 0 blocked.

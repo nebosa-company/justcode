@@ -17,6 +17,7 @@ use perp_core::git::Repo;
 use perp_core::journal::{Journal, Record};
 use perp_core::session::{Decision, Finding, Probe, Session};
 use perp_core::state::{render, replay};
+use perp_core::verify;
 use perp_core::step::StepId;
 use perp_core::{atomic, time, Result, VERSION};
 
@@ -45,6 +46,10 @@ usage:
       Read the journal and say what a previous process left in flight, and what
       to do about it. Reports Unclear rather than guessing; exits non-zero if
       the answer is to park.
+
+  perp check ids [--root <dir>]
+      Check that every requirement id cited anywhere under docs/ is defined in
+      the requirements source. Exits non-zero if one was invented elsewhere.
 
   perp version
 ";
@@ -77,6 +82,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("state") => cmd_state(&args[1..]).map_err(|e| e.to_string()),
         Some("gate") => cmd_gate(&args[1..]),
         Some("resume") => cmd_resume(&args[1..]),
+        Some("check") => cmd_check(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -185,6 +191,68 @@ fn cmd_state(args: &[&str]) -> Result<()> {
         Some("-") => print!("{rendered}"),
         Some(path) => write_state(Path::new(path), &rendered)?,
         None => write_state(&binding.resolve("out.state")?, &rendered)?,
+    }
+    Ok(())
+}
+
+/// `V-9`: ids are minted in the requirements source and cited everywhere else.
+///
+/// The failure this catches is quiet — a batch file naming `L-99`, a plan built
+/// around a requirement that does not exist, and nobody noticing until the
+/// cycle that tries to build it.
+fn cmd_check(args: &[&str]) -> std::result::Result<(), String> {
+    let which = positionals(args).first().copied().unwrap_or("ids");
+    if which != "ids" {
+        return Err(format!("unknown check `{which}` — only `ids` so far"));
+    }
+
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let source_path = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
+    let source = std::fs::read_to_string(&source_path)
+        .map_err(|e| format!("{}: {e}", source_path.display()))?;
+
+    let mut documents = Vec::new();
+    collect_markdown(&binding.root().join("docs"), &source_path, &mut documents)?;
+
+    let borrowed: Vec<(&str, &str)> =
+        documents.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
+    let stray = verify::stray_ids(&source, &borrowed);
+
+    println!("source:    {}", source_path.display());
+    println!(
+        "defined:   {}",
+        verify::defined_ids(&source).map_err(|e| e.to_string())?.len()
+    );
+    println!("documents: {}", documents.len());
+
+    if stray.is_empty() {
+        println!("no stray ids — everything cited is defined");
+        return Ok(());
+    }
+    for item in &stray {
+        println!("  stray: {} in {}", item.id, item.file);
+    }
+    Err(format!("{} id(s) used but never defined", stray.len()))
+}
+
+fn collect_markdown(
+    dir: &Path,
+    skip: &Path,
+    out: &mut Vec<(String, String)>,
+) -> std::result::Result<(), String> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(()),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_markdown(&path, skip, out)?;
+        } else if path.extension().is_some_and(|e| e == "md") && path != skip {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                out.push((path.display().to_string(), text));
+            }
+        }
     }
     Ok(())
 }

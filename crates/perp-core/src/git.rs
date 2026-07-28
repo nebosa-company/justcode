@@ -329,6 +329,78 @@ impl Repo {
         self.head_sha()
     }
 
+    /// Has this ever existed in the history? (`G-7`)
+    ///
+    /// `git log -S` finds commits that added or removed the string, which
+    /// answers "was this built and then removed" — a question grep on the
+    /// working tree cannot answer, and the reason `V-1` looks here too.
+    pub fn history_mentions(&self, needle: &str) -> Result<Vec<String>> {
+        let run = self.run_unchecked(&["log", "-S", needle, "--oneline", "--all"])?;
+        if !run.is_success() {
+            return Ok(Vec::new());
+        }
+        Ok(run.stdout_tail.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
+    }
+
+    /// Does the working tree contain it right now?
+    pub fn tree_mentions(&self, needle: &str) -> Result<Vec<String>> {
+        let run = self.run_unchecked(&["grep", "-l", "--", needle])?;
+        // Exit 1 from `git grep` means "no matches", which is an answer.
+        Ok(run.stdout_tail.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
+    }
+
+    /// The commits that carry a step's trailer (`G-8`).
+    ///
+    /// A feature's commits are contiguous and findable, which is what makes a
+    /// single feature revertible without touching the rest of the batch.
+    pub fn commits_for_step(&self, step: &str) -> Result<Vec<String>> {
+        let needle = format!("Perpetum-Step: {step}");
+        let run = self.run_unchecked(&["log", "--grep", &needle, "--format=%H", "--all"])?;
+        if !run.is_success() {
+            return Ok(Vec::new());
+        }
+        Ok(run.stdout_tail.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
+    }
+
+    /// Stash the working tree, run something, and put it back (`V-3`).
+    ///
+    /// The stash ref is returned to the caller even on success, because
+    /// `G-10` says a destructive operation journals what it displaced — and if
+    /// the pop fails, the error names the ref rather than leaving the operator
+    /// to find it.
+    pub fn with_stashed<T>(&self, label: &str, body: impl FnOnce() -> T) -> Result<(T, String)> {
+        let message = format!("perp {label}");
+        let push = self.run(&["stash", "push", "--include-untracked", "-m", &message], &Approval::NotGranted)?;
+        if !push.is_success() {
+            return Err(Error::unbound(
+                "git stash push",
+                format!("{}: {}", push.exit.describe(), push.stderr_tail.trim()),
+            ));
+        }
+        let stashed = !push.stdout_tail.contains("No local changes");
+        let stash_ref = if stashed {
+            self.first_line(&["rev-parse", "stash@{0}"]).unwrap_or_else(|_| "unknown".to_string())
+        } else {
+            "nothing to stash".to_string()
+        };
+
+        let outcome = body();
+
+        if stashed {
+            let pop = self.run(&["stash", "pop"], &Approval::NotGranted)?;
+            if !pop.is_success() {
+                return Err(Error::unbound(
+                    "git stash pop",
+                    format!(
+                        "the work is safe in {stash_ref} — restore it by hand: {}",
+                        pop.stderr_tail.trim()
+                    ),
+                ));
+            }
+        }
+        Ok((outcome, stash_ref))
+    }
+
     pub fn create_branch(&self, name: &str) -> Result<()> {
         let run = self.run(&["switch", "-c", name], &Approval::NotGranted)?;
         if !run.is_success() && !matches!(run.exit, Exit::Code(0)) {

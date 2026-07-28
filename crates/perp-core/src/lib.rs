@@ -20,7 +20,8 @@
 //! | [`gate`] | `V-2`, `L-16` |
 //! | [`session`] | `L-5`, `L-6`, `L-7`, `L-15`, `N-1`, `N-2` |
 //! | [`watchdog`] | `L-11`, `L-12`, `L-13` |
-//! | [`git`] | `G-1`–`G-6`, `G-10`, `G-14` |
+//! | [`git`] | `G-1`–`G-8`, `G-10`, `G-14` |
+//! | [`verify`] | `V-1`, `V-3`, `V-4`, `V-7`–`V-10` |
 //! | [`json`], [`time`] | no dependencies, per `N-11` |
 //!
 //! Nothing here talks to a model or touches git. Those are batches 4 and 6 —
@@ -39,6 +40,7 @@ pub mod session;
 pub mod state;
 pub mod step;
 pub mod time;
+pub mod verify;
 pub mod watchdog;
 
 #[cfg(test)]
