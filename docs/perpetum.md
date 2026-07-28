@@ -10,12 +10,13 @@ in between cycles.
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 2, batch 6: **44 of 149 requirements are done**, 2 in progress (one
+As of cycle 2, batch 7: **49 of 149 requirements are done**, 5 in progress (one
 approval-gated), 3 parked as conflicting. What exists is the spine (binding,
 steps, journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, and an end-to-end
-suite that drives the real binary — in [`crates/`](../crates/), std-only,
-141 tests. The model layer, the tool host, chat and artifacts are still design.
+suite that drives the real binary, and the model router — in
+[`crates/`](../crates/), std-only, 171 tests. Nothing has yet opened a socket:
+the transport, the tool host, chat and artifacts are still design.
 Status markers below say which is which; a marker without a matching journal
 entry is not believed (Perpetum 0.7).
 
@@ -210,11 +211,11 @@ embedder  = ["here"]
 
 | id | Requirement |
 |---|---|
-| `M-1` | Four link kinds: `lmstudio` (local), `lmlink` (remote peer), `deepseek`, `openai-compat` (Ollama, llama.cpp, vLLM, LiteLLM, OpenRouter — anything speaking `/v1/chat/completions`). |
-| `M-2` | Every call is issued for a **role**. Roles: planner, coder, gatefixer, verifier, chat, compactor, classifier, summarizer, embedder. No call site names a link. |
-| `M-3` | A role resolves to an ordered chain of links. First healthy link wins. |
-| `M-4` | Links carry a `privacy` class. `local` never leaves hardware the user owns; `cloud` is subject to the egress policy (`S-4`). |
-| `M-5` | `local-only` mode disables every `cloud` link. The loop must still run — slower, dumber, complete. This is a supported configuration, not a degraded one. |
+| ✅ ~~`M-1`~~ | Four link kinds: `lmstudio` (local), `lmlink` (remote peer), `deepseek`, `openai-compat` (Ollama, llama.cpp, vLLM, LiteLLM, OpenRouter — anything speaking `/v1/chat/completions`). |
+| ✅ ~~`M-2`~~ | Every call is issued for a **role**. Roles: planner, coder, gatefixer, verifier, chat, compactor, classifier, summarizer, embedder. No call site names a link. |
+| ✅ ~~`M-3`~~ | A role resolves to an ordered chain of links. First healthy link wins. |
+| ✅ ~~`M-4`~~ | Links carry a `privacy` class. `local` never leaves hardware the user owns; `cloud` is subject to the egress policy (`S-4`). |
+| ✅ ~~`M-5`~~ | `local-only` mode disables every `cloud` link. The loop must still run — slower, dumber, complete. This is a supported configuration, not a degraded one. |
 
 ### 3.2 Protocols and capability probing
 
@@ -223,8 +224,8 @@ assuming an OpenAI feature set.
 
 | id | Requirement |
 |---|---|
-| `M-6` | On first use and on model change, probe: native tool calls, JSON-schema structured output, streaming, vision, embeddings, context length, reasoning-content field, prefix caching. Cache the result with a TTL; key it on link + model id + quantization. |
-| `M-7` | For `lmstudio` and `lmlink`, take context length, `state`, `arch` and `quantization` from `/api/v0/models` rather than guessing. Record the exact quantization in the journal — a Q4 and a Q8 of the same model are not the same reviewer. |
+| 🟡 `M-6` | On first use and on model change, probe: native tool calls, JSON-schema structured output, streaming, vision, embeddings, context length, reasoning-content field, prefix caching. Cache the result with a TTL; key it on link + model id + quantization. |
+| 🟡 `M-7` | For `lmstudio` and `lmlink`, take context length, `state`, `arch` and `quantization` from `/api/v0/models` rather than guessing. Record the exact quantization in the journal — a Q4 and a Q8 of the same model are not the same reviewer. |
 | `M-8` | **Degradation ladder** for tool calls: native tool calling → JSON-schema constrained output → prompted block with a parse-and-repair loop (max 2 repairs, then the step fails honestly). The loop must complete with a model at the bottom rung. |
 | `M-9` | Failover on timeout, connection loss, rate limit, or malformed output beyond repair. Failover to a link of a **different privacy class** requires the policy to allow it and is always journalled. |
 | `M-10` | A substitution is never silent. The journal records which link produced every artefact, so "the 4B wrote this migration" is discoverable after the fact. |
@@ -242,7 +243,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | `M-11` | Track per call: input, output, cached-hit and cached-miss tokens, latency, TTFT. Aggregate per step, batch, cycle, role and link. Surface money spent this cycle in the progress board. |
 | `M-12` | Prompts are assembled **stable-prefix first**: system rules, binding, tool schemas, then slowly-changing state, then the volatile task tail. Never reorder the stable region between calls in a batch. |
 | `M-13` | Context compaction is a first-class step run by the `compactor` role on a local link. Compaction output is journalled, so what was dropped is recoverable. |
-| `M-14` | Model ids, prices, context limits and endpoint paths live in config, refreshed from the provider's model list at startup. A deprecated or missing model id is a startup error naming the replacement, never a silent fallback. |
+| 🟡 `M-14` | Model ids, prices, context limits and endpoint paths live in config, refreshed from the provider's model list at startup. A deprecated or missing model id is a startup error naming the replacement, never a silent fallback. |
 | `M-15` | Per-link concurrency limits are respected. One GPU serving one model does not want four parallel requests. |
 
 ### 3.4 Local-server realities

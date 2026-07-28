@@ -104,12 +104,22 @@ impl Binding {
 }
 
 fn parse_block(text: &str) -> Result<Vec<(String, String)>> {
+    parse_fenced(text, FENCE, "binding")
+}
+
+/// Read `key = value` lines out of a labelled fenced block.
+///
+/// Shared with the link configuration (`M-1`), so both live inside the document
+/// that explains them rather than in a config file that drifts from its prose.
+/// Blank lines and `#` comments are ignored; a duplicate key is an error, since
+/// silently taking the last one is how a config lies about itself.
+pub fn parse_fenced(text: &str, fence: &str, what: &str) -> Result<Vec<(String, String)>> {
     let mut lines = text.lines();
-    let opener = format!("```{FENCE}");
+    let opener = format!("```{fence}");
     if !lines.any(|line| line.trim_end() == opener) {
         return Err(Error::unbound(
-            "binding",
-            format!("no ```{FENCE} block — the engine has nothing to read"),
+            what,
+            format!("no ```{fence} block — the engine has nothing to read"),
         ));
     }
 
@@ -127,17 +137,11 @@ fn parse_block(text: &str) -> Result<Vec<(String, String)>> {
             continue;
         }
         let Some((key, value)) = line.split_once('=') else {
-            return Err(Error::unbound(
-                "binding",
-                format!("`{line}` is not `key = value`"),
-            ));
+            return Err(Error::unbound(what, format!("`{line}` is not `key = value`")));
         };
         let (key, value) = (key.trim().to_string(), value.trim().to_string());
         if key.is_empty() || value.is_empty() {
-            return Err(Error::unbound(
-                "binding",
-                format!("`{line}` has an empty key or value"),
-            ));
+            return Err(Error::unbound(what, format!("`{line}` has an empty key or value")));
         }
         if !seen.insert(key.clone()) {
             return Err(Error::unbound(key, "declared twice"));
@@ -146,10 +150,10 @@ fn parse_block(text: &str) -> Result<Vec<(String, String)>> {
     }
 
     if !closed {
-        return Err(Error::unbound("binding", "the block is never closed"));
+        return Err(Error::unbound(what, "the block is never closed"));
     }
     if entries.is_empty() {
-        return Err(Error::unbound("binding", "the block is empty"));
+        return Err(Error::unbound(what, "the block is empty"));
     }
     Ok(entries)
 }

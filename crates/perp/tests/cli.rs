@@ -197,6 +197,68 @@ fn check_ids_fails_when_a_document_invents_a_requirement() {
     assert!(run(&root, &["check", "ids"]).ok(), "and citing a real id must pass");
 }
 
+// ── the router (M-2, M-4, M-5) ─────────────────────────────────────────────
+
+fn with_links(tag: &str, block: &str) -> PathBuf {
+    let root = fixture(tag);
+    std::fs::write(
+        root.join("docs/perpetum/links.md"),
+        format!("# Links\n\n```perp-links\n{block}\n```\n"),
+    )
+    .expect("links");
+    let binding = root.join("docs/perpetum/binding.md");
+    let text = std::fs::read_to_string(&binding).expect("read binding");
+    std::fs::write(
+        &binding,
+        text.replace(
+            "out.journal",
+            "path.links       = docs/perpetum/links.md\nout.journal",
+        ),
+    )
+    .expect("rebind");
+    root
+}
+
+const MIXED: &str = "\
+link.here.kind = lmstudio
+link.here.base_url = http://localhost:1234
+link.here.model = small
+link.cloud.kind = deepseek
+link.cloud.base_url = https://api.deepseek.com
+link.cloud.model = deepseek-v4-flash
+role.coder = cloud, here
+role.embedder = cloud";
+
+#[test]
+fn links_resolves_a_role_and_says_it_contacted_nothing() {
+    let root = with_links("links-resolve", MIXED);
+    let out = run(&root, &["links", "--role", "coder"]);
+    assert!(out.ok(), "stderr: {}", out.stderr);
+    assert!(out.says("cloud → here"), "the chain, in order: {}", out.stdout);
+    assert!(out.says("resolves to: cloud"), "{}", out.stdout);
+    assert!(out.says("health assumed"), "it must not imply it pinged anything");
+}
+
+#[test]
+fn local_only_skips_the_cloud_link_rather_than_preferring_it() {
+    // `M-4`/`M-5`: the whole point is that nothing crosses the privacy
+    // boundary quietly.
+    let root = with_links("links-local", MIXED);
+    let out = run(&root, &["links", "--role", "coder", "--local-only"]);
+    assert!(out.ok(), "stderr: {}", out.stderr);
+    assert!(out.says("resolves to: here"), "{}", out.stdout);
+    assert!(out.says("(skipped: cloud)"), "{}", out.stdout);
+}
+
+#[test]
+fn a_role_with_no_local_option_fails_local_only_instead_of_falling_back() {
+    let root = with_links("links-gap", MIXED);
+    let out = run(&root, &["links", "--local-only"]);
+    assert!(!out.ok(), "embedder is cloud-only, so this run cannot be local-only");
+    assert!(out.says("no local option for: embedder"), "{}", out.stdout);
+    assert!(out.says("no cloud link is substituted"), "{}{}", out.stdout, out.stderr);
+}
+
 // ── the shape of the CLI itself (N-3) ──────────────────────────────────────
 
 #[test]

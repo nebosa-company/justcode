@@ -53,6 +53,7 @@ path.batches      = docs/prioritization/batches.md
 path.conflicts    = docs/prioritization/conflicts.md
 path.weights.source = docs/requirements/weights.md
 path.weights.impact = docs/prioritization/weights.md
+path.links          = docs/perpetum/links.md
 
 out.journal = docs/perpetum/journal.jsonl
 out.state   = docs/perpetum/state.md

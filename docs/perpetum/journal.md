@@ -838,3 +838,87 @@ Branch `perp/c2/b6`. Seven requirements: `N-12` `T-18` `V-6` `L-8` `N-3` `N-5`
   answering a different question than the one the requirement asks.
 
 **Batch 6 status:** 6 of 7 delivered, 1 carried, 0 blocked. 141 tests.
+
+---
+
+## Phase D — Batch 7, model links: the router
+
+Branch `perp/c2/b7`. Eight requirements: `M-1`–`M-7`, `M-14`. The first batch
+that knows what a model is.
+
+### c2/b7/s01 — Share the fenced-block parser
+- **outcome:** `binding::parse_fenced` extracted, so the link configuration
+  lives inside the document that explains it — the same reason the binding does.
+  No second config format, no second place for the same fact to be wrong.
+
+### c2/b7/s02–s04 — The router and the probe
+- **outcome:** `link.rs` and `probe.rs`, and the one decision the whole design
+  rests on: **nothing in the harness names a model, only a role**.
+- **privacy is not free-form.** An `lmstudio` or `lmlink` link is always
+  `local` — a rig you own is yours even in another room — and a `deepseek` link
+  is always `cloud`. Declaring otherwise is a startup error. An
+  `openai-compat` link *must* declare, because it could be a container on this
+  machine or a proxy on the internet, and guessing is not available.
+- **`local-only` removes cloud links from consideration rather than falling
+  back to them**, and the error says so in as many words. A silent promotion
+  across the privacy boundary is the single failure `M-4` exists to prevent, so
+  the message names the whole chain with each link's class.
+- **the probe cache is keyed on the quantization** as well as the link and the
+  model. Swapping a Q8 for a Q4 in LM Studio changes what the link can do while
+  every other identifier stays identical.
+- **capabilities carry their provenance.** `Source::KindDefault` or
+  `Source::Observed` — a default is not a measurement, and a wrong answer should
+  be traceable to which it was.
+
+### c2/b7/s05 — Gates and red run
+- **gates:** green. 152 unit + 5 spine + 14 end-to-end = **171 tests**.
+- **red run:** six mutations, six red — including the one that matters most,
+  the privacy filter:
+
+  ```
+  link.rs   ignore the privacy filter          local_only_removes_cloud_links…       101  red
+  link.rs   let a kind's privacy be overridden a_link_cannot_declare_a_privacy…      101  red
+  link.rs   treat every link as healthy        a_role_resolves_to_the_first_healthy… 101  red
+  link.rs   stop recognising a dead model id   a_deprecated_model_id_names…          101  red
+  probe.rs  drop quantization from the key     the_cache_is_keyed_on_the_quantization… 101 red
+  probe.rs  never expire a cached probe        a_stale_entry_is_dropped…             101  red
+  ```
+
+- **three mutations needed two attempts to apply**, all defeated by `sed`
+  delimiters colliding with `|` in the Rust source. Each was reported as
+  *"MUTATION DID NOT APPLY"* by the `V-10` check rather than as a passing test,
+  and the last was applied with a Python rewrite instead. The check has now paid
+  for itself in four separate batches.
+
+### c2/b7/s06 — Exercised against the real configuration
+- **outcome:** [`links.md`](links.md) written and bound as `path.links`.
+
+  ```
+  $ perp links --role coder --local-only
+  mode:  local-only
+    here [lmstudio · local · qwen3-4b-instruct] http://localhost:1234
+    ds-fast [deepseek · cloud · deepseek-v4-flash] https://api.deepseek.com  (skipped: cloud)
+  role coder: ds-fast → here
+  resolves to: here [...] (health assumed — nothing was contacted)
+  ```
+
+  The output says *health assumed — nothing was contacted*, because a listing
+  that implies it pinged something it did not is exactly the quiet lie this
+  harness exists to avoid.
+- The real `verifier` chain is deliberately the reverse of `coder`'s, so
+  `V-5`'s "the verifier is not the author" is the default rather than a rule
+  someone has to remember.
+
+### c2/b7/s07 — What is *not* done
+- **`M-6`, `M-7` and `M-14` are 🟡.** Each has a half that needs a socket:
+  probing a live endpoint, fetching `/api/v0/models`, and refreshing the model
+  list at startup. The logic halves are done and tested against a recorded
+  response; the network halves are batch 8.
+- Marking them ✅ on the strength of the tested half would be claiming the
+  harness talks to LM Studio. It does not talk to anything yet.
+
+**Batch 7 status:** 5 of 8 delivered, 3 carried, 0 blocked. 171 tests.
+
+**The decision batch 8 opens with** is already recorded in
+[`../prioritization/batches-cycle2.md`](../prioritization/batches-cycle2.md):
+`http://` needs no dependency, `https://` needs TLS, and TLS needs an approval.

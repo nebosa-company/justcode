@@ -15,6 +15,7 @@ use perp_core::binding::Binding;
 use perp_core::gate::{self, Gate};
 use perp_core::git::Repo;
 use perp_core::journal::{Journal, Record};
+use perp_core::link::{AssumeHealthy, Links, Mode, Role};
 use perp_core::session::{Decision, Finding, Probe, Session};
 use perp_core::state::{render, replay};
 use perp_core::verify;
@@ -51,6 +52,11 @@ usage:
       Check that every requirement id cited anywhere under docs/ is defined in
       the requirements source. Exits non-zero if one was invented elsewhere.
 
+  perp links [--role <role>] [--local-only] [--root <dir>]
+      List the configured links and role chains. With --role, show which link
+      that role resolves to. With --local-only, do it as a run with no cloud —
+      and report any role that loses its last option.
+
   perp version
 ";
 
@@ -83,6 +89,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("gate") => cmd_gate(&args[1..]),
         Some("resume") => cmd_resume(&args[1..]),
         Some("check") => cmd_check(&args[1..]),
+        Some("links") => cmd_links(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -191,6 +198,63 @@ fn cmd_state(args: &[&str]) -> Result<()> {
         Some("-") => print!("{rendered}"),
         Some(path) => write_state(Path::new(path), &rendered)?,
         None => write_state(&binding.resolve("out.state")?, &rendered)?,
+    }
+    Ok(())
+}
+
+/// Show the links, the role chains, and what a role resolves to (`M-2`–`M-5`).
+///
+/// Reachability is not checked here — that needs the transport batch 8 adds.
+/// Health is assumed, and the output says so, because a listing that implies it
+/// pinged something it did not is the kind of quiet lie this harness exists to
+/// avoid.
+fn cmd_links(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let path = binding.resolve("path.links").map_err(|e| e.to_string())?;
+    let links = Links::load(&path).map_err(|e| e.to_string())?;
+    let mode = if args.contains(&"--local-only") { Mode::LocalOnly } else { Mode::Any };
+
+    println!("links: {}", path.display());
+    println!("mode:  {}", if mode == Mode::LocalOnly { "local-only" } else { "any" });
+    println!();
+
+    for link in links.all() {
+        let usable = if mode == Mode::Any || link.is_local() { "" } else { "  (skipped: cloud)" };
+        println!("  {}{usable}", link.describe());
+    }
+
+    println!();
+    if let Some(role) = flag(args, "--role") {
+        let role = Role::parse(role).map_err(|e| e.to_string())?;
+        let chain = links.chain(role).map_err(|e| e.to_string())?;
+        println!(
+            "role {role}: {}",
+            chain.iter().map(|l| l.name.as_str()).collect::<Vec<_>>().join(" → ")
+        );
+        let chosen = links
+            .resolve(role, &AssumeHealthy, mode)
+            .map_err(|e| e.to_string())?;
+        println!("resolves to: {} (health assumed — nothing was contacted)", chosen.describe());
+        return Ok(());
+    }
+
+    for (role, chain) in links.roles() {
+        println!("  {role:<11} {}", chain.join(" → "));
+    }
+
+    let gaps = links.local_only_gaps();
+    println!();
+    if gaps.is_empty() {
+        println!("every role has a local option — this project can run local-only");
+    } else {
+        let named: Vec<&str> = gaps.iter().map(|role| role.as_str()).collect();
+        println!("no local option for: {}", named.join(", "));
+        if mode == Mode::LocalOnly {
+            return Err(format!(
+                "{} role(s) cannot run local-only, and no cloud link is substituted",
+                gaps.len()
+            ));
+        }
     }
     Ok(())
 }

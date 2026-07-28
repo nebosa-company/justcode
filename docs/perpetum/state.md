@@ -1,6 +1,6 @@
 # Perpetum state
 
-Cycle: 2 · Phase: D · Batch: 6 of 5 delivered (1 of this cycle's five) ·
+Cycle: 2 · Phase: D · Batch: 7 — 2 of this cycle's five delivered ·
 Updated: 2026-07-28
 
 Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
@@ -16,26 +16,29 @@ Board: [`progress-board.md`](progress-board.md)
 | Batch | Theme | Delivered |
 |---|---|---|
 | 6 | Proving it works | 6 of 7, 1 carried |
+| 7 | Model links — the router | 5 of 8, 3 carried |
 
-- Next: **batch 7 — model links, the router** (`M-1`–`M-7`, `M-14`). The first
-  batch that knows what a model is, and deliberately stops at the network
-  boundary so the suite still runs on a machine with no GPU.
+- Next: **batch 8 — transport and protocols** (`M-8`–`M-10`, `M-21`–`M-23`),
+  which also closes `M-6`, `M-7` and `M-14`. It opens with a decision, not a
+  discovery: see below.
 
 Carried, not done:
 
 | id | Why |
 |---|---|
 | `N-6` | The harness opens no socket, but nothing stops a *project's* gate command reaching the network. Enforcement needs the sandboxed runtime in `T-9`. |
+| `M-6` `M-7` `M-14` | Each has a half that needs a socket — probing a live endpoint, fetching `/api/v0/models`, refreshing the model list. The logic is done and tested against a recorded response; the network half is batch 8. |
 | `X-4` | Tree kill works; surviving a kill of the engine itself needs a job object — approval-gated. |
 
 ## Last green gates
 
-`perp gate all --root .. --step c2/b6/s05`, exit 0, pinned to `b06c7bc`.
+`perp gate all --root .. --step c2/b7/s06`, exit 0, pinned to `95f14d3`.
 
 - lint · exit 0 · clean
 - build · exit 0 · clean
-- tests · exit 0 · **141/141** — 125 unit, 5 spine integration, 11 end-to-end
+- tests · exit 0 · **171/171** — 152 unit, 5 spine integration, 14 end-to-end
 - ids · exit 0 · 149 defined, no strays
+- links · exit 0 · 2 links, 9 roles, every role has a local option
 
 ## Blocked
 
@@ -69,4 +72,4 @@ decision lands before the code that needs it.
 | Cycle | Batches | Features | Tests added | Version |
 |---|---|---|---|---|
 | 1 | 5 of 5 delivered | 38 | 128 | 0.1.0 (unreleased) |
-| 2 | 1 of 5 delivered | 6 | 141 | 0.1.0 (unreleased) |
+| 2 | 2 of 5 delivered | 11 | 171 | 0.1.0 (unreleased) |

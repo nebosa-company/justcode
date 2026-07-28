@@ -22,6 +22,8 @@
 //! | [`watchdog`] | `L-11`, `L-12`, `L-13` |
 //! | [`git`] | `G-1`–`G-8`, `G-10`, `G-14` |
 //! | [`verify`] | `V-1`, `V-3`, `V-4`, `V-7`–`V-10` |
+//! | [`link`] | `M-1`–`M-5`, `M-14` |
+//! | [`probe`] | `M-6`, `M-7` |
 //! | [`json`], [`time`] | no dependencies, per `N-11` |
 //!
 //! Nothing here talks to a model or touches git. Those are batches 4 and 6 —
@@ -35,6 +37,8 @@ pub mod gate;
 pub mod git;
 pub mod journal;
 pub mod json;
+pub mod link;
+pub mod probe;
 pub mod process;
 pub mod session;
 pub mod state;
@@ -50,6 +54,8 @@ pub use binding::Binding;
 pub use error::{Error, Result};
 pub use gate::{Attempts, Gate, GateResult, Verdict};
 pub use journal::{Journal, Kind, Record};
+pub use link::{Link, Links, Mode, Role};
+pub use probe::{Capabilities, ModelFacts, ProbeCache};
 pub use process::{Env, Exit, Nursery, Run, Spec};
 pub use session::{Decision, Finding, Probe, Session, StepGuard};
 pub use state::{replay, Projection};
