@@ -20,6 +20,7 @@
 //! | [`gate`] | `V-2`, `L-16` |
 //! | [`session`] | `L-5`, `L-6`, `L-7`, `L-15`, `N-1`, `N-2` |
 //! | [`watchdog`] | `L-11`, `L-12`, `L-13` |
+//! | [`git`] | `G-1`–`G-6`, `G-10`, `G-14` |
 //! | [`json`], [`time`] | no dependencies, per `N-11` |
 //!
 //! Nothing here talks to a model or touches git. Those are batches 4 and 6 —
@@ -30,6 +31,7 @@ pub mod atomic;
 pub mod binding;
 pub mod error;
 pub mod gate;
+pub mod git;
 pub mod journal;
 pub mod json;
 pub mod process;

@@ -131,6 +131,7 @@ Written in `docs/perpetum.md` next to the requirement id:
 | 🟡 | in progress |
 | ✅ + `~~id~~` | done: implemented, all gates green, transcript in the journal |
 | 🚧 | blocked (Perpetum 0.5) — carries the verbatim error |
+| 🔶 | conflicting (Perpetum C.2) — parked in `conflicts.md` with the vision or architecture line it contradicts |
 | ⛔ | gated (Perpetum 0.6) — carries which kind and what is missing |
 | ❌ | won't do — carries the reason |
 

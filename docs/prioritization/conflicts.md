@@ -77,7 +77,49 @@ to the machine.
 
 ---
 
+---
+
+## CONFLICT-3 — `G-13` versus the binding it was written alongside
+
+**Requirement:** `G-13` — *"The harness's own state (journal, scratch,
+artifacts) is either outside the repo or ignored by it. The loop never commits
+its own noise."*
+
+**Contradicts the current architecture**, specifically
+[`binding.md`](../perpetum/binding.md), which declares
+`out.journal = docs/perpetum/journal.jsonl` — inside the repository — and every
+batch so far has committed it.
+
+Found by implementing batch 4, not by reading. This is the kind of conflict
+Perpetum C.2 exists for: a requirement that was reasonable in the abstract and
+is wrong against the architecture that grew under it.
+
+**The trade-off.** `G-13` is about churn: build output, caches, scratch files,
+a journal that grows a line per tool call. But this loop's journal *is* the
+evidence — gate transcripts, verbatim errors, which step produced which commit.
+Committing it is what makes a branch reviewable by someone who was not there,
+and what makes `perp resume` work on a fresh clone. Ignoring it would mean the
+proof of a green gate lives only on the machine that ran it.
+
+**Options:**
+
+| | Option | Consequence |
+|---|---|---|
+| A | **Split the requirement** *(recommended)* — `G-13` keeps its ban on committing churn (scratch, caches, build output, `crates/target/`), and the journal, state file, board and artifacts are reclassified as **documentation**, deliberately versioned. | Honest about what is happening, keeps the audit trail in git, and still stops the loop committing noise. Needs `G-13`'s text rewritten, not just re-marked. |
+| B | Move the journal outside the repository. | Satisfies `G-13` literally. A reviewer of a `perp/**` branch can no longer see why anything was done, and the evidence stops travelling with the work. |
+| C | Keep the journal in the repo but gitignored. | Worst of both: it exists, it is not shared, and the next clone starts blind. |
+
+**Recommendation: A.** The requirement was written before the journal had a
+reader other than the engine. Now that a human reviews branches by reading it,
+"never commit your own state" is the wrong rule for this particular state.
+
+**Blocks nothing.** `G-13` is marked 🔶 and was not implemented in batch 4;
+the other seven requirements in that batch were.
+
+---
+
 ## Asked
 
-Both presented to the operator on 2026-07-28 as a batch, per C.6. The cycle
-continued without waiting (C.6). No answers recorded yet.
+CONFLICT-1 and CONFLICT-2 presented to the operator on 2026-07-28 as a batch,
+per C.6. CONFLICT-3 added the same day, from batch 4. The cycle continued
+without waiting (C.6). No answers recorded yet.

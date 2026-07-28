@@ -395,3 +395,95 @@ Branch `perp/c1/b3`. Nine requirements plus `L-4`, carried from batch 1.
 **Batch 3 status:** 10 of 10 delivered (`L-5` `L-6` `L-7` `L-11` `L-12` `L-13`
 `L-15` `N-1` `N-2`, plus `L-4` carried from batch 1), 0 blocked. Gates green:
 90 unit + 5 integration = 95 tests.
+
+---
+
+## Phase D — Batch 4, the git harness
+
+Branch `perp/c1/b4`. Eight requirements: `G-1` `G-2` `G-3` `G-4` `G-6` `G-10`
+`G-13` `G-14`.
+
+### c1/b4/s01–s04 — Write the harness
+- **outcome:** `git.rs`. The rules are enforced by a classifier that runs
+  **before** the process is spawned, so there is no path where a command runs
+  and the policy is consulted afterwards. `Never` is not a strong `Approve`:
+  an approval does not unlock `add -A`, and there is a test that says so.
+
+### c1/b4/s05 — Test gate, first run: FAILED
+- **outcome:** exit 101, 1 of 103.
+
+  ```
+  ---- git::tests::the_refusals_are_refusals ----
+  git ["clean", "-fdx"] must be refused outright
+  ```
+
+- **diagnosis:** a **real bug in the code**, not the test. The classifier looked
+  for `-x`, `-fd` and `-a` as whole arguments, so every combined short flag went
+  straight past it — `clean -fdx`, and worse, `commit -am`, which is exactly the
+  sweep-up-everything case `G-3` exists to stop.
+- **fix:** a `short()` helper that looks *inside* a short-flag cluster, and
+  `clean` refused in every form except a dry run — there is no combination of
+  letters worth allow-listing. Test cases added for `commit -am`, `commit -n`,
+  `push -uf`, `clean -f`.
+- **attempt 1 of 2.**
+
+### c1/b4/s06 — Test gate, second failure: FAILED
+- **outcome:** exit 101, 9 of 104 — every test using the repository fixture.
+
+  ```
+  git rev-parse --abbrev-ref HEAD: exit 128:
+  fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree
+  ```
+
+- **diagnosis:** adding the `G-1` refusal to `commit` made every commit ask what
+  branch it was on, and `rev-parse --abbrev-ref HEAD` cannot answer before the
+  first commit exists. The fixture's own first commit broke.
+- **fix:** `git branch --show-current`, which answers on an unborn branch.
+  "The repository is too new to have a branch" is not the same as "detached",
+  and the old command could not tell them apart.
+- **attempt 2 of 2** for this feature — one more and `G-1` would have been
+  blocked per Perpetum 0.5. Recorded because that is how close it got.
+
+### c1/b4/s07 — Gates
+- **outcome:** green. 104 unit + 5 integration = 109 tests.
+
+### c1/b4/s08 — Red run, now with `V-10` enforced
+- **outcome:** four mutations red, and the fifth **caught by the new check**:
+
+  ```
+  git.rs  short-flag detection always false     the_refusals_are_refusals                101  red
+  git.rs  approval check never fires            an_unapproved_push_is_refused…           101  red
+  git.rs  drop the Requirement trailer          a_commit_is_traceable_in_the_repo…       101  red
+  git.rs  protected-branch check never fires    readiness_refuses_a_protected_branch     101  red
+  git.rs  (a pattern that does not exist)       head_sha_is_what_a_gate_would…    MUTATION DID NOT APPLY
+  ```
+
+  The last line is `V-10` working: the red-run harness now diffs the file before
+  believing the result, so a mutation that silently matched nothing is reported
+  as meaningless instead of as a passing test.
+
+### c1/b4/s09 — `G-6` closes `V-2` (Perpetum 0.7)
+- **outcome:** `perp gate` now pins every transcript to `git rev-parse HEAD`.
+
+  ```
+  gate: lint
+  sha: 3c2d8f6336cd3700dffb7fe54957aea4d330aa88
+  exit 0 in 167ms
+  ```
+
+  `V-2` asked for command, cwd, sha, exit code, output tail, duration and
+  timestamp. The sha was the one field missing since batch 2; it moves to ✅.
+
+### c1/b4/s10 — `G-13` conflicts with the binding
+- **outcome:** marked **🔶 conflicting** and parked, not implemented.
+- `G-13` says the harness never commits its own state. The binding declares
+  `out.journal` **inside** the repository, and every batch so far has committed
+  it — deliberately, because the journal is the evidence a reviewer reads and
+  what makes `perp resume` work on a fresh clone.
+- Found by implementing, not by reading. Full trade-off and three options in
+  [`../prioritization/conflicts.md`](../prioritization/conflicts.md) as
+  CONFLICT-3; the recommendation is to split the requirement rather than move
+  the journal out of the repository.
+
+**Batch 4 status:** 7 of 8 delivered, 1 conflicting, 0 blocked. Plus `V-2`
+closed from batch 2. Gates green: 109 tests.

@@ -13,6 +13,7 @@ use std::process::ExitCode;
 
 use perp_core::binding::Binding;
 use perp_core::gate::{self, Gate};
+use perp_core::git::Repo;
 use perp_core::journal::{Journal, Record};
 use perp_core::session::{Decision, Finding, Probe, Session};
 use perp_core::state::{render, replay};
@@ -240,7 +241,19 @@ fn cmd_gate(args: &[&str]) -> std::result::Result<(), String> {
         None => None,
     };
 
-    let results = gate::run_all(&gates).map_err(|e| e.to_string())?;
+    // `G-6`: pin every transcript to the commit it ran against. A repository
+    // that cannot answer is not an error — the gate still ran — but the
+    // transcript then says so rather than implying a sha it does not have.
+    let sha = Repo::at(binding.root()).head_sha().ok();
+
+    let results: Vec<_> = gate::run_all(&gates)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|result| match &sha {
+            Some(sha) => result.at_sha(sha),
+            None => result,
+        })
+        .collect();
     let mut red = 0;
 
     for result in &results {

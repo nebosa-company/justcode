@@ -10,13 +10,13 @@ in between cycles.
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 1, batch 3: **21 of 147 requirements are done**, 3 in progress (one
-of them approval-gated), 2 parked as conflicting. What exists is the spine (binding,
-steps, journal, projection), the gate runner and its evidence, and the recovery
-and watchdog layer — in [`crates/`](../crates/), std-only, 95 tests. Everything
-about models, tools, git, chat and artifacts is still design. Status markers on
-each requirement below say which is which; a marker without a matching journal
-entry is not believed (Perpetum 0.7).
+As of cycle 1, batch 4: **29 of 147 requirements are done**, 2 in progress (one
+of them approval-gated), 3 parked as conflicting. What exists is the spine
+(binding, steps, journal, projection), the gate runner and its evidence, the
+recovery and watchdog layer, and the git harness — in [`crates/`](../crates/),
+std-only, 109 tests. Everything about models, tools, chat and artifacts is still
+design. Status markers on each requirement below say which is which; a marker
+without a matching journal entry is not believed (Perpetum 0.7).
 
 Perpetum describes *what* the loop does. This describes *what has to exist* for
 the loop to survive being left running for a week with nobody watching.
@@ -305,12 +305,12 @@ actually did, and the only thing that can undo it.
 
 | id | Requirement |
 |---|---|
-| `G-1` | The engine owns the branch layout: `perp/c<cycle>/b<batch>` per batch, features committed onto it, merged to the integration branch only when every gate for the batch is green. `main` is never committed to directly. |
-| `G-2` | One feature, one commit (or a tight, ordered series). Commit messages follow the binding's convention and carry trailers: requirement ids, journal step id, and the link + model + quantization that authored the change. A line of code traces back to a requirement and to the model that wrote it. |
-| `G-3` | The staged set is computed from the step's touched files. `git add -A` and `git commit -a` are forbidden — an unattended loop must never sweep up an unrelated change it did not make. |
-| `G-4` | Hooks run and are never bypassed. `--no-verify` is `never` (`T-13`). A hook failure is a gate failure and follows Perpetum 0.5. |
+| ✅ ~~`G-1`~~ | The engine owns the branch layout: `perp/c<cycle>/b<batch>` per batch, features committed onto it, merged to the integration branch only when every gate for the batch is green. `main` is never committed to directly. |
+| ✅ ~~`G-2`~~ | One feature, one commit (or a tight, ordered series). Commit messages follow the binding's convention and carry trailers: requirement ids, journal step id, and the link + model + quantization that authored the change. A line of code traces back to a requirement and to the model that wrote it. |
+| ✅ ~~`G-3`~~ | The staged set is computed from the step's touched files. `git add -A` and `git commit -a` are forbidden — an unattended loop must never sweep up an unrelated change it did not make. |
+| ✅ ~~`G-4`~~ | Hooks run and are never bypassed. `--no-verify` is `never` (`T-13`). A hook failure is a gate failure and follows Perpetum 0.5. |
 | `G-5` | Local commits are `auto`. Push, PR/MR creation, tagging a release, and publishing anything are `approve` (`T-12`, `S-7`). |
-| `G-6` | Every gate transcript records the exact commit sha it ran against (`V-2`). A green gate at a sha that no longer exists is not evidence and does not count. |
+| ✅ ~~`G-6`~~ | Every gate transcript records the exact commit sha it ran against (`V-2`). A green gate at a sha that no longer exists is not evidence and does not count. |
 
 ### 5.2 History as a signal, and as an undo
 
@@ -319,11 +319,11 @@ actually did, and the only thing that can undo it.
 | `G-7` | `log`, `blame`, `show` and `diff` are Phase B and C inputs: churn hotspots feed prioritisation, and blame answers "was this already built?" faster than grep alone (Perpetum 0.7, `V-1`). |
 | `G-8` | Feature commits are contiguous and recorded in the journal, so a single feature can be reverted cleanly. This is the git half of rewind (`O-4`). |
 | `G-9` | Conflict handling is bounded: one automated attempt on non-overlapping hunks, then park as `blocked` with the conflict text verbatim. The loop never resolves a semantic conflict by picking a side quietly. |
-| `G-10` | Rewriting published history, force-push, and `reset --hard` on a dirty tree are `never`. Any destructive git operation stashes first and journals the stash ref. |
+| ✅ ~~`G-10`~~ | Rewriting published history, force-push, and `reset --hard` on a dirty tree are `never`. Any destructive git operation stashes first and journals the stash ref. |
 | `G-11` | Worktrees are lifecycle-managed: created per feature when `L-17` parallelism is on, removed on merge or abandon, never left stale. |
 | `G-12` | Submodules, LFS and in-repo hooks are detected at binding time and either supported or declared unsupported loudly. A loop that silently skips a submodule ships half a change. |
-| `G-13` | The harness's own state (journal, scratch, artifacts) is either outside the repo or ignored by it. The loop never commits its own noise, and `.gitignore` is respected by every tool. |
-| `G-14` | Repo state is asserted before each batch: expected branch, clean tree, no rebase or merge in progress, no detached HEAD. A surprising state parks the cycle rather than committing into it. |
+| 🔶 `G-13` | The harness's own state (journal, scratch, artifacts) is either outside the repo or ignored by it. The loop never commits its own noise, and `.gitignore` is respected by every tool. |
+| ✅ ~~`G-14`~~ | Repo state is asserted before each batch: expected branch, clean tree, no rebase or merge in progress, no detached HEAD. A surprising state parks the cycle rather than committing into it. |
 
 ---
 
@@ -357,7 +357,7 @@ decides whether a week of unattended running produced software or a fiction.
 | id | Requirement |
 |---|---|
 | `V-1` | **Reality check before build** (Perpetum 0.7). Before implementing any requirement, the engine runs a mandatory search step — grep plus `G-7` history — and records its result. A feature cannot enter implementation without one. |
-| 🟡 `V-2` | **No self-reported success.** A gate is green only if the engine ran the command itself and stored the transcript: command, cwd, commit sha, exit code, output tail, duration, timestamp. Model prose asserting success is not evidence and is never written to a status marker. |
+| ✅ ~~`V-2`~~ | **No self-reported success.** A gate is green only if the engine ran the command itself and stored the transcript: command, cwd, commit sha, exit code, output tail, duration, timestamp. Model prose asserting success is not evidence and is never written to a status marker. |
 | `V-3` | **The red run.** A new test must be executed against the tree *without* the change and observed to fail, then with the change and observed to pass. Both transcripts are stored. A test that passes in both runs does not satisfy Perpetum's gate 4, and the feature stays open. |
 | `V-4` | **Test tampering is a hard error.** Deleting, skipping, weakening an assertion or loosening a matcher in an existing test during a gate-fix step aborts the step. If the test is genuinely wrong, that is a requirement — filed and cited, not an edit made in passing. |
 | `V-5` | **Independent verification.** The verifier role must resolve to a different link than the one that authored the change. Self-review by the same model on the same context is not review. |
@@ -423,7 +423,7 @@ other durable output of a cycle deserves the same treatment.
 | `O-3` | Live controls: pause at next step boundary, resume, single-step, inject a message, redirect to another requirement, abort the cycle cleanly. |
 | `O-4` | **Rewind:** resume from any journal step, discarding later work, with the workspace reset to that step's commit (`G-8`). This is how a bad batch is recovered without re-running the cycle. |
 | `O-5` | A watch mode streams: phase, batch, feature, link in use, tokens and money this cycle, gate state, blocked and gated counts, pending approvals, queued `/btw`. |
-| `O-6` | Notification sink is pluggable (OS notifier, webhook, mail) and supports a **reply path** so a human away from the terminal can approve, reject or `/btw`. |
+| 🔶 `O-6` | Notification sink is pluggable (OS notifier, webhook, mail) and supports a **reply path** so a human away from the terminal can approve, reject or `/btw`. |
 | `O-7` | Cycle metrics (Perpetum F.5) are appended to the state file's history table by the engine, from counted facts, not from a summary. |
 
 ### 9.1 JustCode integration
@@ -434,7 +434,7 @@ Speculative, and the reason this document lives in this repo.
 |---|---|
 | `I-1` | The engine is a Rust core with two front-ends: a CLI (`perp run`, `perp chat`, `perp status`, `perp approve`, `perp rewind`) and a JustCode panel. |
 | `I-2` | In JustCode the engine runs as a **sidecar process**, not in the Tauri main process. An agent loop must not be able to take the editor down with it, and must outlive the editor window. |
-| `I-3` | The panel hosts chat, the approvals queue, the current diff, the artifact view and a journal timeline. Approving from the panel opens the diff first. |
+| 🔶 `I-3` | The panel hosts chat, the approvals queue, the current diff, the artifact view and a journal timeline. Approving from the panel opens the diff first. |
 | `I-4` | Existing editor surfaces are reused where they fit: the Problems panel for gate failures, the terminal dock for gate transcripts, tabs for the files under edit. |
 | `I-5` | The panel is a view onto the journal, not a second source of truth. Closing the editor does not stop the loop; reopening re-attaches. |
 
