@@ -1,0 +1,19 @@
+[workspace]
+members = ["perp-core", "perp"]
+resolver = "2"
+
+# A workspace of its own, separate from ../src-tauri, so the editor's build
+# never gains the harness's dependencies and `cargo tauri build` behaves exactly
+# as it did before this directory existed (binding.md, "Code layout").
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

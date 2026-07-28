@@ -18,6 +18,10 @@ dist-ssr
 src-tauri/target/
 src-tauri/gen/
 
+# The harness workspace builds into its own target/ (crates/ is a separate
+# cargo workspace from src-tauri/, deliberately — see docs/perpetum/binding.md).
+crates/target/
+
 # Bundles produced by scripts/pack.mjs
 *.msi
 *.nsis.zip

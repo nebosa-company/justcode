@@ -132,3 +132,94 @@ resolves every path Perpetum names. ✅
   ahead of the tool host (160).
 
 **Phase C exit:** 10 batches written; conflicts parked and asked; state updated. ✅
+
+---
+
+## Phase D — Batch 1, the spine
+
+Branch `perp/c1/b1`. Nine requirements, built in dependency order. From `c1/b1/s13`
+onward the records are also in `journal.jsonl`, written by the engine itself.
+
+### c1/b1/s01–s09 — Write the spine
+- **intent:** implement batch 1: binding loader, step ids, journal, projection,
+  atomic writes, typed errors, versioned records.
+- **outcome:** `crates/` created as its **own cargo workspace**, separate from
+  `src-tauri/` so the editor's build is untouched. `perp-core` (library) and
+  `perp` (CLI), **zero third-party dependencies** — the binding makes adding a
+  crate an approval step, and a hand-written JSON writer and scanner cost less
+  than the approval would (`N-11`).
+- **files:** `error.rs` `json.rs` `time.rs` `atomic.rs` `step.rs` `binding.rs`
+  `journal.rs` `state.rs` `lib.rs`, `perp/src/main.rs`, `tests/spine.rs`.
+
+### c1/b1/s10 — Lint gate, first run: FAILED
+- **outcome:** `cargo clippy --workspace --all-targets -- -D warnings` → **exit 101**.
+
+  ```
+  error: used `expect()` on a `Result` value
+    --> perp-core\tests\spine.rs:19:5
+     = note: requested on the command line with `-D clippy::expect-used`
+  error: could not compile `perp-core` (test "spine") due to 4 previous errors
+  ```
+
+- **cause:** clippy's `allow-expect-in-tests` covers `#[test]` functions; the
+  fixture helpers in `tests/` are plain functions beside them, so the exemption
+  did not reach them.
+- **fix:** `#[allow(clippy::expect_used)]` on the two helpers, with the reason in
+  a comment. The policy was not weakened — `unwrap_used`/`expect_used` remain
+  `deny` for all library code, which is what `N-9` is about.
+- **attempt 1 of 2** (Perpetum 0.5). Resolved on the first attempt.
+
+### c1/b1/s11 — Gates, all three
+- **outcome:** green.
+
+  ```
+  $ cargo clippy --workspace --all-targets -- -D warnings
+  Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s
+  exit 0
+
+  $ cargo build --workspace
+  Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.90s
+  exit 0
+
+  $ cargo test --workspace
+  test result: ok. 48 passed; 0 failed   (perp-core lib)
+  test result: ok.  5 passed; 0 failed   (tests/spine.rs)
+  exit 0
+  ```
+
+### c1/b1/s12 — Red run
+- **intent:** Perpetum gate 4 says the tests must *fail without the change*.
+  `V-3` is batch 5, so this is the manual form: mutate the implementation, run
+  that feature's test, confirm red, restore.
+- **outcome:** four of four went red.
+
+  ```
+  step.rs     drop the seq tiebreak from Ord   orders_by_cycle_then_sequence          101
+  journal.rs  .append(true) -> .truncate(true) appending_never_rewrites_what_is_there 101
+  time.rs     div_floor -> integer division    handles_before_the_epoch               101
+  binding.rs  !path.exists() -> false          verify_names_the_input_that_is_missing 101
+  restored                                     53 passed, exit 0
+  ```
+
+- **honest scope:** four of the 53 tests were red-run, chosen as the
+  highest-risk behaviours. The other 49 were not. Automating this for every
+  feature is `V-3`, in batch 5.
+
+### c1/b1/s13 — Exercise the real artefact (Perpetum 0.7)
+- **outcome:** `perp bind --root ..` resolved all 7 inputs `[ok]` and both
+  outputs `[to be written]`, exit 0. `perp record` appended four records to
+  `docs/perpetum/journal.jsonl`. `perp state --out -` replayed them into the
+  projection — 2 done, 0 blocked, 9 requirements cited.
+
+### c1/b1/s14 — What is *not* done
+- `L-4` and `L-8` are **🟡 in progress**, not done. The projection exists and is
+  tested, but "rewritten after each outcome" needs the loop engine (batch 3) to
+  call it, and "context is disposable" is an invariant to re-assert every batch
+  rather than a feature that finishes. Marking them done would be the exact
+  failure this harness exists to prevent.
+- `docs/perpetum/state.md` is still the operator's hand-written file. The engine
+  can render a projection but cannot yet represent parked conflicts or gated
+  items, so it was **not** pointed at that path this cycle.
+
+**Batch 1 status:** 7 of 9 delivered, 2 carried, 0 blocked, 0 gated. All gates
+green at the delivered set.

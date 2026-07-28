@@ -36,6 +36,44 @@ every gate in this cycle is a real command with a real transcript in
 | Release notes | `docs/perpetum/release-notes.md` | the harness's own, separate from the editor's |
 | Deploy runbook | `docs/maintain/deploy.md` | created in Phase E if absent |
 
+## The machine-readable binding
+
+The block below is the binding the engine actually reads (`L-21`). The tables in
+this document are commentary on it; this is the source. One file, one truth —
+a separate config file would be a second place for these paths to be wrong.
+
+`path.*` are **inputs** and must exist, or the loop stops and asks. `out.*` are
+**written** by the engine; only their parent directory must exist.
+
+```perp-binding
+path.requirements = docs/perpetum.md
+path.vision       = docs/initiation/vision.md
+path.nfrs         = docs/initiation/nfrs.md
+path.batches      = docs/prioritization/batches.md
+path.conflicts    = docs/prioritization/conflicts.md
+path.weights.source = docs/requirements/weights.md
+path.weights.impact = docs/prioritization/weights.md
+
+out.journal = docs/perpetum/journal.jsonl
+out.state   = docs/perpetum/state.md
+out.board   = docs/perpetum/progress-board.md
+
+gate.cwd   = crates
+gate.lint  = cargo clippy --workspace --all-targets -- -D warnings
+gate.build = cargo build --workspace
+gate.test  = cargo test --workspace
+
+git.branch.batch = perp/c{cycle}/b{batch}
+git.branch.init  = perp/c{cycle}/init
+git.push         = approval
+```
+
+Two journals, deliberately: [`journal.md`](journal.md) is **cycle 1's operator
+journal**, written by hand while the engine is being built, and
+`journal.jsonl` is what the engine writes from batch 1 onward. When the engine
+takes the loop over, the markdown journal stops growing and stands as the record
+of the bootstrap.
+
 ## Where new requirements may be written
 
 **Yes — new ids are appended to `docs/perpetum.md`**, in the section table that

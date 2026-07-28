@@ -1,0 +1,15 @@
+[package]
+name = "perp-core"
+description = "Perpetum harness — the durable spine: binding, steps, journal, projection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# No dependencies, on purpose. `N-11` puts the standard library first and the
+# binding makes adding a crate an approval step; the journal's record shape is
+# small enough that a hand-written JSON writer and scanner cost less than the
+# approval would.
+[dependencies]
+
+[lints]
+workspace = true

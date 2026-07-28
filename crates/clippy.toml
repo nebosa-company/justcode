@@ -1,0 +1,5 @@
+# `unwrap_used` and `expect_used` are denied for the crate (`N-9`) — a panic
+# mid-batch is what stops the loop reconciling on restart. Tests are the one
+# place a panic is the point: an assertion that cannot fail proves nothing.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

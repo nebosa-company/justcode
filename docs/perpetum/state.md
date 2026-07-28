@@ -1,22 +1,30 @@
 # Perpetum state
 
-Cycle: 1 · Phase: D · Batch: 1 of 5 · Updated: 2026-07-28
+Cycle: 1 · Phase: D · Batch: 1 of 5 delivered · Updated: 2026-07-28
 
-Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) ·
-Requirements: [`../perpetum.md`](../perpetum.md) ·
-Batches: [`../prioritization/batches.md`](../prioritization/batches.md)
+Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
+`journal.jsonl` · Requirements: [`../perpetum.md`](../perpetum.md) ·
+Batches: [`../prioritization/batches.md`](../prioritization/batches.md) ·
+Board: [`progress-board.md`](progress-board.md)
+
+Hand-written this cycle. The engine can render a projection (`perp state`) but
+cannot yet represent parked conflicts or gated items, so `out.state` is not
+pointed here until batch 3.
 
 ## Position
 
-- Current batch theme: **Batch 1 — the spine: journal, steps, state projection**
-- In batch: 0 of 9 done, 0 blocked, 9 remaining
-- Next: `L-21` — binding loader, refuse to run unbound
+- Batch 1 — **the spine** — closed: 7 of 9 delivered, 2 carried, 0 blocked.
+- Next: **batch 2 — gate runner and evidence** (`V-2` `T-3` `L-16` `X-4` `X-12` `T-4`).
+- Carried into batch 3, not done: `L-4` (projection needs the loop to call it
+  after each outcome), `L-8` (an invariant, re-asserted every batch).
 
 ## Last green gates
 
-- lint: not yet run
-- build: not yet run
-- tests: not yet run
+- lint: `cargo clippy --workspace --all-targets -- -D warnings` · 2026-07-28 · exit 0 · clean
+- build: `cargo build --workspace` · 2026-07-28 · exit 0 · clean
+- tests: `cargo test --workspace` · 2026-07-28 · exit 0 · 53/53 passed
+
+Transcripts in [`journal.md`](journal.md) at `c1/b1/s11`.
 
 ## Blocked
 
@@ -44,3 +52,4 @@ session itself)*
 
 | Cycle | Batches | Features | Tests added | Version |
 |---|---|---|---|---|
+| 1 | 1 of 5 delivered | 7 | 53 | 0.1.0 (unreleased) |
