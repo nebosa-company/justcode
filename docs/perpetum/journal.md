@@ -1319,3 +1319,99 @@ review, which makes E.5 the step that matters this time.
 
 **Phase E exit:** 0.2.0 shipped **to the approval boundary**, with the two
 crossing steps parked and named. ✅
+
+---
+
+## Phase F — Clean-up, 2026-07-29
+
+Branch `perp/c2/cleanup`. The day has changed since the batches were built,
+which matters for one thing and is recorded rather than glossed: the market
+source was skipped in cycle 2 *because it was the same day*, and that reason has
+now expired.
+
+### c2/F/s01 — Reconcile the markers (F.1)
+- **outcome, counted from the file rather than from the last report:**
+
+  ```
+  done: 64   in progress: 4   gated: 1   conflicting: 3   total: 152
+  ```
+
+  `perp check ids` agrees: 152 defined across 29 documents, no strays. Perpetum
+  0.8 has held for two cycles, and there is a command that proves it rather
+  than a habit that claims it.
+
+### c2/F/s02 — The reconcile found the board rotting
+- **intent:** F.1 exists to make the next cycle's C.1 start from the truth. That
+  includes the board.
+- **outcome:** `docs/perpetum/progress-board.md` was last written at **`c1/b5`**
+  — *six batches ago*. The published artifact was updated every single batch;
+  the file on disk was not.
+- **this is the exact failure Perpetum 0.7 describes**: the visible thing gets
+  maintained and the recorded thing rots. It happened because both are
+  hand-written — `A-2` and `A-3` would generate them from the journal, and
+  neither is built.
+- **fix:** the board is regenerated, and it says at the top that it went stale
+  and why. A board that silently caught up would teach nobody anything.
+- **not filed as a new requirement**, because `A-3` already says exactly this
+  and is already in batch 14. What changed is the evidence for its priority:
+  six batches of drift, found by a reconcile rather than by a reader.
+
+### c2/F/s03 — Move the delivered work out (F.2)
+- Batches 6–10 marked delivered in
+  [`../prioritization/batches-cycle2.md`](../prioritization/batches-cycle2.md),
+  with what each carried. Batches 11–15 compete again in cycle 3.
+
+### c2/F/s04 — [approval] Close the loop with whoever asked (F.3)
+- **parked**, same as cycle 1. The only requester is the operator, who is in the
+  session; the GitHub tracker has been unreachable for both cycles because the
+  active `gh` account cannot see a repository owned by the other one.
+
+### c2/F/s05 — The cycle's numbers (F.5)
+
+| | Cycle 1 | Cycle 2 |
+|---|---|---|
+| Batches delivered | 5 of 5 | 5 of 5 |
+| Requirements done | 38 | 26 |
+| Requirements minted while building | 7 | 4 |
+| Tests | 128, from 0 | 237, from 128 |
+| Tests red-run | 26 | 32 |
+| Gate failures | 5 | 3 |
+| Blocked | 0 | 0 |
+| Model calls | 0 | 1 — an embedding, against a real local model |
+| Money spent | £0 | £0 |
+| Commits | 7 | 8 |
+| Pushed | nothing | nothing |
+
+**Two cycles, sixteen commits, thirteen branches, and `main` has not moved.**
+
+### c2/F/s06 — What cycle 3 inherits
+- **Due immediately in Phase B:** the market pass. It was skipped in cycle 2
+  with the reason "same day"; the day has changed, and `M-14` exists precisely
+  because these facts rot — one of them rotted four days before the design was
+  written.
+- **Three defects found by running it**, all filed, none built: `T-18`
+  (self-lock), `M-24` (credentials checked too late), `S-8` (request bodies in a
+  shared temp directory).
+- **Two gated:** `X-4` needs a dependency approval; `M-25` needs LM Studio to
+  expose per-request device selection, or the SDK.
+- **Three conflicts, unanswered since cycle 1:** `I-3`, `O-6`, `G-13`. Two of
+  them shape what the harness *is*, and they have now survived two full cycles
+  of being asked politely at the end of a phase.
+
+**Phase F exit:** statuses reconciled, delivered work moved out, parked items
+carried with their reasons, numbers recorded. The loop returns to **Phase B for
+cycle 3**. ✅
+
+---
+
+## Cycle 2 closed
+
+The harness can now route a call by role rather than by model name, refuse to
+cross a privacy boundary, reach a real server over a transport that keeps the
+credential off the command line, account for what it spent with cache-hit and
+cache-miss priced apart, and tell you which link answered and which one failed
+first.
+
+It still cannot drive itself. The loop that would call any of this — the phase
+machine, the tool host, the budget — is batches 11 and 12, and until then the
+thing running Perpetum is still a person following a document.

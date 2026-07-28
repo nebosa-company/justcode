@@ -1,5 +1,22 @@
 # Batches — cycle 2
 
+## Delivered (Perpetum F.2)
+
+Batches 6–10 are closed. Phase D's exit needs five; five is what it got, and
+this time the end-to-end obligation was met rather than carried.
+
+| # | Theme | Delivered | Carried or parked |
+|---|---|---|---|
+| 6 | Proving it works | 6 of 7 | `N-6` carried — the *gate runner* makes no network call, but nothing stops a project's gate command |
+| 7 | Model links — the router | 5 of 8 | `M-6` `M-7` `M-14` carried to batch 8 and closed there |
+| 8 | Transport and protocols | 6 of 8 | `M-21` `M-23` carried; `M-8` untouched, waiting on the tool host |
+| 9 | Cost, caching and context | 4 of 4 | — |
+| 10 | Local-server realities | 5 of 5 | `M-25` discovered and gated |
+
+**Batches 11–15 below are unchanged and compete again in cycle 3's Phase C**, in
+front of a backlog that now carries `M-24`, `S-8` and `T-18` — three defects
+found by running the thing rather than by planning it.
+
 The next 10 batches (Perpetum C.7), renumbered 6–15. Cycle 1's unbuilt batches
 6–10 competed again from scratch rather than being inherited; four of them
 survive, in a different order, and two new ones join.

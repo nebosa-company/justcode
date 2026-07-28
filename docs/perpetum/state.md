@@ -1,7 +1,6 @@
 # Perpetum state
 
-Cycle: 2 · Phase: **E complete** · 0.2.0 at the approval boundary ·
-Updated: 2026-07-28
+Cycle: 2 · **closed** · Phase: F complete → B (cycle 3) · Updated: 2026-07-29
 
 Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
 `journal.jsonl` · Requirements: [`../perpetum.md`](../perpetum.md) ·
@@ -21,11 +20,17 @@ Board: [`progress-board.md`](progress-board.md)
 | 9 | Cost, caching and context | 4 of 4 |
 | 10 | Local-server realities | 5 of 5 |
 
-**Phase D** met its exit condition: five batches, suite green. **Phase E**
-shipped 0.2.0 to the approval boundary — security review with two new tests and
-one finding (`S-8`), price book verified, one false statement corrected, and a
-deploy runbook created that records that nothing was deployed. Next is **F**,
-which closes the cycle and returns to B.
+**Phase E** shipped 0.2.0 to the approval boundary. **Phase F** reconciled the
+markers against the file, moved batches 6–10 out of the active list, and
+recorded the numbers.
+
+**F.1 found the progress board six batches stale** — the published artifact was
+updated every batch, the file on disk was not. Regenerated, and it says so at
+the top. `A-2`/`A-3` would generate both from the journal; neither is built,
+which is now evidenced rather than merely argued.
+
+- Next: **Phase B — cycle 3**. The market pass is **due immediately**: it was
+  skipped in cycle 2 because it was the same day, and the day has changed.
 
 Perpetum D also asks for end-to-end coverage to be extended over the five
 batches. It was: the CLI suite grew from 11 tests to 15, including a full
@@ -94,3 +99,6 @@ downloading one onto it is not the loop's decision. DeepSeek has no key.
 |---|---|---|---|---|
 | 1 | 5 of 5 delivered | 38 | 128 | 0.1.0 (unreleased) |
 | 2 | 5 of 5 delivered | 26 | 237 | 0.2.0 (unreleased) |
+
+Two cycles, sixteen commits, thirteen branches, `main` unmoved at `e579167`.
+One model call, an embedding, against a real local model. £0 spent.
