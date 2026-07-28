@@ -15,7 +15,9 @@ use perp_core::binding::Binding;
 use perp_core::gate::{self, Gate};
 use perp_core::git::Repo;
 use perp_core::journal::{Journal, Record};
+use perp_core::client::{ChatRequest, Client, Message};
 use perp_core::link::{AssumeHealthy, Links, Mode, Role};
+use perp_core::net::Curl;
 use perp_core::session::{Decision, Finding, Probe, Session};
 use perp_core::state::{render, replay};
 use perp_core::verify;
@@ -57,6 +59,10 @@ usage:
       that role resolves to. With --local-only, do it as a run with no cloud —
       and report any role that loses its last option.
 
+  perp ask <prompt> [--role <role>] [--local-only] [--system <text>] [--root <dir>]
+      Resolve a role to a link and ask it. Prints the reply, the provenance of
+      whichever link answered, and any link that was tried first and failed.
+
   perp version
 ";
 
@@ -90,6 +96,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("resume") => cmd_resume(&args[1..]),
         Some("check") => cmd_check(&args[1..]),
         Some("links") => cmd_links(&args[1..]),
+        Some("ask") => cmd_ask(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -256,6 +263,50 @@ fn cmd_links(args: &[&str]) -> std::result::Result<(), String> {
             ));
         }
     }
+    Ok(())
+}
+
+/// Ask a role's link something (`M-9`, `M-10`).
+///
+/// Prints where the answer came from, always — including the links that were
+/// tried and failed first. A reply whose author is invisible is the thing
+/// `M-10` exists to prevent.
+fn cmd_ask(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let links = Links::load(&binding.resolve("path.links").map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+
+    let prompt = positionals(args)
+        .first()
+        .copied()
+        .ok_or_else(|| "expected a prompt".to_string())?;
+    let role = Role::parse(flag(args, "--role").unwrap_or("chat")).map_err(|e| e.to_string())?;
+    let mode = if args.contains(&"--local-only") { Mode::LocalOnly } else { Mode::Any };
+
+    let mut messages = Vec::new();
+    if let Some(system) = flag(args, "--system") {
+        messages.push(Message::system(system));
+    }
+    messages.push(Message::user(prompt));
+
+    let transport = Curl::new();
+    let mut client = Client::new(&transport);
+    let served = client
+        .call(&links, role, &ChatRequest::new(messages), &AssumeHealthy, mode, time::now())
+        .map_err(|e| e.to_string())?;
+
+    println!("{}", served.reply.content);
+    println!();
+    if let Some(reasoning) = &served.reply.reasoning {
+        println!("[reasoning, {} chars — kept out of the message]", reasoning.len());
+    }
+    println!("via: {}", served.provenance());
+    println!(
+        "tokens: {} in ({} cached) / {} out",
+        served.reply.usage.prompt_tokens,
+        served.reply.usage.cache_hit_tokens,
+        served.reply.usage.completion_tokens
+    );
     Ok(())
 }
 

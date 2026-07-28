@@ -922,3 +922,114 @@ that knows what a model is.
 **The decision batch 8 opens with** is already recorded in
 [`../prioritization/batches-cycle2.md`](../prioritization/batches-cycle2.md):
 `http://` needs no dependency, `https://` needs TLS, and TLS needs an approval.
+
+---
+
+## Phase D — Batch 8, transport and protocols
+
+Branch `perp/c2/b8`. **The operator answered the HTTPS question: use `curl`.**
+No TLS crate, no dependency, and `curl` 8.19 is already on this machine.
+
+### c2/b8/s01 — The credential problem, before the transport
+- **the constraint that shaped everything:** anyone on a machine can read
+  another process's command line. An `Authorization` header passed as an
+  argument is a credential leak with a nice interface.
+- **outcome:** the header goes to `curl -K -` on **stdin** — not in argv, not in
+  a file that outlives the call, not in the journal (`S-2`). The request body
+  goes to a temp file, deleted after, because a prompt is longer than any
+  command line allows and stdin is spoken for.
+- `Secret` holds the **name** of an environment variable and reads the value at
+  the moment of use. Its `Debug` prints `Secret($DEEPSEEK_API_KEY)`, so a `{:?}`
+  of a request is safe to journal.
+
+### c2/b8/s02 — A real server, in the tests
+- **outcome:** the transport tests start a **one-shot HTTP server on an
+  ephemeral port** with `std::net::TcpListener` and let `curl` genuinely
+  connect. Dependency-free, hermetic, and real — the assertions are about what
+  the server actually received.
+- The credential test is the one worth reading: it asserts the key is **absent
+  from argv** and **present in the request the server saw**. Both halves, or it
+  proves nothing.
+
+### c2/b8/s03–s05 — The client
+- `client.rs`: model listing (`/api/v0/models` for LM Studio kinds, `/v1/models`
+  otherwise), capability probing, chat, failover.
+- **`M-22`** — reasoning is parsed into its own field, never concatenated into
+  the message, and `Reply::as_message` deliberately drops it, because providers
+  reject a replayed reasoning block or charge for it.
+- **`M-9`/`M-10`** — a fall-through is recorded with the reason, and
+  `Served::provenance()` produces the line that goes in a journal record:
+  `link here · model small · Q4_K_M · after cloud (HTTP 401 — bad key)`.
+- **the failover path is not a way around `M-4`**: candidates are filtered by
+  privacy *before* the loop, so a `local-only` run cannot reach a cloud link by
+  failing enough times. There is a test named after exactly that.
+
+### c2/b8/s06 — Test gate FAILED, and it was the design
+- **outcome:** exit 101, `capabilities_are_probed_once_and_then_cached`.
+
+  ```
+  cached: Unbound { key: "test", reason: "no answer left" }
+  ```
+
+- **diagnosis:** `capabilities()` fetched the model list **before** consulting
+  the cache, because the cache key includes the quantization and the
+  quantization is only knowable by asking. So the cache saved nothing: every
+  lookup still cost a round trip, and the TTL protected nothing.
+- **fix:** cache the facts alongside the capabilities, with the same TTL. A
+  second test now asserts the other half — past the TTL it asks again, so a
+  model swapped in LM Studio is not believed to be the old one forever.
+- **attempt 1 of 2.** The test found a real defect in the design, not a typo.
+
+### c2/b8/s07 — A live LM Studio, and two findings
+- **LM Studio is running on this machine.** The transport reached it, which
+  turned this from a fixture exercise into a real one.
+- **finding 1 — `M-24`, filed.** The first live call failed with
+  *"`LMSTUDIO_TOKEN` is not set"*, because the configuration declared an
+  `auth_env` for a server that needs no token by default. The link failed before
+  it connected. Worse, it failed *at call time*: on a real batch that is an hour
+  in, to discover a typo. Filed as **`M-24`** — declared credentials are checked
+  when the project is bound, not at first use. The configuration was corrected.
+- **finding 2 — `M-14` was available but not enforced.** With the token fixed,
+  the call went out and came back `HTTP 400: No models loaded`. The check that
+  would have caught it existed and nothing called it. Now `Client::call`
+  verifies the configured model against the link's real listing before sending:
+
+  ```
+  $ perp ask "say hello" --role compactor
+  perp: role.compactor: every link failed: here — link.here.model:
+  `qwen3-4b-instruct` is not offered by this link.
+  Available: text-embedding-nomic-embed-text-v1.5
+  ```
+
+  That message is generated from the live server's real model list. `M-7` and
+  `M-14` are no longer tested only against a recorded fixture.
+
+### c2/b8/s08 — Gates and red run
+- **gates:** green, pinned to `f528ae5`. 175 unit + 5 spine + 14 end-to-end =
+  **194 tests**.
+- **red run:** five mutations, four red, one anchor missing and reported as
+  such rather than counted:
+
+  ```
+  net.rs     put the credential back in argv     the_credential_reaches_the_server…   101  red
+  client.rs  concatenate reasoning into content  reasoning_is_a_separate_channel…     101  red
+  client.rs  fail instead of falling through     a_failed_link_falls_through…         101  red
+  client.rs  never hit the facts cache           capabilities_are_probed_once…        101  red
+  link.rs    (anchor no longer present)          an_unknown_model_id_lists…    DID NOT APPLY
+  ```
+
+### c2/b8/s09 — What is *not* done
+- **`M-8`** — the degradation ladder for tool calls — is untouched. It needs
+  tool calling, which needs the tool host, which is batch 11.
+- **`M-21` is 🟡.** Chat completions works; `/v1/responses` is an explicit
+  `Protocol` variant that returns "not implemented yet" rather than silently
+  falling back. The enum exists so the choice is visible.
+- **`M-23` is 🟡.** `--connect-timeout` and `--max-time` bound every request,
+  but a true **first-token** deadline needs streaming, and `curl` one-shot
+  invocations do not stream into the parser.
+- **DeepSeek has still never been called.** The transport can do HTTPS; no key
+  is set on this machine, and the loop will not invent one (`S-5`).
+
+**Batch 8 status:** 6 of 8 delivered (`M-9` `M-10` `M-22`, plus `M-6` `M-7`
+`M-14` closed from batch 7), 2 carried, `M-8` untouched, 0 blocked. One
+requirement discovered and filed (`M-24`). 194 tests.

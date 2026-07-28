@@ -175,6 +175,12 @@ pub struct Spec {
     pub cwd: PathBuf,
     pub env: Env,
     pub timeout: Duration,
+    /// Written to the child's stdin and closed.
+    ///
+    /// This is how a secret reaches a subprocess without touching argv, which
+    /// any other user on the machine can read out of a process listing, or the
+    /// filesystem, which outlives the call (`S-2`).
+    pub stdin: Option<String>,
 }
 
 impl Spec {
@@ -184,7 +190,14 @@ impl Spec {
             cwd: cwd.into(),
             env: Env::declared(),
             timeout,
+            stdin: None,
         }
+    }
+
+    /// Feed the child something on stdin. See [`Spec::stdin`].
+    pub fn with_stdin(mut self, text: impl Into<String>) -> Spec {
+        self.stdin = Some(text.into());
+        self
     }
 
     pub fn with_env(mut self, env: Env) -> Spec {
@@ -248,7 +261,7 @@ pub fn run(spec: &Spec) -> Result<Run> {
     command
         .args(args)
         .current_dir(&spec.cwd)
-        .stdin(Stdio::null())
+        .stdin(if spec.stdin.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     spec.env.apply(&mut command);
@@ -257,6 +270,15 @@ pub fn run(spec: &Spec) -> Result<Run> {
     let started = Instant::now();
     let mut child = command.spawn().map_err(|e| Error::io(&spec.cwd, e))?;
     let pid = child.id();
+
+    // Written and closed before the wait: a child reading stdin to EOF would
+    // otherwise sit there until the deadline killed it.
+    if let Some(text) = &spec.stdin {
+        if let Some(mut pipe) = child.stdin.take() {
+            use std::io::Write as _;
+            let _ = pipe.write_all(text.as_bytes());
+        }
+    }
 
     // Drained on threads: a child that fills a pipe while we poll would block
     // forever, and a deadlock is not a timeout.

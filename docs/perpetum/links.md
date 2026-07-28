@@ -33,8 +33,10 @@ always `cloud`. Declaring otherwise is a startup error rather than a preference.
 link.here.kind      = lmstudio
 link.here.base_url  = http://localhost:1234
 link.here.model     = qwen3-4b-instruct
-link.here.auth_env  = LMSTUDIO_TOKEN
 link.here.concurrency = 1
+# No auth_env: LM Studio's server does not require a token by default. Add one
+# only if you have enabled auth — a declared variable that is not set makes the
+# link fail before it connects, which is `M-24`'s whole point.
 
 # A DeepSeek link is configured but unreachable until batch 8 gives the harness
 # an HTTPS transport. Listed so the router can be exercised against a cloud
