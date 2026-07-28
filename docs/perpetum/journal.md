@@ -688,3 +688,83 @@ invented outside the source.
 
 It cannot yet talk to a model — which is the whole of batches 6 and 7, and the
 first thing cycle 2 will pick up.
+
+---
+---
+
+# Perpetum journal — cycle 2
+
+Branch `perp/c2/init` for phases B–C.
+
+## Phase B — Requirements gathering
+
+### c2/B/s01 — Sources
+- **outcome:** all eight read or recorded unavailable.
+
+| Source | Weight | This cycle |
+|---|---|---|
+| Crash analytics | 100 | unavailable — nothing deployed; the search from `c1/B/s06` re-run, still only false positives |
+| Security | 95 | **read** — there is code now; see below |
+| Support | 45 | unavailable — no users |
+| User voice | 40 | partial — operator read, GitHub still unreachable |
+| Backlog | 30 | **read in full** — 148 → 149 |
+| NFRs | 20 | **read** — produced `N-12` |
+| Analytics | 10 | unavailable |
+| Market | 5 | **not re-read**, same day; recorded with the reason rather than dated as fresh |
+
+### c2/B/s02 — Security, the first pass with something to scan
+- **outcome:** no findings, and the checks that produced that are named rather
+  than implied.
+
+  ```
+  cargo tree            perp -> perp-core, nothing else (2 packages in Cargo.lock)
+  cargo audit           NOT RUN — not installed; a deduction is not a scan
+  unsafe blocks         0  (5 textual hits, all the English word)
+  unwrap/expect in lib  0  outside #[cfg(test)]; clippy's deny is demonstrably live
+  network calls         0  no HTTP client exists
+  secret reads          0  only the named allow-list in Env::essentials
+  ```
+
+- **the honest caveat:** this is the last pass where "no network, no secrets" is
+  true. Batches 7 and 8 add an HTTP client and API keys.
+
+### c2/B/s03 — What the loop asked for
+- **outcome:** `N-12` minted — end-to-end tests drive `perp` as a subprocess.
+  Cycle 1 delivered five batches and only the spine has E2E coverage, which
+  Perpetum D asks for. Filed rather than carried as a footnote, so it can
+  compete for a slot like anything else.
+
+**Phase B exit:** every source read or marked unavailable, dated. ✅
+
+---
+
+## Phase C — Prioritisation
+
+### c2/C/s04 — Reconcile against reality (C.1, Perpetum 0.7)
+- **intent:** cycle 1's markers were written by the same session that wrote the
+  code. That is the situation Perpetum 0.7 exists to distrust.
+- **outcome:** **no marker rot.** 38 ✅ each map to a module and passing tests;
+  16 modules, ~5,450 lines; `perp check ids` clean across 18 documents; the
+  `N-9` and `unsafe` claims verified by independent greps rather than by
+  re-reading last cycle's report.
+- **note:** expected after one cycle, and it will not stay expected.
+
+### c2/C/s05 — Conflicts
+- **outcome:** the three from cycle 1 (`I-3`, `O-6`, `G-13`) carry forward
+  unanswered. **No new conflicts.** The TLS-dependency question that batch 7
+  raises is an *approval*, not a contradiction — `local-only` remains
+  first-class either way, so the vision is untouched.
+
+### c2/C/s06 — Score and batch
+- **outcome:** ten batches, renumbered 6–15, in
+  [`../prioritization/batches-cycle2.md`](../prioritization/batches-cycle2.md).
+- **score and coherence agree this cycle**, and where they differ the score
+  wins: **proving it works goes before the model layer**. It scores highest,
+  closes cycle 1's outstanding Phase D obligation, and fixes `T-18`. Building
+  the model layer on an unproven CLI would mean the first end-to-end test ever
+  written has to cover twice as much.
+- Recorded because the interesting work is batch 7, and "do the boring thing
+  first" is exactly the call an unattended loop is tempted to skip.
+
+**Phase C exit:** 10 batches written; conflicts carried and re-asked; state
+updated. ✅

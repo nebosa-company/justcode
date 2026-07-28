@@ -469,6 +469,7 @@ Speculative, and the reason this document lives in this repo.
 | ✅ ~~`N-8`~~ | Config, journal and artifact formats are versioned with forward-compatible readers. A loop mid-cycle must survive a harness upgrade. |
 | ✅ ~~`N-9`~~ | No panic on a runtime-fallible path. Parsing, IO and process execution return typed errors; `unwrap`/`expect` appear only where the invariant is local and proven. A harness that panics mid-batch cannot honour `L-7`. |
 | ✅ ~~`N-10`~~ | Derived files (state, board, artifacts) are written atomically — temp file, then rename — so a crash mid-write cannot leave a truncated projection that contradicts the journal. |
+| `N-12` | End-to-end tests drive `perp` as a subprocess, not just its library. Perpetum D extends E2E coverage every five batches; unit tests over a library cannot catch an argument parsed wrongly, a path resolved from the wrong root, or an exit code that lies. |
 | `N-11` | Dependency policy: standard library first; every third-party crate carries a recorded reason at the point it is added; the workspace builds from a warm cache with no network. A cold-cache failure blocks the batch rather than silently changing the plan. |
 
 ---
