@@ -4,6 +4,22 @@ The next 10 batches (Perpetum C.7). Each is 5–10 active requirements that are
 logically related, in dependency order, with the combined effort estimate and
 the score that produced it.
 
+## Delivered in cycle 1 (Perpetum F.2)
+
+Batches 1–5 are closed. Phase D's exit needs five, and five is what it got.
+
+| # | Theme | Delivered | Carried or parked |
+|---|---|---|---|
+| 1 | The spine | 7 of 9 | `L-4` and `L-8` carried; `L-4` closed in batch 3 |
+| 2 | Gate runner and evidence | 4 of 6 | `V-2` carried, closed in batch 4; `X-4` approval-gated |
+| 3 | Recovery and watchdogs | 10 of 10 | — |
+| 4 | The git harness | 7 of 8 | `G-13` parked as conflicting |
+| 5 | The honesty machinery | 8 of 8 | — |
+
+**Batches 6–10 below are unchanged and compete again in cycle 2's Phase C**, in
+front of a backlog that now has 59 unbatched requirements plus everything cycle
+2's Phase B turns up.
+
 Requirements source: [`../perpetum.md`](../perpetum.md) — 146 requirements after
 this cycle's minting (`N-9`–`N-11` from the NFR pass, `L-21`–`L-22` from C.1).
 Ids are cited here, never defined (Perpetum 0.8, `V-9`).

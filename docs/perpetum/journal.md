@@ -576,3 +576,115 @@ One requirement discovered and filed (`T-18`).
 
 **Phase D exit:** 5 batches delivered. 38 requirements done, 2 in progress,
 3 conflicting, 1 approval-gated, 0 blocked.
+
+---
+
+## Phase E — Release
+
+Ordered so the irreversible steps come last. Version **0.1.0**.
+
+### c1/E/s01 — Version and release notes
+- **outcome:** [`release-notes.md`](release-notes.md) written, including the two
+  formats that will be treated as breaking if they change — the journal record
+  shape and the step-id format.
+
+### c1/E/s02 — Localisation and accessibility
+- **outcome:** both **N/A**, per [`nfrs.md`](../initiation/nfrs.md): a CLI with
+  no interface and no user-facing strings beyond English help text. Recorded
+  rather than skipped, because "not applicable" and "not done" look identical
+  in a report that omits them.
+
+### c1/E/s03 — Security scan
+- **outcome:** the dependency surface is **empty**.
+
+  ```
+  $ cargo tree
+  perp v0.1.0
+  └── perp-core v0.1.0
+
+  $ grep -c '^\[\[package\]\]' Cargo.lock
+  2
+  ```
+
+- `cargo-audit` is **not installed** and was not installed unattended. With zero
+  dependencies it would have nothing to report, but the honest statement is
+  that the tool did not run — not that the scan was clean.
+- No findings to feed cycle 2's Phase B.
+
+### c1/E/s04 — Review what the release made false
+- **outcome:** one real correction. `docs/perpetum.md` opened with *"Status:
+  speculation. Nothing here is built."* — true when written this morning, false
+  after batch 1. It now carries counts that are checked against the file rather
+  than remembered.
+- The editor's [`README.md`](../README.md) was reviewed and **deliberately not
+  changed**: it documents JustCode, which is a shipped product, and the harness
+  is neither shipped nor part of it. Mentioning `crates/` there would advertise
+  something a user cannot use.
+
+### c1/E/s05 — Price book, help pages, training material, GTM
+- **price book:** N/A — nothing is sold.
+- **help:** `perp help` lists all six commands; kept in the binary rather than a
+  page, because a CLI whose help is elsewhere is a CLI nobody reads the help of.
+- **training material:** the "running a cycle" section of the release notes,
+  including the `T-18` workaround, since an operator will otherwise lose an hour
+  to it.
+- **GTM:** skipped, with reason — there is no market for a harness with one
+  user, and `docs/gtm/` would be a folder of aspiration.
+
+### c1/E/s06 — [approval] Deploy, and [approval] notify
+- **outcome:** both **parked**, unattended, as designed. Nothing was pushed,
+  tagged, or merged. Six branches exist and all six are local.
+- A blocked approval does not fail the release (Perpetum E): the cycle
+  continues, and the parked steps are named.
+
+**Phase E exit:** version 0.1.0 shipped **to the approval boundary**, with the
+two crossing steps parked. ✅
+
+---
+
+## Phase F — Clean-up
+
+### c1/F/s07 — Reconcile the record
+- Status markers updated in the requirements source: 38 ✅, 2 🟡, 3 🔶.
+  Verified by counting the file, not by remembering:
+  `done: 38  wip: 2  conflicting: 3`, against `148` ids total.
+- `perp check ids` confirms all 148 are defined in the source and cited
+  correctly across 18 documents — Perpetum 0.8 held for the whole cycle.
+- Delivered batches moved out of the active list in
+  [`../prioritization/batches.md`](../prioritization/batches.md); batches 6–10
+  carry into cycle 2's Phase C.
+
+### c1/F/s08 — [approval] Close the loop with whoever asked
+- **outcome:** parked. The only requester is the operator, who is in the session
+  — there is no issue thread to reply to, and the GitHub tracker was unreachable
+  all cycle (`c1/B/s07`).
+
+### c1/F/s09 — The cycle's numbers
+| | |
+|---|---|
+| Batches delivered | 5 of 5 |
+| Requirements done | 38 of 148 |
+| In progress | 2 · conflicting 3 · gated 1 · **blocked 0** |
+| Requirements minted while building | 7 |
+| Tests | 128, from 0 |
+| Red-run tests | 26, of which 3 mutations were inconclusive and re-run |
+| Gate failures | 5, all fixed inside 2 attempts |
+| Commits | 6, none pushed |
+| Money spent on models | £0 — cycle 1 ran no model calls; the loop was executed by hand against the binding |
+
+**Phase F exit:** statuses reconciled, delivered work moved out, parked items
+carried with their reasons, numbers recorded. The loop returns to Phase B for
+cycle 2. ✅
+
+---
+
+## Cycle 1 closed
+
+The harness that will run this loop can now: bind a project, refuse to run
+unbound, journal its steps, project its state, run gates and keep their
+transcripts pinned to a commit, reconcile a killed run, notice itself thrashing,
+refuse the destructive half of git, and prove that no requirement id was
+invented outside the source.
+
+It cannot yet talk to a model — which is the whole of batches 6 and 7, and the
+first thing cycle 2 will pick up.

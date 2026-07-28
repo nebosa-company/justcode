@@ -1,6 +1,6 @@
 # Perpetum state
 
-Cycle: 1 · Phase: D complete → E · Batch: 5 of 5 delivered · Updated: 2026-07-28
+Cycle: 1 · **closed** · Phase: F complete → B (cycle 2) · Updated: 2026-07-28
 
 Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
 `journal.jsonl` · Requirements: [`../perpetum.md`](../perpetum.md) ·
@@ -30,7 +30,15 @@ spine end to end; the gate runner, git harness and verification layer have unit
 coverage but no end-to-end test that drives `perp` as a subprocess. **That is
 outstanding work, carried into Phase E as the first thing to fix.**
 
-- Next: **Phase E — release**, at version 0.1.0.
+**Phase E** shipped 0.1.0 to the approval boundary — release notes written,
+security surface reviewed (zero dependencies; `cargo-audit` not installed and
+not run), deploy and customer notification parked unattended. Nothing pushed.
+
+**Phase F** reconciled the markers against the file, moved batches 1–5 out of
+the active list, and recorded the cycle's numbers.
+
+- Next: **Phase B — cycle 2**, gathering requirements again. Batches 6 and 7
+  (the model layer) compete first: the harness still cannot talk to a model.
 
 Carried, not done:
 
