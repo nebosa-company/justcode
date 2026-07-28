@@ -396,6 +396,43 @@ mod tests {
     }
 
     #[test]
+    fn a_secret_never_reaches_the_transcript_that_goes_in_the_journal() {
+        // Phase E security review. `S-2` says a key never reaches a journal —
+        // and the transcript of a failed request is exactly what gets written
+        // there. Argv is already covered; this is the other path.
+        std::env::set_var("PERP_TEST_KEY_3", "sk-transcript-leak-check");
+        let (port, _requests) = one_shot(500, r#"{"error":"boom"}"#);
+        let request = Request::get(format!("http://127.0.0.1:{port}/v1/models"))
+            .bearer(Secret::from_env_var("PERP_TEST_KEY_3"));
+
+        let curl = curl();
+        let response = curl.send(&request).expect("the call happened");
+        assert_eq!(response.status, 500);
+
+        // The same shape the gate runner journals.
+        let spec = Spec::new(
+            format!("curl {}", curl.args(&request, None).join(" ")),
+            std::env::temp_dir(),
+            Duration::from_secs(5),
+        );
+        let transcript = process::run(&spec).expect("run").transcript();
+        assert!(
+            !transcript.contains("sk-transcript-leak-check"),
+            "the key reached a transcript: {transcript}"
+        );
+        assert!(!format!("{response:?}").contains("sk-transcript-leak-check"));
+    }
+
+    #[test]
+    fn certificate_verification_is_never_turned_off() {
+        // The one flag that would quietly make every HTTPS call meaningless.
+        let argv = curl().args(&Request::get("https://api.deepseek.com/v1/models"), None).join(" ");
+        for dangerous in ["--insecure", "-k", "--proxy-insecure", "--ssl-no-revoke"] {
+            assert!(!argv.contains(dangerous), "{dangerous} is in the command line: {argv}");
+        }
+    }
+
+    #[test]
     fn a_secret_is_redacted_in_debug_output() {
         // A `{:?}` of a request has to be safe to journal.
         std::env::set_var("PERP_TEST_KEY_2", "sk-also-secret");

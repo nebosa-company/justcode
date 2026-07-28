@@ -1,6 +1,6 @@
 # Perpetum state
 
-Cycle: 2 · Phase: **D complete** · Batch: 10 — 5 of 5 delivered ·
+Cycle: 2 · Phase: **E complete** · 0.2.0 at the approval boundary ·
 Updated: 2026-07-28
 
 Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
@@ -21,8 +21,11 @@ Board: [`progress-board.md`](progress-board.md)
 | 9 | Cost, caching and context | 4 of 4 |
 | 10 | Local-server realities | 5 of 5 |
 
-**Phase D's exit condition is met for cycle 2**: five batches delivered, suite
-green. Next is **Phase E — release**, at 0.2.0, and then F closes the cycle.
+**Phase D** met its exit condition: five batches, suite green. **Phase E**
+shipped 0.2.0 to the approval boundary — security review with two new tests and
+one finding (`S-8`), price book verified, one false statement corrected, and a
+deploy runbook created that records that nothing was deployed. Next is **F**,
+which closes the cycle and returns to B.
 
 Perpetum D also asks for end-to-end coverage to be extended over the five
 batches. It was: the CLI suite grew from 11 tests to 15, including a full
@@ -33,21 +36,22 @@ Carried, not done:
 
 | id | Why |
 |---|---|
-| `N-6` | The harness opens no socket, but nothing stops a *project's* gate command reaching the network. Enforcement needs the sandboxed runtime in `T-9`. |
+| `N-6` | The **gate runner** still makes no network call, which is what this requirement is about. The harness as a whole now does — batch 8 gave it a transport — and nothing stops a *project's* gate command reaching the network either. Enforcement needs the sandboxed runtime in `T-9`. |
 | `M-21` | Chat completions works; `/v1/responses` is an explicit protocol variant that refuses rather than silently falling back. |
 | `M-23` | Every request is bounded by connect and total deadlines, but a true first-token deadline needs streaming, which one-shot `curl` does not give. |
 | `M-8` | Untouched — the degradation ladder needs tool calling, which needs the tool host in batch 11. |
 | `M-24` | Filed, not built: declared credentials must be checked at bind time, not at the eleventh call. |
+| `S-8` | Filed in the Phase E security review, not built: request bodies land in a shared temp directory (`D:\Temp` here) while a call is in flight. |
 | `X-4` | Tree kill works; surviving a kill of the engine itself needs a job object — approval-gated. |
 
 ## Last green gates
 
-`perp gate all --root .. --step c2/b10/s07`, exit 0, pinned to `535b625`.
+`perp gate all --root .. --step c2/E/s06`, exit 0, pinned to `a2319be`.
 
 - lint · exit 0 · clean
 - build · exit 0 · clean
-- tests · exit 0 · **235/235** — 215 unit, 5 spine integration, 15 end-to-end
-- ids · exit 0 · 149 defined, no strays
+- tests · exit 0 · **237/237** — 217 unit, 5 spine integration, 15 end-to-end
+- ids · exit 0 · 152 defined across 29 documents, no strays
 - links · exit 0 · 2 links, 9 roles, every role has a local option
 
 ## Blocked
@@ -89,4 +93,4 @@ downloading one onto it is not the loop's decision. DeepSeek has no key.
 | Cycle | Batches | Features | Tests added | Version |
 |---|---|---|---|---|
 | 1 | 5 of 5 delivered | 38 | 128 | 0.1.0 (unreleased) |
-| 2 | 5 of 5 delivered | 26 | 235 | 0.1.0 (unreleased) |
+| 2 | 5 of 5 delivered | 26 | 237 | 0.2.0 (unreleased) |

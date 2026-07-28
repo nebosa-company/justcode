@@ -5,6 +5,113 @@ process is unchanged and documented in [`../RELEASING.md`](../RELEASING.md).
 
 ---
 
+## 0.2.0 — 2026-07-28 · *unreleased, and deliberately so*
+
+Cycle 2. Five batches: the end-to-end suite, the model router, the transport,
+cost accounting, and the local-server layer. **A real model answered for the
+first time.** 237 tests, from 128.
+
+### What changed
+
+| | |
+|---|---|
+| `perp links` | Lists links and role chains; resolves a role; reports any role with no local option. |
+| `perp ask` | Calls a role's link. Prints the reply, the provenance of whichever link answered, and any link tried first and failed. |
+| `perp cost` | Replays the journal and reports what was spent, by link and by role. |
+| `perp gate` | Now refuses up front when it would rebuild the binary running it. |
+
+Underneath: four link kinds with an enforced privacy boundary, a `curl`-backed
+transport with the credential confined to stdin, capability probing keyed on
+quantization, reasoning as a separate channel, recorded failover, cost split by
+cache-hit and cache-miss, prompt-prefix enforcement, compaction restricted to
+local links, per-link concurrency, VRAM leased per host, and rolling throughput.
+
+### API breaking changes
+
+None for users. Two internal changes that will be treated as breaking if they
+move again:
+
+- `Client::call` now takes `&mut self` and a clock, because it verifies a
+  link's model against the live listing before sending and caches the result.
+- `Permits::acquire` takes `&Arc<Permits>` rather than `&self`, so a held
+  permit does not borrow the thing that issued it.
+
+The journal record shape (`v: 1`) and the step-id format are unchanged. Records
+now carry accounting fields — `role`, `link`, `model`, `cache_hit`,
+`cache_miss`, `output_tokens`, `latency_ms`, `charge` — which older readers
+preserve and ignore, per `N-8`.
+
+### Security review (Perpetum E.5)
+
+The first pass with a network and a credential to review. **Two checks were
+turned into tests rather than assertions**, because a security property nobody
+runs is a security property nobody has:
+
+- the credential reaches the server and **never** appears in argv (a process
+  listing) or in a run transcript (which is what gets journalled);
+- certificate verification is never disabled — no `--insecure`, `-k`,
+  `--proxy-insecure` or `--ssl-no-revoke` anywhere in the command line.
+
+**One finding, filed as `S-8`.** A request body is written to a file for the
+duration of the call, in the ambient temp directory. On this machine `TMP` is
+`D:\Temp` — a *shared* root-level directory, not the per-user one — so a prompt
+containing repository content is briefly readable by any other user of the
+machine. The key is unaffected; it never touches disk. Feeds cycle 3's Phase B.
+
+Still true: zero dependencies, no `unsafe`, no panics outside tests.
+
+### Price book (Perpetum E.7)
+
+Now genuinely applicable, and reviewed. The prices in
+[`links.md`](links.md) — `0.0028` cache-hit, `0.14` cache-miss, `0.28` output
+per million tokens for `deepseek-v4-flash` — were verified against the
+provider's own documentation on 2026-07-28 and are unchanged. They live in
+configuration precisely so this review is an edit rather than a release.
+
+### Documentation the release made false (Perpetum E.6)
+
+One real correction: the state file still said *"the harness opens no socket"*,
+which batch 8 made false. `N-6` is about the **gate runner**, which still makes
+no network call; the sentence now says which is which.
+
+The editor's [`README.md`](../README.md) was reviewed again and again left
+alone — it documents a shipped product, and the harness is still neither.
+
+### Accessibility and localisation
+
+N/A, unchanged from 0.1.0: a CLI with no interface and no user-facing strings
+beyond English help text. Recorded rather than skipped.
+
+### Parked at the approval boundary
+
+| Step | Why |
+|---|---|
+| Deploy / publish | Perpetum 0.4. The runbook now exists — [`../maintain/deploy.md`](../maintain/deploy.md) — and describes what a deploy would be. Nothing was deployed. |
+| Push, tag, merge to `main` | `G-5`. Thirteen branches exist locally and none has left the machine. |
+
+### Known and not fixed
+
+- `S-8` — request bodies in a shared temp directory.
+- `M-25` — **external-gated**: inference on an LM Link peer is unreachable from
+  outside LM Studio. Measured, not assumed.
+- `X-4` — **approval-gated**: children surviving a kill of the engine needs a
+  Windows job object, which needs a dependency.
+- `M-8` — the degradation ladder, waiting on the tool host.
+- `M-21`, `M-23` — `/v1/responses` and a true first-token deadline.
+- `M-24` — credentials should be checked at bind time, not at first call.
+- `N-6` — nothing stops a project's gate command reaching the network.
+- `I-3`, `O-6`, `G-13` — parked as conflicting since cycle 1, still unanswered.
+
+### What has still never happened
+
+**No chat model has been called.** An embedding has. This machine holds no chat
+model, and downloading one onto it is not the loop's decision; DeepSeek has no
+key set. Everything about generation — tokens per second, time to first token,
+the reasoning channel, the cache-hit ratio — is proven against recorded
+responses and a real socket, which is not the same thing.
+
+---
+
 ## 0.1.0 — 2026-07-28 · *unreleased, and deliberately so*
 
 The first cycle of [Perpetum](../../../perpetum.md) run against the harness that

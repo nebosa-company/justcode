@@ -1244,3 +1244,78 @@ question stopped being a question.
 **Batch 10 status:** 5 of 5 delivered, 0 blocked. One requirement discovered and
 filed (`M-25`, external-gated). 235 tests. **Phase D's exit condition is met for
 cycle 2** — five batches delivered.
+
+---
+
+## Phase E — Release 0.2.0
+
+Branch `perp/c2/release`. The first release with a network and a credential to
+review, which makes E.5 the step that matters this time.
+
+### c2/E/s01 — Version
+- 0.1.0 → **0.2.0** in the workspace manifest; both crates inherit it.
+  `perp version` confirms.
+
+### c2/E/s02 — Security review (E.5), and two assertions turned into tests
+- **intent:** cycle 1's review had nothing to look at. This one has a transport,
+  an API key and a temp file.
+- **outcome:** two properties that had only ever been *claimed* are now tests,
+  because a security property nobody runs is a security property nobody has:
+  - the credential reaches the server and appears in **neither argv nor a run
+    transcript** — argv was covered in batch 8, the transcript is what gets
+    journalled and was not;
+  - **certificate verification is never disabled** — no `--insecure`, `-k`,
+    `--proxy-insecure`, `--ssl-no-revoke` in the command line, ever.
+
+  Both pass.
+- **one finding, filed as `S-8`.** A request body is written to a file for the
+  duration of the call, in the ambient temp directory. Checked rather than
+  assumed:
+
+  ```
+  scratch: std::env::temp_dir()
+  on this machine: D:\Temp          per-user: False
+  ```
+
+  `TMP` here is a **shared root-level directory**, not `%LOCALAPPDATA%\Temp`, so
+  a prompt containing repository content is briefly readable by any other user
+  of the machine. The key is unaffected — it never touches disk. Feeds cycle 3's
+  Phase B, which is what E.5 is for.
+
+### c2/E/s03 — Price book (E.7)
+- **outcome:** applicable for the first time, and reviewed. `deepseek-v4-flash`
+  at `0.0028` / `0.14` / `0.28` per million matches the provider's own
+  documentation as of today. Unchanged.
+- Worth noting: because prices live in configuration, this review is an edit,
+  not a release. That was the point of `M-11`'s design.
+
+### c2/E/s04 — Documentation the release made false (E.6)
+- **outcome:** one real correction. The state file still read *"the harness
+  opens no socket"* — true when written in batch 6, false since batch 8.
+  Rewritten to say which is which: `N-6` is about the **gate runner**, which
+  still makes no network call.
+- The editor's README was reviewed again and again left alone, for the same
+  reason as cycle 1: it documents a shipped product, and this is not one.
+- `perp check ids`: **152 ids defined, 29 documents, no strays.**
+
+### c2/E/s05 — Help, training, GTM, and a deploy runbook that says nothing happened
+- **help (E.8):** `perp help` lists all nine commands; the three added this
+  cycle are there.
+- **training (E.9):** the release notes carry what an operator needs, including
+  the `T-18` workaround.
+- **GTM (E.10):** skipped again, with the same reason — there is no market for a
+  harness with one user.
+- **deploy runbook:** Perpetum says Phase E creates
+  [`../maintain/deploy.md`](../maintain/deploy.md) if it is absent. It was, and
+  now is not. Its honest content is the paragraph at the top: nothing has been
+  deployed, and it names the three things that would have to be true first —
+  the parked conflicts answered, `S-8` fixed, and a chat model actually called.
+
+### c2/E/s06 — [approval] Deploy, and [approval] notify
+- **outcome:** both **parked**, unattended, as designed. Gates green at
+  `a2319be`; 237 tests. Thirteen `perp/**` branches exist and all thirteen are
+  local. `main` is still at `e579167`, exactly where it was before any of this
+  started.
+
+**Phase E exit:** 0.2.0 shipped **to the approval boundary**, with the two
+crossing steps parked and named. ✅

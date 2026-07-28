@@ -10,14 +10,14 @@ in between cycles.
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 2, end of phase D: **64 of 151 requirements are done**, 4 in progress (one
+As of cycle 2, end of phase E: **64 of 152 requirements are done**, 4 in progress (one
 approval-gated, one external-gated), 3 parked as conflicting. What exists is the spine (binding,
 steps, journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, and an end-to-end
 suite that drives the real binary, the model router, and a `curl`-backed
 transport exercised against a live LM Studio, cost accounting replayed from the
 journal, and the local-server layer — in [`crates/`](../crates/), std-only,
-235 tests. A real model has answered once, for an embedding. The tool host, the
+237 tests, at version 0.2.0. A real model has answered once, for an embedding. The tool host, the
 loop driver, chat and artifacts are still design.
 Status markers below say which is which; a marker without a matching journal
 entry is not believed (Perpetum 0.7).
@@ -460,6 +460,7 @@ Speculative, and the reason this document lives in this repo.
 | `S-4` | Egress policy: an allowlist of hosts the loop may reach. Everything else is refused and journalled. |
 | `S-5` | `credential-gated` items are recognised and parked. The harness never invents, requests, or types a credential to get past a gate. |
 | `S-6` | A `local-only` run makes exactly zero outbound connections beyond the configured local and LM Link peers, and this is assertable from the journal. |
+| `S-8` | Request bodies are written to a file while a call is in flight, and that file inherits the ambient temp directory. On this machine `TMP` is `D:\Temp` — a shared root-level directory, not the per-user one — so a prompt containing repository content is briefly readable by any other user of the machine. The body must go in a private directory with restrictive permissions, or through a pipe. Found in the cycle 2 Phase E security review; the key itself is unaffected, since it never touches disk. |
 | `S-7` | Push, PR creation, tagging and publishing are `approve` (`G-5`). Nothing leaves the machine unattended. |
 
 ---
