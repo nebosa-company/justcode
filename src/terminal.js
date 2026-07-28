@@ -63,6 +63,9 @@ let viewsEl = null;
 let onVisibilityChange = () => {};
 let onDockChange = () => {};
 let cwdProvider = () => null;
+// Injected rather than imported, like every other outside dependency here, so
+// this module stays testable and knows nothing about Tauri's clipboard.
+let copyText = async () => false;
 
 const terminals = new Map(); // id -> { id, title, term, fit, element, exited }
 let activeId = null;
@@ -279,13 +282,45 @@ export function setDock(edge) {
 }
 
 /** Attaches the panel to the layout. Call once, at startup. */
-export function initTerminals({ workspace: host, dock: initialDock, onVisibility, onDock, currentDirectory }) {
+export function initTerminals({
+  workspace: host,
+  dock: initialDock,
+  onVisibility,
+  onDock,
+  currentDirectory,
+  copy,
+}) {
   workspace = host;
   if (DOCKS.includes(initialDock)) dock = initialDock;
   buildPanel();
   onVisibilityChange = onVisibility || (() => {});
   onDockChange = onDock || (() => {});
   cwdProvider = currentDirectory || (() => null);
+  copyText = copy || (async () => false);
+}
+
+/** Whether a node lives inside the terminal panel — used to tell which surface
+ *  a copy was meant for when the editor also has a selection. */
+export function containsNode(node) {
+  return panel !== null && node instanceof Node && panel.contains(node);
+}
+
+/** The active terminal's selected text, or "" when nothing is selected. */
+export function selectedText() {
+  const term = terminals.get(activeId)?.term;
+  return term?.hasSelection() ? term.getSelection() : "";
+}
+
+/** Copies the active terminal's selection. Resolves false when there was
+ *  nothing selected or the clipboard refused. */
+export async function copySelection() {
+  const text = selectedText();
+  if (!text) return false;
+  return await copyText(text);
+}
+
+export function focusActive() {
+  terminals.get(activeId)?.term.focus();
 }
 
 export function isVisible() {
@@ -486,6 +521,20 @@ export async function openTerminal(profile = PROFILES[0].id, options = {}) {
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(element);
+
+  // Ctrl+C copies **only when something is selected**. With nothing selected it
+  // has to reach the shell as SIGINT, which is the whole reason this is a
+  // condition rather than a binding: a terminal that cannot interrupt a runaway
+  // process is worse than one that cannot copy.
+  term.attachCustomKeyEventHandler((event) => {
+    if (event.type !== "keydown") return true;
+    const plainCtrl = event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+    if (plainCtrl && event.key === "c" && term.hasSelection()) {
+      copySelection();
+      return false;
+    }
+    return true;
+  });
 
   const label =
     options.title || PROFILES.find((entry) => entry.id === profile)?.label || profile;
