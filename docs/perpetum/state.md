@@ -100,5 +100,5 @@ downloading one onto it is not the loop's decision. DeepSeek has no key.
 | 1 | 5 of 5 delivered | 38 | 128 | 0.1.0 (unreleased) |
 | 2 | 5 of 5 delivered | 26 | 237 | 0.2.0 (unreleased) |
 
-Two cycles, sixteen commits, thirteen branches, `main` unmoved at `e579167`.
+Two cycles, fifteen commits, fourteen branches, `main` unmoved at `e579167`.
 One model call, an embedding, against a real local model. £0 spent.

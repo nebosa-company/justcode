@@ -1382,7 +1382,7 @@ now expired.
 | Commits | 7 | 8 |
 | Pushed | nothing | nothing |
 
-**Two cycles, sixteen commits, thirteen branches, and `main` has not moved.**
+**Two cycles, fifteen commits, fourteen branches, and `main` has not moved.**
 
 ### c2/F/s06 — What cycle 3 inherits
 - **Due immediately in Phase B:** the market pass. It was skipped in cycle 2
