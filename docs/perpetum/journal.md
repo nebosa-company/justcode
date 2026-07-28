@@ -1129,3 +1129,118 @@ Branch `perp/c2/b9`. Four requirements: `M-11` `M-12` `M-13` `M-15`.
   as proven against a model.
 
 **Batch 9 status:** 4 of 4 delivered, 0 blocked. 222 tests.
+
+---
+
+## Phase D — Batch 10, local-server realities
+
+Branch `perp/c2/b10`. Five requirements: `M-16`–`M-20`. The batch where the open
+question stopped being a question.
+
+### c2/b10/s01 — The open question, settled by testing it
+- **intent:** `M-19` cannot be built without knowing how an `lmlink` peer is
+  actually reached. The design has carried this as open since it was written.
+- **the machine turned out to have everything needed**: LM Studio running, the
+  `lms` CLI installed, LM Link **enabled**, and a peer **connected**.
+
+  ```
+  $ lms link status
+  This device: ROG Z13 RTX 3080
+  Status: Online
+
+  Found 1 device:
+
+    - KUR
+      Status: connected
+      Identifier: 249f12e9a0ce27e285de21d08ee37ffd
+  ```
+
+- **the measurement that answers it:**
+
+  ```
+  $ lms ls
+  text-embedding-nomic-embed-text-v1.5   Nomic BERT   84.11 MB   Local
+  text-embedding-nomic-embed-text-v1.5   Nomic BERT   84.11 MB   KUR
+
+  $ curl -s localhost:1234/api/v0/models | (count ids)
+  1
+  ```
+
+  **Two devices to `lms`, one model to the REST API.** A peer's models are not
+  served through the local OpenAI-compatible server.
+- **and the second half:** `lms load --help` has **no `--device` flag**. Its own
+  text says the model "will be loaded on the preferred device (if set)" — a
+  *global* setting (`lms link set-preferred-device`), not a per-call argument.
+- **consequence, filed as `M-25` and marked ⛔ external-gated:** the `lmlink`
+  kind cannot be a base-URL swap, and it cannot be routed per call either.
+  Reaching a peer needs the LM Studio SDK or a global setting change — and a
+  loop that flipped a global setting to route one call would be changing the
+  operator's environment underneath them. That is not a thing this harness does.
+- The requirements doc's §0.1 and open question 1 are both updated from
+  "unverified" to the measurement.
+
+### c2/b10/s02 — A real model finally answered
+- **intent:** every batch so far has been proven against a socket and a
+  recorded response. Not the same as a model.
+- **outcome:** loaded the one model on this machine and called it.
+
+  ```
+  $ lms load text-embedding-nomic-embed-text-v1.5 --ttl 600 -y
+  Model loaded successfully in 7.69s. (80.21 MiB)
+
+  $ curl -s localhost:1234/api/v0/models
+  text-embedding-nomic-embed-text-v1.5 -> loaded  Q4_K_M  2048
+
+  $ curl -s -X POST localhost:1234/v1/embeddings -d '{...}'
+  {"object":"list","data":[{"object":"embedding","embedding":[-0.0423694…
+  ```
+
+  A real vector, from a real model, on the operator's hardware. **80 MiB took
+  7.69 seconds** — which is the entire argument for `M-16`, since a 30B is
+  minutes of that.
+- The model was **unloaded afterwards** and `lms ps` confirms nothing is
+  resident. The machine is as it was found.
+- Still not proven: chat. This machine has no chat model, and downloading one
+  onto it is not the loop's decision.
+
+### c2/b10/s03–s05 — The batch
+- **`M-16`** — warming is decided from the reported `state` and performed with
+  `lms load --ttl`, which is how the "holds them with a TTL" half is met. The
+  TTL is the harness's to set, which was not obvious until `lms load --help`
+  was read.
+- **`M-17`** — VRAM as a lease, keyed on the **host**, not the link: two links
+  pointing at `localhost` are two models on one GPU however different their
+  names are. A second claim is **refused, not queued** — the honest answer is
+  "that will not fit", rather than a wait that ends in an out-of-memory error
+  minutes later.
+- **`M-18`** — a rolling per-link mean of tokens/second and time-to-first-token.
+  An unmeasured link returns `None` rather than an optimistic default: a
+  wall-clock budget built on a guess is worse than no budget, because it looks
+  like a plan.
+- **`M-19`** — `lms link status` parsed against **real recorded output**, quoted
+  verbatim in the test. A parser written against imagined output is a parser
+  that has never been tested.
+- **`M-20`** — a dead local peer **parks**; it does not promote the cloud link
+  sitting healthy in the same chain. The message says so in as many words: a
+  peer going away is not consent to send the work somewhere else.
+
+### c2/b10/s06 — Test gate FAILED
+- **outcome:** exit 101 on the new `M-20` test. The behaviour was right; the
+  **message** was wrong — a multi-line string literal carried its own source
+  indentation into the error, so the text arrived with twenty spaces in the
+  middle of a sentence. Fixed with line continuations.
+- **attempt 1 of 2.**
+
+### c2/b10/s07 — Red run
+- **outcome:** nine mutations, seven red first time, and both stragglers were
+  worth the second pass:
+  - one anchor did not match the file and was reported as **not applied**
+    rather than as a pass (`V-10`, fifth batch running).
+  - `a_remote_peer_is_a_different_host_from_this_machine` survived a mutation
+    that collapsed every device to one host key — because asserting two strings
+    *differ* is nearly impossible to break. Rewritten to assert the exact keys
+    (`device:KUR`, `host:localhost:1234`); now red.
+
+**Batch 10 status:** 5 of 5 delivered, 0 blocked. One requirement discovered and
+filed (`M-25`, external-gated). 235 tests. **Phase D's exit condition is met for
+cycle 2** — five batches delivered.

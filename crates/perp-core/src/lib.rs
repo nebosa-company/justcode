@@ -24,6 +24,7 @@
 //! | [`verify`] | `V-1`, `V-3`, `V-4`, `V-7`–`V-10` |
 //! | [`link`] | `M-1`–`M-5`, `M-14` |
 //! | [`probe`] | `M-6`, `M-7` |
+//! | [`local`] | `M-16`–`M-19` |
 //! | [`net`] | the transport, over `curl` — `S-2`, `T-3` |
 //! | [`client`] | `M-6`–`M-10`, `M-21`, `M-22` |
 //! | [`cost`] | `M-11` |
@@ -44,6 +45,7 @@ pub mod git;
 pub mod journal;
 pub mod json;
 pub mod link;
+pub mod local;
 pub mod net;
 pub mod probe;
 pub mod process;

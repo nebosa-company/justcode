@@ -479,11 +479,20 @@ impl Links {
             }
         }
 
+        // `M-20`: in a local-only run this is a **park**, not a failure to be
+        // worked around. The chain may well contain a healthy cloud link, and
+        // the whole point is that it is not reached for.
+        let parked = mode == Mode::LocalOnly && chain.iter().any(|link| !link.is_local());
         Err(Error::unbound(
             format!("role.{role}"),
             format!(
-                "every eligible link is unhealthy: [{}]",
-                eligible.iter().map(|l| l.name.as_str()).collect::<Vec<_>>().join(", ")
+                "every eligible link is unhealthy: [{}].{}",
+                eligible.iter().map(|l| l.name.as_str()).collect::<Vec<_>>().join(", "),
+                if parked {
+                    " This parks. The chain has a cloud link that is not unhealthy, and local-only does not promote it — a peer going away is not consent to send the work somewhere else."
+                } else {
+                    ""
+                }
             ),
         ))
     }
@@ -741,6 +750,23 @@ deprecated.deepseek-reasoner = deepseek-v4-pro
         let links = links();
         let err = links.resolve(Role::Coder, &AllDown, Mode::Any).expect_err("must fail");
         assert!(format!("{err}").contains("unhealthy"), "{err}");
+    }
+
+    #[test]
+    fn a_dead_local_peer_parks_rather_than_promoting_the_cloud_link() {
+        // `M-20`. The chain is `ds, rig`; in a local-only run with the rig
+        // gone, the cloud link is right there, healthy, and must not be used.
+        let links = links();
+        let err = links
+            .resolve(Role::Coder, &Down("rig"), Mode::LocalOnly)
+            .expect_err("must not fall back to the cloud");
+        let text = format!("{err}");
+        assert!(text.contains("This parks"), "{text}");
+        assert!(text.contains("not consent to send the work somewhere else"), "{text}");
+
+        // Outside local-only the same failure is an ordinary one.
+        let err = links.resolve(Role::Coder, &AllDown, Mode::Any).expect_err("must fail");
+        assert!(!format!("{err}").contains("This parks"), "nothing to park for");
     }
 
     #[test]

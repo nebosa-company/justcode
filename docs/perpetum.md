@@ -10,14 +10,15 @@ in between cycles.
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 2, batch 9: **59 of 150 requirements are done**, 4 in progress (one
-approval-gated), 3 parked as conflicting. What exists is the spine (binding,
+As of cycle 2, end of phase D: **64 of 151 requirements are done**, 4 in progress (one
+approval-gated, one external-gated), 3 parked as conflicting. What exists is the spine (binding,
 steps, journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, and an end-to-end
 suite that drives the real binary, the model router, and a `curl`-backed
-transport exercised against a live LM Studio, and cost accounting replayed from
-the journal — in [`crates/`](../crates/), std-only, 222 tests. The tool host,
-the loop driver, chat and artifacts are still design.
+transport exercised against a live LM Studio, cost accounting replayed from the
+journal, and the local-server layer — in [`crates/`](../crates/), std-only,
+235 tests. A real model has answered once, for an embedding. The tool host, the
+loop driver, chat and artifacts are still design.
 Status markers below say which is which; a marker without a matching journal
 entry is not believed (Perpetum 0.7).
 
@@ -58,9 +59,12 @@ Volatile. The harness must not hard-code any of it (see `M-14`).
 | LM Studio auth | Bearer token supported in current versions | assume required |
 | LM Link setup | `lms login`, `lms link enable`, `lms link status`, `lms link set-device-name` | headless supported |
 
-**Unverified:** whether LM Link's remote models are reachable through the local
-`/v1` server or only through the app and `lms` CLI. This is load-bearing for
-§3.1 and is the first thing to test — see Open questions.
+**Settled, 2026-07-28, on a machine with LM Link enabled and a peer connected:**
+a peer's models are **not** served through the local REST API. `lms ls` listed
+the same model twice — once for `Local`, once for the peer `KUR` — while
+`/api/v0/models` listed it once. Device selection is a *global* preferred-device
+setting (`lms link set-preferred-device`), not a per-request parameter. So the
+`lmlink` kind cannot be a base-URL swap; see `M-25`.
 
 ---
 
@@ -252,11 +256,12 @@ means prompt *layout* is an engineering requirement, not a style preference.
 
 | id | Requirement |
 |---|---|
-| `M-16` | **Warm before a batch.** LM Studio JIT-loads models; a cold 30B load is minutes. The engine pre-loads the batch's links and holds them with a TTL longer than the batch's expected duration. |
-| `M-17` | Never force two large models onto one host concurrently. The router treats a host's VRAM as a lease. |
-| `M-18` | Use TTFT and tok/s from `/api/v0` to keep a rolling throughput estimate per link, and use it for both scheduling and the wall-clock budget. |
-| `M-19` | `lmlink` health = peer reachable **and** the named model loadable on it. `lms link status` reports peers and loaded models; a peer that vanished mid-step fails the step, not the cycle. |
-| `M-20` | A `lmlink` peer's disappearance never auto-promotes a cloud link when the run is `local-only`. It parks instead. |
+| ⛔ `M-25` | An `lmlink` link cannot be reached by a base-URL swap: a peer's models are absent from the local REST listing, and `lms` selects the device from a **global** preferred-device setting rather than a per-call argument. Until LM Studio exposes per-request device selection, inference on a peer is **external-gated** — it needs the LM Studio SDK or a global setting change, and a loop that flipped a global setting to route one call would be changing the operator's environment underneath them. Measured in `c2/b10/s01`. |
+| ✅ ~~`M-16`~~ | **Warm before a batch.** LM Studio JIT-loads models; a cold 30B load is minutes. The engine pre-loads the batch's links and holds them with a TTL longer than the batch's expected duration. |
+| ✅ ~~`M-17`~~ | Never force two large models onto one host concurrently. The router treats a host's VRAM as a lease. |
+| ✅ ~~`M-18`~~ | Use TTFT and tok/s from `/api/v0` to keep a rolling throughput estimate per link, and use it for both scheduling and the wall-clock budget. |
+| ✅ ~~`M-19`~~ | `lmlink` health = peer reachable **and** the named model loadable on it. `lms link status` reports peers and loaded models; a peer that vanished mid-step fails the step, not the cycle. |
+| ✅ ~~`M-20`~~ | A `lmlink` peer's disappearance never auto-promotes a cloud link when the run is `local-only`. It parks instead. |
 
 ---
 
@@ -497,10 +502,10 @@ M0–M4 are the harness. M5–M6 are Perpetum. M7 is the product.
 
 ## 13. Open questions
 
-1. **LM Link through `/v1`.** Are linked remote models reachable via the local
-   OpenAI-compatible server, or only through the app and `lms` CLI? If the
-   latter, the `lmlink` kind needs a CLI- or SDK-driven transport rather than a
-   base-URL swap. Test before designing further.
+1. ~~**LM Link through `/v1`.**~~ **Answered 2026-07-28 by testing it.** Remote
+   models are not in the local REST listing; only `lms` sees them, and it picks
+   the device from a global setting rather than a per-call argument. The
+   consequence is filed as `M-25`, and the evidence is in `c2/b10/s01`.
 2. **Cache hit rate under a churning context.** DeepSeek's prefix cache pays for
    stable prefixes; an agent loop mutates its context constantly. `M-12` is a
    guess at the right layout. Measure hit ratio per step type before optimising.
