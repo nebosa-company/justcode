@@ -97,10 +97,39 @@ impl Gate {
                 format!("{} does not exist", self.cwd.display()),
             ));
         }
+        if let Some(complaint) = self_lock_complaint(&self.cwd) {
+            return Err(Error::unbound("gate", complaint));
+        }
         let spec = Spec::new(&self.command, &self.cwd, self.timeout).with_env(Env::declared());
         let run = process::run(&spec)?;
         Ok(GateResult { name: self.name.clone(), run, sha: None })
     }
+}
+
+/// Would this gate be asked to rebuild the binary that is running it? (`T-18`)
+///
+/// On Windows a running executable cannot be replaced, so a harness launched
+/// from the workspace's own `target/` fails its own build gate with
+/// `Access is denied (os error 5)` — an error that says nothing about the code
+/// and costs an operator an hour. Refused up front, with the fix in the message.
+///
+/// Found in `c1/b5/s07` by running the gates through the harness on its own
+/// repository, which is the only way this was ever going to show up.
+pub fn self_lock_complaint(cwd: &Path) -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let exe = exe.canonicalize().unwrap_or(exe);
+    let workspace = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
+
+    if !exe.starts_with(&workspace) {
+        return None;
+    }
+    Some(format!(
+        "this binary is running from {}, inside the workspace the gates build ({}). \
+         On Windows the build cannot replace a running executable. \
+         Copy `perp` somewhere outside the tree and run it from there.",
+        exe.display(),
+        workspace.display()
+    ))
 }
 
 /// A gate that has actually been run. There is no constructor that does not
@@ -382,6 +411,34 @@ mod tests {
         let results = run_all(&gates).expect("run");
         assert_eq!(results.len(), 1, "the build must not run after lint went red");
         assert!(!results[0].is_green());
+    }
+
+    #[test]
+    fn a_gate_that_would_rebuild_the_running_binary_is_refused() {
+        // `T-18`. The test binary genuinely lives inside `crates/target/`, so
+        // this is the real condition, not a simulated one.
+        let workspace = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(Path::to_path_buf))
+            .expect("the test binary has a directory");
+        let complaint = self_lock_complaint(&workspace).expect("must complain");
+        assert!(complaint.contains("running from"), "{complaint}");
+        assert!(complaint.contains("Copy `perp` somewhere outside"), "the fix is in the message");
+
+        let gate = Gate {
+            name: "build".into(),
+            command: "cargo build".into(),
+            cwd: workspace,
+            timeout: Duration::from_secs(5),
+        };
+        let err = gate.run().expect_err("must refuse before spawning cargo");
+        assert!(format!("{err}").contains("cannot replace a running executable"), "{err}");
+    }
+
+    #[test]
+    fn a_gate_outside_the_running_binarys_tree_is_fine() {
+        let elsewhere = tmpdir("gate-elsewhere");
+        assert_eq!(self_lock_complaint(&elsewhere), None);
     }
 
     #[test]

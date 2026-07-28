@@ -10,13 +10,14 @@ in between cycles.
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 1, end of phase D: **38 of 148 requirements are done**, 2 in progress (one
-of them approval-gated), 3 parked as conflicting. What exists is the spine
-(binding, steps, journal, projection), the gate runner and its evidence, the
-recovery and watchdog layer, the git harness and the verification machinery —
-in [`crates/`](../crates/), std-only, 128 tests. Everything about models, tools,
-chat and artifacts is still design. Status markers on each requirement below say which is which; a marker
-without a matching journal entry is not believed (Perpetum 0.7).
+As of cycle 2, batch 6: **44 of 149 requirements are done**, 2 in progress (one
+approval-gated), 3 parked as conflicting. What exists is the spine (binding,
+steps, journal, projection), the gate runner and its evidence, the recovery and
+watchdog layer, the git harness, the verification machinery, and an end-to-end
+suite that drives the real binary — in [`crates/`](../crates/), std-only,
+141 tests. The model layer, the tool host, chat and artifacts are still design.
+Status markers below say which is which; a marker without a matching journal
+entry is not believed (Perpetum 0.7).
 
 Perpetum describes *what* the loop does. This describes *what has to exist* for
 the loop to survive being left running for a week with nobody watching.
@@ -133,7 +134,7 @@ what the journal stores and what recovery replays against.
 | ✅ ~~`L-5`~~ | Every step is idempotent, or declares itself not and is bracketed by a reality check (`V-1`) on replay. |
 | ✅ ~~`L-6`~~ | The engine can kill and respawn the model session at any step boundary with no loss beyond the in-flight step. |
 | ✅ ~~`L-7`~~ | On start, the engine reconciles: find the last intent with no outcome, verify against the workspace what actually happened, then redo, skip, or park it. Never assume. |
-| 🟡 `L-8` | Context is disposable. A step may not depend on anything not reconstructible from binding, state, journal and the workspace. |
+| ✅ ~~`L-8`~~ | Context is disposable. A step may not depend on anything not reconstructible from binding, state, journal and the workspace. |
 | ✅ ~~`L-21`~~ | The engine loads `binding.md` before anything else and refuses to run unbound. A path the binding does not resolve stops the loop and asks; it is never guessed (Perpetum 0.1). |
 | ✅ ~~`L-22`~~ | Step ids are stable, ordered and human-citable — `c<cycle>/<phase or batch>/s<nn>`. The journal, the commit trailer, the board, the status marker and `/explain` all name the same step with the same string. |
 
@@ -292,7 +293,7 @@ needs permission.
 | `T-14` | `approve` enqueues a request with: what, why, the exact command or content, the diff, and the requirement id. The loop then continues elsewhere (`L-19`). |
 | `T-15` | Approval is per action and per cycle. An approval granted last cycle never carries forward. |
 | `T-16` | Approvals expire. An unanswered request older than the configured window is parked with reason `approval-gated` and carried into the next cycle (Perpetum 0.6). |
-| `T-18` | The engine must not hold a lock on any artefact its own gates rebuild. On Windows a running executable cannot be replaced, so a harness launched from the workspace own `target/` fails its own build gate with `Access is denied (os error 5)`. The engine runs from a copy outside the tree it builds, and says so in the gate transcript. Found in `c1/b5/s08` by running the gates through the harness on its own repository. |
+| ✅ ~~`T-18`~~ | The engine must not hold a lock on any artefact its own gates rebuild. On Windows a running executable cannot be replaced, so a harness launched from the workspace own `target/` fails its own build gate with `Access is denied (os error 5)`. The engine runs from a copy outside the tree it builds, and says so in the gate transcript. Found in `c1/b5/s08` by running the gates through the harness on its own repository. |
 | `T-17` | Anything drafted for a human — release notes, issue replies, GTM copy — is written to disk unattended and *sent* only through an `approve` call. Drafting is free; sending is not. |
 
 ---
@@ -362,7 +363,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`V-3`~~ | **The red run.** A new test must be executed against the tree *without* the change and observed to fail, then with the change and observed to pass. Both transcripts are stored. A test that passes in both runs does not satisfy Perpetum's gate 4, and the feature stays open. |
 | ✅ ~~`V-4`~~ | **Test tampering is a hard error.** Deleting, skipping, weakening an assertion or loosening a matcher in an existing test during a gate-fix step aborts the step. If the test is genuinely wrong, that is a requirement — filed and cited, not an edit made in passing. |
 | `V-5` | **Independent verification.** The verifier role must resolve to a different link than the one that authored the change. Self-review by the same model on the same context is not review. |
-| `V-6` | **Exercise the artefact.** Once per batch, run the real thing — launch the app, open the page, run the CLI — and store the evidence (exit code, screenshot, log). Perpetum 0.7's second half is a step, not a suggestion. |
+| ✅ ~~`V-6`~~ | **Exercise the artefact.** Once per batch, run the real thing — launch the app, open the page, run the CLI — and store the evidence (exit code, screenshot, log). Perpetum 0.7's second half is a step, not a suggestion. |
 | ✅ ~~`V-7`~~ | Status markers are derived from journal evidence. The engine writes them; the model proposes. |
 | ✅ ~~`V-8`~~ | Gated items (`external-gated`, `credential-gated`, `approval-gated`, `blocked`) are counted separately from done, forever, and are never re-picked without their reason changing. |
 | ✅ ~~`V-10`~~ | The red run verifies the mutation **actually changed the file** before believing either result. A mutation that failed to apply reports a passing test that was never challenged — a false green wearing the costume of evidence. Found the hard way in `c1/b3/s12`, where a multi-line `sed` pattern silently matched nothing. |
@@ -461,15 +462,15 @@ Speculative, and the reason this document lives in this repo.
 |---|---|
 | ✅ ~~`N-1`~~ | **Crash-only.** Kill -9 at any moment loses at most the in-flight step. No clean-shutdown path is required for correctness. |
 | ✅ ~~`N-2`~~ | A cold start reads only the binding and the journal. No hidden state in a cache, a temp file, or a model's memory. |
-| `N-3` | Single binary, no daemon required, no container required for the default host runtime. |
+| ✅ ~~`N-3`~~ | Single binary, no daemon required, no container required for the default host runtime. |
 | `N-4` | Cross-platform: Windows first, then Linux/WSL2 and macOS. Path handling, line endings and shell quoting are tested on Windows, not assumed. |
-| `N-5` | Deterministic replay of the journal for inspection: the same journal renders the same state file and the same board, on any machine. |
-| `N-6` | Gates run without network access wherever the project allows it, so a flaky connection cannot manufacture a red. |
+| ✅ ~~`N-5`~~ | Deterministic replay of the journal for inspection: the same journal renders the same state file and the same board, on any machine. |
+| 🟡 `N-6` | Gates run without network access wherever the project allows it, so a flaky connection cannot manufacture a red. |
 | `N-7` | Engine overhead is bounded and reported: tokens spent on compaction, classification and routing are counted separately from work tokens. |
 | ✅ ~~`N-8`~~ | Config, journal and artifact formats are versioned with forward-compatible readers. A loop mid-cycle must survive a harness upgrade. |
 | ✅ ~~`N-9`~~ | No panic on a runtime-fallible path. Parsing, IO and process execution return typed errors; `unwrap`/`expect` appear only where the invariant is local and proven. A harness that panics mid-batch cannot honour `L-7`. |
 | ✅ ~~`N-10`~~ | Derived files (state, board, artifacts) are written atomically — temp file, then rename — so a crash mid-write cannot leave a truncated projection that contradicts the journal. |
-| `N-12` | End-to-end tests drive `perp` as a subprocess, not just its library. Perpetum D extends E2E coverage every five batches; unit tests over a library cannot catch an argument parsed wrongly, a path resolved from the wrong root, or an exit code that lies. |
+| ✅ ~~`N-12`~~ | End-to-end tests drive `perp` as a subprocess, not just its library. Perpetum D extends E2E coverage every five batches; unit tests over a library cannot catch an argument parsed wrongly, a path resolved from the wrong root, or an exit code that lies. |
 | `N-11` | Dependency policy: standard library first; every third-party crate carries a recorded reason at the point it is added; the workspace builds from a warm cache with no network. A cold-cache failure blocks the batch rather than silently changing the plan. |
 
 ---

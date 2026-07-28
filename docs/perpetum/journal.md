@@ -768,3 +768,73 @@ Branch `perp/c2/init` for phases B–C.
 
 **Phase C exit:** 10 batches written; conflicts carried and re-asked; state
 updated. ✅
+
+---
+
+## Phase D — Batch 6, proving it works
+
+Branch `perp/c2/b6`. Seven requirements: `N-12` `T-18` `V-6` `L-8` `N-3` `N-5`
+`N-6`.
+
+### c2/b6/s01 — Fix `T-18` first
+- **intent:** the harness cannot reliably test itself while it locks its own
+  binary, so this comes before the tests that would trip over it.
+- **outcome:** `gate::self_lock_complaint` refuses up front, with the fix in the
+  message. Before and after, on the real repository:
+
+  ```
+  before:  error: failed to remove file `...\target\debug\perp.exe`
+           Caused by: Access is denied. (os error 5)
+
+  after:   perp: binding key `gate`: this binary is running from
+           \\?\D:\repos\justcode\crates\target\debug\perp.exe, inside the
+           workspace the gates build (\\?\D:\repos\justcode\crates). On Windows
+           the build cannot replace a running executable. Copy `perp` somewhere
+           outside the tree and run it from there.
+  ```
+
+  Same exit code; the difference is whether the operator loses an hour.
+
+### c2/b6/s02–s03 — The end-to-end suite (`N-12`)
+- **outcome:** `crates/perp/tests/cli.rs`, 11 tests that run the **real binary
+  as a subprocess** against fixture repositories.
+- **where it lives matters:** in the `perp` package, not beside the library's
+  own tests, because cargo sets `CARGO_BIN_EXE_perp` there and guarantees the
+  binary is built first. An E2E suite that tests a stale binary is worse than
+  none.
+- **what it catches that unit tests cannot:** an argument parsed wrongly, a path
+  resolved from the wrong root, and an exit code that lies — the last being what
+  an unattended caller actually reads. Two tests assert exit codes specifically:
+  an unbound project and a parked resume both exit non-zero.
+
+### c2/b6/s04 — Gates and red run
+- **gates:** green. 125 unit + 5 spine + **11 end-to-end** = 141 tests.
+- **red run:** five mutations.
+
+  ```
+  gate.rs     never detect the self-lock       a_gate_that_would_rebuild…             101  red
+  state.rs    corrupt the projection's counts  a_failed_outcome_carries_its_verbatim… 101  red
+  main.rs     stop treating stray ids as errors check_ids_fails_when_a_document…      101  red
+  session.rs  Unclear -> Continue instead of Park  resume_parks_a_step_that_died…     101  red
+  main.rs     change the park message text     resume_parks_a_step_that_died…           0  green
+  ```
+
+- **the green one is not a weak test.** It mutated the wording of an error
+  message; the test asserts the *decision* and the *exit code*, which is what
+  matters and what the fourth mutation proves. Recorded rather than counted as
+  a survivor, because "a mutation that changed nothing anyone depends on" and
+  "a test that checks nothing" look identical in a summary.
+
+### c2/b6/s05 — Artefact exercised (`V-6`)
+- **outcome:** `perp gate all --root .. --step c2/b6/s05` from a copy outside
+  the tree: all three gates green, pinned to `b06c7bc`. The E2E suite is now the
+  automated form of this — it runs the real artefact on every `cargo test`.
+
+### c2/b6/s06 — What is *not* done
+- **`N-6` is 🟡.** The harness opens no socket, which is verified. But nothing
+  stops a *project's* gate command from reaching the network — `cargo` will
+  happily fetch — and enforcing that needs the sandboxed runtime in `T-9`.
+  Claiming `N-6` on the strength of the harness's own behaviour would be
+  answering a different question than the one the requirement asks.
+
+**Batch 6 status:** 6 of 7 delivered, 1 carried, 0 blocked. 141 tests.
