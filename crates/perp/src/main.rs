@@ -14,6 +14,7 @@ use std::process::ExitCode;
 use perp_core::binding::Binding;
 use perp_core::gate::{self, Gate};
 use perp_core::journal::{Journal, Record};
+use perp_core::session::{Decision, Finding, Probe, Session};
 use perp_core::state::{render, replay};
 use perp_core::step::StepId;
 use perp_core::{atomic, time, Result, VERSION};
@@ -38,6 +39,11 @@ usage:
       Run the gates the binding declares, in Perpetum order, stopping at the
       first red. Prints the transcript. With --step, appends an outcome record
       per gate to the journal. Exits non-zero if any gate is red.
+
+  perp resume [--root <dir>]
+      Read the journal and say what a previous process left in flight, and what
+      to do about it. Reports Unclear rather than guessing; exits non-zero if
+      the answer is to park.
 
   perp version
 ";
@@ -69,6 +75,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("record") => cmd_record(&args[1..]).map_err(|e| e.to_string()),
         Some("state") => cmd_state(&args[1..]).map_err(|e| e.to_string()),
         Some("gate") => cmd_gate(&args[1..]),
+        Some("resume") => cmd_resume(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -179,6 +186,36 @@ fn cmd_state(args: &[&str]) -> Result<()> {
         None => write_state(&binding.resolve("out.state")?, &rendered)?,
     }
     Ok(())
+}
+
+/// Report what a previous process left behind (`L-7`).
+///
+/// The CLI's probe is deliberately the ignorant one: from outside the loop
+/// there is no way to tell whether a step's effect landed, so it answers
+/// Unclear and lets the rules decide — redo if the step declared itself
+/// idempotent, park otherwise. Guessing here is how a loop sends the same
+/// email twice.
+fn cmd_resume(args: &[&str]) -> std::result::Result<(), String> {
+    struct CannotTell;
+    impl Probe for CannotTell {
+        fn finding(&self, _step: &StepId, _summary: &str) -> Finding {
+            Finding::Unclear
+        }
+    }
+
+    let root = root_of(args);
+    let session = Session::open(&root).map_err(|e| e.to_string())?;
+    let decision = session.resume(&CannotTell).map_err(|e| e.to_string())?;
+    let projection = session.projection().map_err(|e| e.to_string())?;
+
+    println!("journal: {}", session.journal_path().display());
+    println!("steps:   {} done, {} blocked", projection.done.len(), projection.blocked.len());
+    println!("resume:  {}", decision.describe());
+
+    match decision {
+        Decision::Park { step, why } => Err(format!("{step} needs a human: {why}")),
+        _ => Ok(()),
+    }
 }
 
 /// Run gates and print what actually happened. The exit code is the gates', not

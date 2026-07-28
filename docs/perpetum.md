@@ -6,9 +6,17 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: speculation.** Nothing here is built. This document is the requirements
-source for the harness — requirement ids are defined here and cited elsewhere
-(Perpetum 0.8). Working name for the binary: `perp`.
+**Status: partly built.** This document is the requirements source for the
+harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
+Working name for the binary: `perp`.
+
+As of cycle 1, batch 3: **21 of 147 requirements are done**, 3 in progress (one
+of them approval-gated), 2 parked as conflicting. What exists is the spine (binding,
+steps, journal, projection), the gate runner and its evidence, and the recovery
+and watchdog layer — in [`crates/`](../crates/), std-only, 95 tests. Everything
+about models, tools, git, chat and artifacts is still design. Status markers on
+each requirement below say which is which; a marker without a matching journal
+entry is not believed (Perpetum 0.7).
 
 Perpetum describes *what* the loop does. This describes *what has to exist* for
 the loop to survive being left running for a week with nobody watching.
@@ -121,10 +129,10 @@ what the journal stores and what recovery replays against.
 | `L-1` | The phase machine implements Perpetum A–G. A runs once, B→F loops, G is terminal and entirely approval-gated. |
 | `L-2` | Every phase declares its exit condition as a **checkable predicate**, not prose. The engine evaluates it; the model does not get to assert it. |
 | ✅ ~~`L-3`~~ | Every step is written to `journal.jsonl` as an *intent* record before the side effect and an *outcome* record after. Records are append-only and never rewritten. |
-| 🟡 `L-4` | `state.md` (Perpetum 0.2) is a **projection** of the journal, rewritten after each outcome. If they disagree, the journal wins. |
-| `L-5` | Every step is idempotent, or declares itself not and is bracketed by a reality check (`V-1`) on replay. |
-| `L-6` | The engine can kill and respawn the model session at any step boundary with no loss beyond the in-flight step. |
-| `L-7` | On start, the engine reconciles: find the last intent with no outcome, verify against the workspace what actually happened, then redo, skip, or park it. Never assume. |
+| ✅ ~~`L-4`~~ | `state.md` (Perpetum 0.2) is a **projection** of the journal, rewritten after each outcome. If they disagree, the journal wins. |
+| ✅ ~~`L-5`~~ | Every step is idempotent, or declares itself not and is bracketed by a reality check (`V-1`) on replay. |
+| ✅ ~~`L-6`~~ | The engine can kill and respawn the model session at any step boundary with no loss beyond the in-flight step. |
+| ✅ ~~`L-7`~~ | On start, the engine reconciles: find the last intent with no outcome, verify against the workspace what actually happened, then redo, skip, or park it. Never assume. |
 | 🟡 `L-8` | Context is disposable. A step may not depend on anything not reconstructible from binding, state, journal and the workspace. |
 | ✅ ~~`L-21`~~ | The engine loads `binding.md` before anything else and refuses to run unbound. A path the binding does not resolve stops the loop and asks; it is never guessed (Perpetum 0.1). |
 | ✅ ~~`L-22`~~ | Step ids are stable, ordered and human-citable — `c<cycle>/<phase or batch>/s<nn>`. The journal, the commit trailer, the board, the status marker and `/explain` all name the same step with the same string. |
@@ -137,11 +145,11 @@ An unattended loop with no ceiling is a billing incident.
 |---|---|
 | `L-9` | Budgets are declared per cycle and per batch, in three currencies: tokens, wall-clock, money. Reaching one parks the current work with a `budget` reason and stops cleanly at the next step boundary. |
 | `L-10` | Money is counted from real usage, per link, per role, per step (`M-11`). Local links count as zero money but non-zero wall-clock and watts. |
-| `L-11` | **No-progress watchdog:** N consecutive steps with no workspace change and no gate-state change ends the feature per Perpetum 0.5. Default N=5. |
-| `L-12` | **Repetition watchdog:** the same tool call with the same arguments K times in a window is an error, not a retry. Default K=3. |
-| `L-13` | **Thrash watchdog:** a file edited to a previously seen content hash within a batch is flagged; twice, the feature is blocked. |
+| ✅ ~~`L-11`~~ | **No-progress watchdog:** N consecutive steps with no workspace change and no gate-state change ends the feature per Perpetum 0.5. Default N=5. |
+| ✅ ~~`L-12`~~ | **Repetition watchdog:** the same tool call with the same arguments K times in a window is an error, not a retry. Default K=3. |
+| ✅ ~~`L-13`~~ | **Thrash watchdog:** a file edited to a previously seen content hash within a batch is flagged; twice, the feature is blocked. |
 | `L-14` | Stop conditions are exactly Perpetum F's: backlog exhausted, batch blocked, or a human says stop. Each writes a distinct terminal record. |
-| `L-15` | The loop stops *clean*: no half-applied patch, no dangling branch, no running child process. |
+| ✅ ~~`L-15`~~ | The loop stops *clean*: no half-applied patch, no dangling branch, no running child process. |
 | ✅ ~~`L-16`~~ | Two attempts at a failing gate, then `BLOCKED` with the **verbatim error text** (Perpetum 0.5). The engine enforces the count; the model cannot ask for a third. |
 
 ### 2.4 Concurrency
@@ -356,6 +364,7 @@ decides whether a week of unattended running produced software or a fiction.
 | `V-6` | **Exercise the artefact.** Once per batch, run the real thing — launch the app, open the page, run the CLI — and store the evidence (exit code, screenshot, log). Perpetum 0.7's second half is a step, not a suggestion. |
 | `V-7` | Status markers are derived from journal evidence. The engine writes them; the model proposes. |
 | `V-8` | Gated items (`external-gated`, `credential-gated`, `approval-gated`, `blocked`) are counted separately from done, forever, and are never re-picked without their reason changing. |
+| `V-10` | The red run verifies the mutation **actually changed the file** before believing either result. A mutation that failed to apply reports a passing test that was never challenged — a false green wearing the costume of evidence. Found the hard way in `c1/b3/s12`, where a multi-line `sed` pattern silently matched nothing. |
 | `V-9` | Requirement ids are minted only in the requirements source named by the binding (Perpetum 0.8). A write that introduces a new id anywhere else — batches, board, state, a `/btw` note — is rejected by the engine. |
 
 ---
@@ -449,8 +458,8 @@ Speculative, and the reason this document lives in this repo.
 
 | id | Requirement |
 |---|---|
-| `N-1` | **Crash-only.** Kill -9 at any moment loses at most the in-flight step. No clean-shutdown path is required for correctness. |
-| `N-2` | A cold start reads only the binding and the journal. No hidden state in a cache, a temp file, or a model's memory. |
+| ✅ ~~`N-1`~~ | **Crash-only.** Kill -9 at any moment loses at most the in-flight step. No clean-shutdown path is required for correctness. |
+| ✅ ~~`N-2`~~ | A cold start reads only the binding and the journal. No hidden state in a cache, a temp file, or a model's memory. |
 | `N-3` | Single binary, no daemon required, no container required for the default host runtime. |
 | `N-4` | Cross-platform: Windows first, then Linux/WSL2 and macOS. Path handling, line endings and shell quoting are tested on Windows, not assumed. |
 | `N-5` | Deterministic replay of the journal for inspection: the same journal renders the same state file and the same board, on any machine. |

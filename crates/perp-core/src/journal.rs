@@ -105,6 +105,25 @@ impl Record {
         self
     }
 
+    /// Declare whether repeating this step is safe (`L-5`).
+    ///
+    /// Carried as an extra field rather than a new column: a reader that has
+    /// never heard of it still round-trips the record (`N-8`), and a record
+    /// that does not carry it is treated as unsafe to repeat, which is the
+    /// conservative reading.
+    pub fn idempotent(mut self, idempotent: bool) -> Record {
+        self.extra.retain(|(key, _)| key != "idempotent");
+        self.extra.push(("idempotent".to_string(), Value::Bool(idempotent)));
+        self
+    }
+
+    pub fn is_idempotent(&self) -> Option<bool> {
+        self.extra
+            .iter()
+            .find(|(key, _)| key == "idempotent")
+            .and_then(|(_, value)| value.as_bool())
+    }
+
     pub fn to_value(&self) -> Value {
         let mut pairs = vec![
             ("v".to_string(), Value::int(self.version)),

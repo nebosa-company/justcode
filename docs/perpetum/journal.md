@@ -291,3 +291,107 @@ Branch `perp/c1/b2`. Six requirements: `V-2` `T-3` `L-16` `X-4` `X-12` `T-4`.
 
 **Batch 2 status:** 4 of 6 delivered, 2 carried (1 of them approval-gated),
 0 blocked. Gates green.
+
+---
+
+## Phase D — Batch 3, recovery and watchdogs
+
+Branch `perp/c1/b3`. Nine requirements plus `L-4`, carried from batch 1.
+
+### c1/b3/s01–s06 — Write the recovery layer
+- **outcome:** `session.rs` — a session opens from the binding and the journal
+  and nothing else, hands out step guards, reconciles what a dead process left,
+  and stops clean. `watchdog.rs` — the three ways a loop burns tokens without
+  moving.
+- **the decision that matters:** a step whose intent carries no idempotence flag
+  is treated as **unsafe to repeat**. Absent evidence, the conservative reading
+  is the safe one — repeating a non-idempotent step blind is how a loop sends
+  the same email twice.
+- `StepGuard` writes the outcome on `close`. Dropping it without closing leaves
+  the intent open **on purpose**: that is what a crash looks like, and hiding it
+  would defeat `L-7`.
+
+### c1/b3/s07 — Test gate, first run: FAILED
+- **outcome:** `cargo test --workspace` → **exit 101**, 1 of 87 failed.
+
+  ```
+  ---- watchdog::tests::a_file_edited_back_to_an_earlier_state_is_thrash ----
+  assertion `left == right` failed
+    left: Stop { reason: "src/main.rs has been edited back to an earlier state 2 times" }
+   right: Continue
+  ```
+
+- **diagnosis:** the **test** was wrong, not the code. `one → two → one → two` is
+  *two* reverts, so the watchdog stops on the fourth write; the test expected
+  the fifth. The behaviour under test is unchanged and still asserted — the
+  expectation was corrected, and the reasoning is in the test as a comment so
+  the next reader does not "fix" it back.
+- **attempt 1 of 2.** Resolved on the first attempt.
+
+### c1/b3/s08 — Gates
+- **outcome:** green, run through the harness itself.
+
+  ```
+  $ perp gate all --root .. --step c1/b3/s08
+  gate: lint   exit 0 in 192ms
+  gate: build  exit 0 in 129ms
+  gate: test   exit 0 in 840ms
+  all 3 gates green
+  ```
+
+### c1/b3/s09 — Recovery drill on the real journal (Perpetum 0.7)
+- **intent:** prove `L-7` against the actual repository, not a fixture.
+- **outcome:**
+
+  ```
+  $ perp record c1/b3/s09 intent "drill: die between intent and outcome"
+  recorded c1/b3/s09
+
+  $ perp resume
+  steps:   8 done, 0 blocked
+  resume:  park c1/b3/s09: cannot tell whether it landed, and it is not safe to repeat
+  exit 1
+  ```
+
+  The CLI's probe answers `Unclear` on purpose — from outside the loop there is
+  no way to tell whether a step's effect landed, and the rules then park rather
+  than guess. The drill step was then closed by the operator and `perp resume`
+  returned to `nothing in flight`, exit 0.
+
+### c1/b3/s10–s11 — Close `L-4`
+- **outcome:** `StepGuard::close` now rewrites the state file from the journal
+  after the outcome is on the record — never before, since a projection
+  describing a step the journal has not accepted is exactly the disagreement
+  `L-4` exists to prevent. `L-4` moves from 🟡 to ✅.
+
+### c1/b3/s12 — Red run, and a false green in the red run itself
+- **outcome:** five mutations, **two survived**, and both survivals were real
+  findings rather than noise:
+
+  ```
+  session.rs   unsafe default -> safe default    a_step_with_no_recorded_idempotence…  101  red
+  session.rs   idempotent branch never taken     an_unclear_step_parks_unless…         101  red
+  watchdog.rs  never reset the quiet counter     any_progress_resets_the_count         101  red
+  watchdog.rs  never trim the window             the_window_forgets_old_calls            0  SURVIVED
+  session.rs   stop kills nothing                stopping_reports_what_it_had_to…        0  SURVIVED
+  ```
+
+  - `the_window_forgets_old_calls` passed with the window trimming disabled,
+    because its limit was 3 and the scenario only ever produced 2 repeats. The
+    test never tested the window. Rewritten with limit 2 in a window of 3, it
+    now fails when trimming is removed.
+  - `stopping_reports_what_it_had_to_clean_up` only ever ran with an empty
+    nursery, so "kill nothing" passed. A second test now spawns a real child
+    and asserts it is killed and that the stop reports itself unclean.
+
+  Both re-run after the fix: **red, as they should be.**
+
+- **and one more, about the red run itself:** a sixth mutation reported "still
+  green" when in fact `sed` had silently matched nothing — the pattern spanned
+  two lines. A no-op mutation is a false green wearing the costume of evidence.
+  Filed as **`V-10`**: the red run must verify the mutation actually changed the
+  file before believing either result.
+
+**Batch 3 status:** 10 of 10 delivered (`L-5` `L-6` `L-7` `L-11` `L-12` `L-13`
+`L-15` `N-1` `N-2`, plus `L-4` carried from batch 1), 0 blocked. Gates green:
+90 unit + 5 integration = 95 tests.
