@@ -58,10 +58,11 @@ out.journal = docs/perpetum/journal.jsonl
 out.state   = docs/perpetum/state.md
 out.board   = docs/perpetum/progress-board.md
 
-gate.cwd   = crates
-gate.lint  = cargo clippy --workspace --all-targets -- -D warnings
-gate.build = cargo build --workspace
-gate.test  = cargo test --workspace
+gate.cwd     = crates
+gate.timeout = 900
+gate.lint    = cargo clippy --workspace --all-targets -- -D warnings
+gate.build   = cargo build --workspace
+gate.test    = cargo test --workspace
 
 git.branch.batch = perp/c{cycle}/b{batch}
 git.branch.init  = perp/c{cycle}/init

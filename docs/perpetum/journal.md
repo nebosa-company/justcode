@@ -223,3 +223,71 @@ onward the records are also in `journal.jsonl`, written by the engine itself.
 
 **Batch 1 status:** 7 of 9 delivered, 2 carried, 0 blocked, 0 gated. All gates
 green at the delivered set.
+
+---
+
+## Phase D — Batch 2, gate runner and evidence
+
+Branch `perp/c1/b2`. Six requirements: `V-2` `T-3` `L-16` `X-4` `X-12` `T-4`.
+
+### c1/b2/s01–s04 — Write the runner
+- **outcome:** two modules. `process.rs` — bounded runs, declared environment,
+  tree kill, and a nursery that kills what a step spawned. `gate.rs` — gates
+  read from the binding, a result type that *contains* its transcript, and the
+  attempt counter.
+- **two design decisions worth recording:**
+  - `Spec` has no constructor without a timeout. `T-3` says no unbounded
+    process, ever, and a type is a better place to enforce that than a memo.
+  - `GateResult` cannot be built without a `Run`. There is no code path that
+    records a pass without the transcript that proves it — which is what `V-2`
+    actually asks for.
+- **output is drained on threads** rather than read after waiting: a child that
+  fills a pipe while the parent polls would block forever, and a deadlock is not
+  a timeout.
+
+### c1/b2/s05 — Gates
+- **outcome:** green on the first run this time.
+
+  ```
+  cargo clippy --workspace --all-targets -- -D warnings -> exit 0
+  cargo build --workspace -> exit 0
+  cargo test --workspace -> exit 0; 66 unit + 5 integration = 71 passed, 0 failed
+  ```
+
+  One warning was fixed before the lint gate ran (`unused import: Path`), which
+  the build reported.
+
+### c1/b2/s06 — Red run, and the harness running its own gates
+- **red run:** four of four went red.
+
+  ```
+  process.rs  drop kill_tree in the deadline path  a_command_that_hangs_is_killed_at_its_deadline          101
+  process.rs  drop env_clear()                     the_environment_is_declared_not_inherited              101
+  gate.rs     never reach the attempt ceiling      two_failures_block_and_the_third_attempt_is_not_offered 101
+  gate.rs     do not stop at the first red gate    runs_stop_at_the_first_red                             101
+  restored                                         71 passed, exit 0
+  ```
+
+  The first mutation is the interesting one: removing the kill still returns
+  `TimedOut`, so the test that only checked the verdict would have passed. It
+  fails because it also checks the clock — the process really has to die.
+
+- **artefact exercised (Perpetum 0.7):** `perp gate all --root .. --step c1/b2/s06`
+  ran clippy, build and test **through the harness**, exit 0, and appended three
+  outcome records to `journal.jsonl` carrying the verbatim transcripts —
+  command, cwd, `env: declared: kept 16, set 0`, exit code, duration. The
+  harness now produces its own evidence.
+
+### c1/b2/s07 — What is *not* done
+- `V-2` is **🟡**: the transcript carries command, cwd, env, exit, duration and
+  output tail, but not the **commit sha**. `GateResult.sha` exists and is
+  `None`; filling it is `G-6`, in batch 4.
+- `X-4` is **🟡 ⛔**: the tree kill works — `taskkill /F /T` on Windows, a
+  process-group kill on Unix — but the requirement's stronger clause, that
+  children die *even if the engine is killed*, needs a Windows **job object**,
+  which needs the `windows-sys` crate. Adding a dependency is approval-gated
+  under this project's binding, so it is **requested, not taken**. Carried as
+  `approval-gated` (Perpetum 0.6).
+
+**Batch 2 status:** 4 of 6 delivered, 2 carried (1 of them approval-gated),
+0 blocked. Gates green.

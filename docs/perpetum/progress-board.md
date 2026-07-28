@@ -8,46 +8,48 @@ session.
 
 ## Batch
 
-**1 of 10 — the spine: journal, steps, state projection**
+**2 of 10 — gate runner and evidence** (closed)
 
 | Field | Value |
 |---|---|
-| Current feature | — (batch closed; next is batch 2, gate runner and evidence) |
-| Previous 3 features | `O-1` replayable journal · `N-10` atomic writes · `N-9` typed errors |
-| Delivered this batch | 7 of 9 |
-| Carried | `L-4`, `L-8` — 🟡, need the loop engine (batch 3) |
+| Current feature | — (batch closed; next is batch 3, recovery and watchdogs) |
+| Previous 3 features | `L-16` attempt ceiling · `X-12` declared environment · `T-4` nursery |
+| Delivered this batch | 4 of 6 — `T-3` `T-4` `X-12` `L-16` |
+| Carried | `V-2` (no commit sha until `G-6`), `X-4` (job object is approval-gated) |
 | Blocked | 0 |
-| Gated | 0 |
+| Gated | 1 — `X-4`, approval-gated |
 
-## Gates — last run 2026-07-28, all green
+## Gates — last run 2026-07-28 by `perp gate all`, all green
 
 | Gate | Command | Exit | Result |
 |---|---|---|---|
 | lint | `cargo clippy --workspace --all-targets -- -D warnings` | 0 | clean |
 | build | `cargo build --workspace` | 0 | clean |
-| test | `cargo test --workspace` | 0 | 53 passed / 0 failed |
+| test | `cargo test --workspace` | 0 | 71 passed / 0 failed |
 
-Tests: **53 passed, 0 failed** — 48 unit, 5 integration. Four were red-run
-against mutated implementations (`c1/b1/s12`); the other 49 were not.
+Tests: **71 passed, 0 failed** — 66 unit, 5 integration. Eight have been
+red-run against mutated implementations across batches 1–2; the other 63 have
+not.
 
 ## Cycle totals
 
 | | |
 |---|---|
-| Requirements | 146 (141 designed · 5 minted this cycle) |
-| Done | 7 |
-| In progress | 2 |
-| Batched, not started | 76 |
+| Requirements | 146 |
+| Done | 11 |
+| In progress | 4 — `L-4` `L-8` `V-2` `X-4` |
+| Batched, not started | 70 |
 | Unbatched | 61 |
 | Conflicting, parked | 2 — `I-3`, `O-6` |
-| Commits | 2, on `perp/c1/init` and `perp/c1/b1`. Nothing pushed. |
+| Gated | 1 — `X-4` |
+| Commits | 3, on `perp/c1/{init,b1,b2}`. Nothing pushed. |
 
 ## Sources, this pass
 
 | Source | Weight | Status |
 |---|---|---|
 | Crash analytics | 100 | unavailable — nothing has ever run |
-| Security scanners | 95 | empty — no harness dependencies yet |
+| Security scanners | 95 | empty — the harness still has zero dependencies |
 | Support | 45 | unavailable — no users |
 | User voice | 40 | partial — operator read; GitHub issues unreachable |
 | Product backlog | 30 | read in full |

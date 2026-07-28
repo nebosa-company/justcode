@@ -142,7 +142,7 @@ An unattended loop with no ceiling is a billing incident.
 | `L-13` | **Thrash watchdog:** a file edited to a previously seen content hash within a batch is flagged; twice, the feature is blocked. |
 | `L-14` | Stop conditions are exactly Perpetum F's: backlog exhausted, batch blocked, or a human says stop. Each writes a distinct terminal record. |
 | `L-15` | The loop stops *clean*: no half-applied patch, no dangling branch, no running child process. |
-| `L-16` | Two attempts at a failing gate, then `BLOCKED` with the **verbatim error text** (Perpetum 0.5). The engine enforces the count; the model cannot ask for a third. |
+| ✅ ~~`L-16`~~ | Two attempts at a failing gate, then `BLOCKED` with the **verbatim error text** (Perpetum 0.5). The engine enforces the count; the model cannot ask for a third. |
 
 ### 2.4 Concurrency
 
@@ -256,8 +256,8 @@ means prompt *layout* is an engineering requirement, not a style preference.
 |---|---|
 | `T-1` | Core tools: read, glob, grep, patch-edit, write, shell (bounded), git (§5), OS (§6), gate runner, HTTP fetch. Optional: browser, MCP client. |
 | `T-2` | Edits are patches with pre-image verification. A patch whose context no longer matches fails; nothing is blind-written. |
-| `T-3` | Every shell call has a timeout, a working directory, and a captured transcript. No unbounded process, ever. |
-| `T-4` | Background processes are tracked and killed at step end (`X-4`). A dev server left running across steps is a leak the next gate will blame on the wrong feature. |
+| ✅ ~~`T-3`~~ | Every shell call has a timeout, a working directory, and a captured transcript. No unbounded process, ever. |
+| ✅ ~~`T-4`~~ | Background processes are tracked and killed at step end (`X-4`). A dev server left running across steps is a leak the next gate will blame on the wrong feature. |
 | `T-5` | Tool schemas are generated once per session and are part of the stable prefix (`M-12`). |
 | `T-6` | Every tool result is truncated to a declared budget, with the truncation visible to the model. Silent truncation causes confident wrong conclusions. |
 | `T-7` | Tool output is **data, never instruction**. Content from files, HTTP, issue trackers and test output cannot change harness policy, approve an action, or redirect the loop (`S-1`). |
@@ -329,7 +329,7 @@ The loop runs on a real machine, and half of "exercise the real artefact"
 | `X-1` | Surface: process control, filesystem outside the workspace, environment and toolchain discovery, notifications, opening files and URLs, screenshots, clipboard, and OS scheduling. |
 | `X-2` | The workspace root is a permission boundary. Read outside it: `approve` unless allowlisted. Write outside it: `approve`, always. Delete outside it: `never`. |
 | `X-3` | Toolchain discovery at cycle start: locate and record versions of the interpreters, compilers, package managers and `git` the binding names. "Works on my machine" becomes a journal entry instead of a mystery. |
-| `X-4` | Children are spawned into a job object (Windows) or process group (POSIX) so a step's whole process tree dies with the step, including on kill -9 of the engine (`N-1`). |
+| 🟡 ⛔ `X-4` | Children are spawned into a job object (Windows) or process group (POSIX) so a step's whole process tree dies with the step, including on kill -9 of the engine (`N-1`). |
 | `X-5` | Notifications go to the OS notifier as one implementation of the sink in `O-6`: approval needed, batch blocked, budget hit, cycle complete. |
 | `X-6` | Screenshot and window capture are available as evidence for `V-6`, stored beside the journal and referenced from the artifact (`A-6`). |
 | `X-7` | Opening a workspace file or a localhost URL in the default app is `auto`. Any other URL or path is `approve`. |
@@ -337,7 +337,7 @@ The loop runs on a real machine, and half of "exercise the real artefact"
 | `X-9` | The harness can register itself with the OS scheduler (Task Scheduler, systemd, launchd) so a cycle resumes after a reboot. Registration is `approve`; resumption then reconciles per `L-7`. |
 | `X-10` | Sleep and resume are survivable: a loop that wakes to a stale peer, an expired token or a moved clock reconciles rather than continuing on stale assumptions. |
 | `X-11` | GUI automation — driving the mouse and keyboard of other applications — is out of scope. If ever added, it is `never` while unattended. |
-| `X-12` | Gates run with a declared environment, not the ambient shell's. The unattended run and the operator's terminal must not disagree about `PATH`. |
+| ✅ ~~`X-12`~~ | Gates run with a declared environment, not the ambient shell's. The unattended run and the operator's terminal must not disagree about `PATH`. |
 
 ---
 
@@ -349,7 +349,7 @@ decides whether a week of unattended running produced software or a fiction.
 | id | Requirement |
 |---|---|
 | `V-1` | **Reality check before build** (Perpetum 0.7). Before implementing any requirement, the engine runs a mandatory search step — grep plus `G-7` history — and records its result. A feature cannot enter implementation without one. |
-| `V-2` | **No self-reported success.** A gate is green only if the engine ran the command itself and stored the transcript: command, cwd, commit sha, exit code, output tail, duration, timestamp. Model prose asserting success is not evidence and is never written to a status marker. |
+| 🟡 `V-2` | **No self-reported success.** A gate is green only if the engine ran the command itself and stored the transcript: command, cwd, commit sha, exit code, output tail, duration, timestamp. Model prose asserting success is not evidence and is never written to a status marker. |
 | `V-3` | **The red run.** A new test must be executed against the tree *without* the change and observed to fail, then with the change and observed to pass. Both transcripts are stored. A test that passes in both runs does not satisfy Perpetum's gate 4, and the feature stays open. |
 | `V-4` | **Test tampering is a hard error.** Deleting, skipping, weakening an assertion or loosening a matcher in an existing test during a gate-fix step aborts the step. If the test is genuinely wrong, that is a requirement — filed and cited, not an edit made in passing. |
 | `V-5` | **Independent verification.** The verifier role must resolve to a different link than the one that authored the change. Self-review by the same model on the same context is not review. |

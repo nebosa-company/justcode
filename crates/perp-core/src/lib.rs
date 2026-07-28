@@ -16,17 +16,21 @@
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
 //! | [`atomic`] | `N-10` |
 //! | [`error`] | `N-9` |
+//! | [`process`] | `T-3`, `T-4`, `X-4`, `X-12` |
+//! | [`gate`] | `V-2`, `L-16` |
 //! | [`json`], [`time`] | no dependencies, per `N-11` |
 //!
-//! Nothing here talks to a model, runs a command, or touches git. Those are
-//! batches 2, 4 and 6 — and the spine is deliberately testable without any of
-//! them, or the tests would need a GPU to run.
+//! Nothing here talks to a model or touches git. Those are batches 4 and 6 —
+//! and everything so far is deliberately testable without either, or the tests
+//! would need a GPU to run.
 
 pub mod atomic;
 pub mod binding;
 pub mod error;
+pub mod gate;
 pub mod journal;
 pub mod json;
+pub mod process;
 pub mod state;
 pub mod step;
 pub mod time;
@@ -36,7 +40,9 @@ mod testutil;
 
 pub use binding::Binding;
 pub use error::{Error, Result};
+pub use gate::{Attempts, Gate, GateResult, Verdict};
 pub use journal::{Journal, Kind, Record};
+pub use process::{Env, Exit, Nursery, Run, Spec};
 pub use state::{replay, Projection};
 pub use step::StepId;
 

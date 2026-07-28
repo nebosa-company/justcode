@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use perp_core::binding::Binding;
+use perp_core::gate::{self, Gate};
 use perp_core::journal::{Journal, Record};
 use perp_core::state::{render, replay};
 use perp_core::step::StepId;
@@ -32,6 +33,11 @@ usage:
   perp state [--out <file>] [--root <dir>]
       Replay the journal and render the state file. Without --out, writes the
       path the binding names; with -, prints to stdout.
+
+  perp gate [<name>|all] [--step <id>] [--root <dir>]
+      Run the gates the binding declares, in Perpetum order, stopping at the
+      first red. Prints the transcript. With --step, appends an outcome record
+      per gate to the journal. Exits non-zero if any gate is red.
 
   perp version
 ";
@@ -62,6 +68,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("bind") => cmd_bind(&args[1..]).map_err(|e| e.to_string()),
         Some("record") => cmd_record(&args[1..]).map_err(|e| e.to_string()),
         Some("state") => cmd_state(&args[1..]).map_err(|e| e.to_string()),
+        Some("gate") => cmd_gate(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -171,6 +178,59 @@ fn cmd_state(args: &[&str]) -> Result<()> {
         Some(path) => write_state(Path::new(path), &rendered)?,
         None => write_state(&binding.resolve("out.state")?, &rendered)?,
     }
+    Ok(())
+}
+
+/// Run gates and print what actually happened. The exit code is the gates', not
+/// an opinion about them.
+fn cmd_gate(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let wanted = positionals(args).first().copied().unwrap_or("all");
+
+    let gates = match wanted {
+        "all" => Gate::from_binding(&binding).map_err(|e| e.to_string())?,
+        name => vec![Gate::named(&binding, name).map_err(|e| e.to_string())?],
+    };
+
+    let journal = match flag(args, "--step") {
+        Some(_) => Some(Journal::at(
+            binding.resolve("out.journal").map_err(|e| e.to_string())?,
+        )),
+        None => None,
+    };
+    let step = match flag(args, "--step") {
+        Some(text) => Some(StepId::parse(text).map_err(|e| e.to_string())?),
+        None => None,
+    };
+
+    let results = gate::run_all(&gates).map_err(|e| e.to_string())?;
+    let mut red = 0;
+
+    for result in &results {
+        print!("{}", result.evidence());
+        println!();
+        if !result.is_green() {
+            red += 1;
+        }
+        if let (Some(journal), Some(step)) = (&journal, &step) {
+            journal
+                .append(&result.to_record(step.clone(), time::now()))
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    if results.len() < gates.len() {
+        println!(
+            "stopped after {} of {} gates — a red gate makes the rest meaningless",
+            results.len(),
+            gates.len()
+        );
+    }
+
+    if red > 0 {
+        return Err(format!("{red} gate(s) red"));
+    }
+    println!("all {} gates green", results.len());
     Ok(())
 }
 
