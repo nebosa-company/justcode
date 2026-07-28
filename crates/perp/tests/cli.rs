@@ -259,6 +259,93 @@ fn a_role_with_no_local_option_fails_local_only_instead_of_falling_back() {
     assert!(out.says("no cloud link is substituted"), "{}{}", out.stdout, out.stderr);
 }
 
+// ── a call, and its bill (M-9, M-10, M-11) ─────────────────────────────────
+
+/// A tiny OpenAI-compatible server, for as many requests as it is given
+/// answers. Real socket, real curl, real journal — the whole chain.
+fn fake_link(answers: Vec<(u16, String)>) -> u16 {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+
+    std::thread::spawn(move || {
+        for (status, body) in answers {
+            let Ok((stream, _)) = listener.accept() else { return };
+            let mut reader = BufReader::new(stream);
+            let mut length = 0usize;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+                if line.trim().is_empty() {
+                    break;
+                }
+            }
+            if length > 0 {
+                use std::io::Read as _;
+                let mut body = vec![0u8; length];
+                let _ = reader.read_exact(&mut body);
+            }
+            let mut stream = reader.into_inner();
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            );
+            let _ = stream.flush();
+        }
+    });
+
+    port
+}
+
+#[test]
+fn a_real_call_over_a_real_socket_lands_in_the_journal_and_the_ledger() {
+    let models = r#"{"object":"list","data":[{"id":"small","type":"llm","quantization":"Q4_K_M","state":"loaded","max_context_length":4096}]}"#;
+    let chat = r#"{"id":"c1","model":"small","choices":[{"index":0,"message":{"role":"assistant","content":"hello back"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1000,"completion_tokens":20,"prompt_cache_hit_tokens":800,"prompt_cache_miss_tokens":200}}"#;
+    let port = fake_link(vec![(200, models.to_string()), (200, chat.to_string())]);
+
+    let root = with_links(
+        "cost-e2e",
+        &format!(
+            "link.local.kind = openai-compat\n\
+             link.local.base_url = http://127.0.0.1:{port}\n\
+             link.local.model = small\n\
+             link.local.privacy = local\n\
+             role.chat = local\n\
+             price.local.cache_hit = 0.0028\n\
+             price.local.cache_miss = 0.14\n\
+             price.local.output = 0.28"
+        ),
+    );
+
+    let ask = run(&root, &["ask", "say hello", "--role", "chat", "--step", "c2/b9/s01"]);
+    assert!(ask.ok(), "stderr: {}", ask.stderr);
+    assert!(ask.says("hello back"), "the reply: {}", ask.stdout);
+    assert!(ask.says("via: link local"), "the provenance: {}", ask.stdout);
+    assert!(ask.says("Q4_K_M"), "including the quantization: {}", ask.stdout);
+    assert!(ask.says("800 cached"), "and the cache split: {}", ask.stdout);
+
+    // And the bill, replayed out of the journal by a separate process.
+    let cost = run(&root, &["cost"]);
+    assert!(cost.ok(), "stderr: {}", cost.stderr);
+    assert!(cost.says("1 calls"), "{}", cost.stdout);
+    assert!(cost.says("1000 tokens in (800 cached)"), "{}", cost.stdout);
+    assert!(cost.says("chat"), "grouped by role: {}", cost.stdout);
+    // 800 hits at 0.0028 + 200 misses at 0.14 + 20 out at 0.28, per million
+    // = 0.00003584. Asserted to six places, because four would round every
+    // real call to zero — which is what this test caught.
+    assert!(cost.says("0.000036"), "the charge: {}", cost.stdout);
+}
+
 // ── the shape of the CLI itself (N-3) ──────────────────────────────────────
 
 #[test]

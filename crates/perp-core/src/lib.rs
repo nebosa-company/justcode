@@ -26,6 +26,8 @@
 //! | [`probe`] | `M-6`, `M-7` |
 //! | [`net`] | the transport, over `curl` — `S-2`, `T-3` |
 //! | [`client`] | `M-6`–`M-10`, `M-21`, `M-22` |
+//! | [`cost`] | `M-11` |
+//! | [`prompt`] | `M-12`, `M-13` |
 //! | [`json`], [`time`] | no dependencies, per `N-11` |
 //!
 //! Nothing here talks to a model or touches git. Those are batches 4 and 6 —
@@ -35,6 +37,7 @@
 pub mod atomic;
 pub mod binding;
 pub mod client;
+pub mod cost;
 pub mod error;
 pub mod gate;
 pub mod git;
@@ -44,6 +47,7 @@ pub mod link;
 pub mod net;
 pub mod probe;
 pub mod process;
+pub mod prompt;
 pub mod session;
 pub mod state;
 pub mod step;

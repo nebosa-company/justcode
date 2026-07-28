@@ -222,6 +222,72 @@ impl Link {
     }
 }
 
+/// Per-link concurrency (`M-15`).
+///
+/// One GPU serving one model does not want four parallel requests: they do not
+/// go faster, they queue inside the server, and the timeouts start firing at
+/// the wrong layer. The limit is the link's `concurrency`, which defaults to 1.
+///
+/// Shared between threads by design — the engine is single-threaded today, and
+/// this is the thing that has to already be right on the day it is not.
+#[derive(Debug, Default)]
+pub struct Permits {
+    in_flight: std::sync::Mutex<Vec<(String, u32)>>,
+}
+
+/// Held for the duration of a call; releases on drop, including on a panic or
+/// an early return.
+///
+/// Owns a handle to the pool rather than borrowing it, so holding a permit does
+/// not lock the caller out of the thing that issued it.
+#[derive(Debug)]
+pub struct Permit {
+    permits: std::sync::Arc<Permits>,
+    link: String,
+}
+
+impl Drop for Permit {
+    fn drop(&mut self) {
+        if let Ok(mut in_flight) = self.permits.in_flight.lock() {
+            if let Some(entry) = in_flight.iter_mut().find(|(name, _)| name == &self.link) {
+                entry.1 = entry.1.saturating_sub(1);
+            }
+        }
+    }
+}
+
+impl Permits {
+    pub fn new() -> Permits {
+        Permits::default()
+    }
+
+    /// `None` when the link is already at its limit. The caller waits or picks
+    /// another link; it does not get to exceed it.
+    pub fn acquire(self: &std::sync::Arc<Self>, link: &Link) -> Option<Permit> {
+        let mut in_flight = self.in_flight.lock().ok()?;
+        let slot = match in_flight.iter_mut().find(|(name, _)| name == &link.name) {
+            Some(entry) => entry,
+            None => {
+                in_flight.push((link.name.clone(), 0));
+                in_flight.last_mut()?
+            }
+        };
+        if slot.1 >= link.concurrency.max(1) {
+            return None;
+        }
+        slot.1 += 1;
+        Some(Permit { permits: std::sync::Arc::clone(self), link: link.name.clone() })
+    }
+
+    pub fn in_flight(&self, link: &Link) -> u32 {
+        self.in_flight
+            .lock()
+            .ok()
+            .and_then(|held| held.iter().find(|(name, _)| name == &link.name).map(|(_, n)| *n))
+            .unwrap_or(0)
+    }
+}
+
 /// Whether a link can be used right now. Implemented against a real endpoint in
 /// batch 8; until then the router is testable with a fake.
 pub trait Health {
@@ -247,6 +313,8 @@ pub struct Links {
     /// baked into the binary. `deepseek-chat` died on 2026-07-24; a harness
     /// that hard-coded it would have needed a release to say so.
     deprecated: Vec<(String, String)>,
+    /// Per-link prices, for the same reason: they change (`M-11`).
+    prices: Vec<(String, crate::cost::Price)>,
 }
 
 impl Links {
@@ -286,6 +354,8 @@ impl Links {
                 chains.push((role, chain));
             } else if let Some(dead) = key.strip_prefix("deprecated.") {
                 deprecated.push((dead.to_string(), value.clone()));
+            } else if key.starts_with("price.") {
+                // Parsed below, in one pass, so a malformed price names itself.
             } else {
                 return Err(Error::unbound(
                     key,
@@ -299,8 +369,10 @@ impl Links {
             links.push(build_link(&name, &fields)?);
         }
 
-        let result = Links { links, chains, deprecated };
+        let prices = crate::cost::prices(&entries)?;
+        let result = Links { links, chains, deprecated, prices };
         result.check_chains()?;
+        result.check_prices()?;
         Ok(result)
     }
 
@@ -318,6 +390,32 @@ impl Links {
             }
         }
         Ok(())
+    }
+
+    /// Every price must belong to a link that exists, or a typo silently
+    /// prices nothing.
+    fn check_prices(&self) -> Result<()> {
+        for (name, _) in &self.prices {
+            if !self.links.iter().any(|link| &link.name == name) {
+                return Err(Error::unbound(
+                    format!("price.{name}"),
+                    "is not a configured link",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// What this link charges. A link with no configured price is **free**,
+    /// which is right for a local one and a visible zero for a cloud one —
+    /// a bill of nothing next to a cloud link is a configuration bug you can
+    /// see, rather than a guess at what DeepSeek costs this week.
+    pub fn price(&self, name: &str) -> crate::cost::Price {
+        self.prices
+            .iter()
+            .find(|(link, _)| link == name)
+            .map(|(_, price)| *price)
+            .unwrap_or(crate::cost::Price::FREE)
     }
 
     pub fn all(&self) -> &[Link] {
@@ -731,6 +829,76 @@ deprecated.deepseek-reasoner = deepseek-v4-pro
         assert!(Kind::LmLink.has_native_api());
         assert!(!Kind::DeepSeek.has_native_api());
         assert!(!Kind::OpenAiCompat.has_native_api());
+    }
+
+    #[test]
+    fn a_link_is_not_asked_more_than_its_concurrency_allows() {
+        // `M-15`.
+        let links = links();
+        let link = links.get("rig").expect("rig");
+        assert_eq!(link.concurrency, 1, "the default, and the right one for a single GPU");
+
+        let permits = std::sync::Arc::new(Permits::new());
+        let first = permits.acquire(link).expect("the first is allowed");
+        assert!(permits.acquire(link).is_none(), "the second is not");
+        assert_eq!(permits.in_flight(link), 1);
+
+        drop(first);
+        assert_eq!(permits.in_flight(link), 0, "and releasing frees the slot");
+        assert!(permits.acquire(link).is_some());
+    }
+
+    #[test]
+    fn one_links_limit_does_not_block_another() {
+        let links = links();
+        let permits = std::sync::Arc::new(Permits::new());
+        let _rig = permits.acquire(links.get("rig").expect("rig")).expect("rig");
+        assert!(
+            permits.acquire(links.get("here").expect("here")).is_some(),
+            "the limit is per link, not global"
+        );
+    }
+
+    #[test]
+    fn the_limit_holds_under_real_threads() {
+        // The engine is single-threaded today. This is the thing that has to
+        // already be right on the day it is not.
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::Arc;
+
+        let text = "```perp-links\n\
+                    link.busy.kind = lmstudio\n\
+                    link.busy.base_url = http://localhost:1234\n\
+                    link.busy.model = m\n\
+                    link.busy.concurrency = 2\n\
+                    role.coder = busy\n```\n";
+        let links = Arc::new(Links::parse(text).expect("parse"));
+        let permits = Arc::new(Permits::new());
+        let granted = Arc::new(AtomicU32::new(0));
+        let peak = Arc::new(AtomicU32::new(0));
+
+        let handles: Vec<_> = (0..16)
+            .map(|_| {
+                let (links, permits, granted, peak) =
+                    (links.clone(), permits.clone(), granted.clone(), peak.clone());
+                std::thread::spawn(move || {
+                    let link = links.get("busy").expect("busy");
+                    if let Some(permit) = permits.acquire(link) {
+                        let now = granted.fetch_add(1, Ordering::SeqCst) + 1;
+                        peak.fetch_max(now, Ordering::SeqCst);
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                        granted.fetch_sub(1, Ordering::SeqCst);
+                        drop(permit);
+                    }
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().expect("thread");
+        }
+
+        assert!(peak.load(Ordering::SeqCst) <= 2, "the limit was exceeded: {peak:?}");
+        assert_eq!(permits.in_flight(links.get("busy").expect("busy")), 0, "all released");
     }
 
     #[test]

@@ -1033,3 +1033,99 @@ No TLS crate, no dependency, and `curl` 8.19 is already on this machine.
 **Batch 8 status:** 6 of 8 delivered (`M-9` `M-10` `M-22`, plus `M-6` `M-7`
 `M-14` closed from batch 7), 2 carried, `M-8` untouched, 0 blocked. One
 requirement discovered and filed (`M-24`). 194 tests.
+
+---
+
+## Phase D — Batch 9, cost, caching and context
+
+Branch `perp/c2/b9`. Four requirements: `M-11` `M-12` `M-13` `M-15`.
+
+### c2/b9/s01 — The ledger is a projection, not a counter
+- **outcome:** `cost.rs`. Every call writes its accounting into the journal
+  record's extra fields, and `Ledger::replay` rebuilds the totals from them —
+  the same rule as `state.md` (`L-4`). A process that dies mid-batch has still
+  recorded what it spent.
+- **cache-hit and cache-miss input are never added together.** DeepSeek prices
+  them fifty to one; a ledger that merges them reports a number that is wrong
+  by an order of magnitude and looks perfectly reasonable.
+- **an unreported cache split counts as all-miss** — priced as if nothing was
+  cached, rather than assuming a discount nobody granted. `cache_ratio()`
+  returns `None` for it: unknown, not zero.
+- **prices come from configuration**, like model ids and for the same reason.
+  A link with no price is free, which is right for a local one and a visible
+  zero next to a cloud one.
+
+### c2/b9/s02 — Prompt layout as an engineering requirement
+- **outcome:** `prompt.rs`. Stable region first in a fixed order, volatile tail
+  last, and a `PrefixGuard` that fingerprints the stable region per batch.
+- **the failure this prevents is invisible**: reorder two system segments and
+  the model behaves the same, the tests pass, and every call silently pays
+  cache-miss rates. Nothing else in the system would ever mention it.
+
+### c2/b9/s03 — Compaction, and where it is allowed to run
+- **outcome:** oldest tail first, newest turn always kept, stable prefix never
+  touched — compacting the prefix would cost more cache than it saves tokens.
+- **refuses to run on a cloud link** (`M-13`). Compaction reads everything the
+  loop has seen; it is the most context-rich call in the system, which is
+  exactly why it stays on the operator's hardware.
+- Token counts are `estimated_tokens`, named for what they are. The provider's
+  reported usage is the truth; this is for deciding what to send before there
+  is a report to read.
+
+### c2/b9/s04 — Concurrency
+- **outcome:** `Permits`, per link, defaulting to 1. A link at its limit is
+  **skipped and the skip recorded**, not queued and not exceeded.
+- Tested with sixteen real threads against a limit of two, asserting the peak
+  never exceeded it. The engine is single-threaded today; this is the thing
+  that has to already be right on the day it is not.
+
+### c2/b9/s05 — Test gate FAILED: the report read zero
+- **outcome:** the new end-to-end test failed on its last assertion.
+
+  ```
+  the charge: 1 calls · 1000 tokens in (800 cached) · 20 out · 0.1s · 0.0000
+  ```
+
+- **diagnosis:** the arithmetic was right and the **display** was wrong. One
+  call costs tens of millionths; formatted to four decimal places, every real
+  amount rounds to `0.0000`. A cost report that always reads zero is
+  decoration.
+- **fix:** six decimal places. The test now asserts `0.000036`, which is
+  800 hits at 0.0028 plus 200 misses at 0.14 plus 20 out at 0.28, per million.
+- **attempt 1 of 2.**
+
+### c2/b9/s06 — The whole chain, over a real socket
+- **outcome:** an end-to-end test starts an OpenAI-compatible server on an
+  ephemeral port, points a fixture configuration at it, and runs the **real
+  binary**: `perp ask --step c2/b9/s01` then `perp cost`, as two separate
+  processes over one journal.
+
+  ```
+  via: link local · model small · Q4_K_M
+  tokens: 1000 in (800 cached) / 20 out
+  ...
+  1 calls · 1000 tokens in (800 cached) · 20 out · 0.1s · 0.000036
+  ```
+
+  Real socket, real `curl`, real journal, real replay. Nothing in that path is
+  mocked except the model on the other end.
+
+### c2/b9/s07 — Red run, and a design error it found
+- **outcome:** nine mutations, eight red. The survivor was the useful one.
+- `reordering_the_stable_region_changes_the_fingerprint` still passed with the
+  **segment name** removed from the hash — and thinking about why exposed a
+  real error: a prefix cache matches **bytes, not labels**. Hashing the names
+  meant a pure rename would trip the guard while the cache hit perfectly. That
+  is the worst kind of alarm, the one you learn to ignore.
+- **fix:** the fingerprint hashes content and order only. Two new tests pin it
+  — a rename does not change it, a segment boundary does — and both go red
+  under mutation.
+
+### c2/b9/s08 — Still not proven
+- **No real model has been called.** LM Studio is running here but has only an
+  embeddings model, and downloading a chat model onto the operator's machine is
+  not the loop's decision. DeepSeek has no key. Everything in this batch is
+  proven against a real socket and a recorded response, which is not the same
+  as proven against a model.
+
+**Batch 9 status:** 4 of 4 delivered, 0 blocked. 222 tests.

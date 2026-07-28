@@ -1,6 +1,6 @@
 # Perpetum state
 
-Cycle: 2 · Phase: D · Batch: 8 — 3 of this cycle's five delivered ·
+Cycle: 2 · Phase: D · Batch: 9 — 4 of this cycle's five delivered ·
 Updated: 2026-07-28
 
 Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
@@ -18,10 +18,12 @@ Board: [`progress-board.md`](progress-board.md)
 | 6 | Proving it works | 6 of 7, 1 carried |
 | 7 | Model links — the router | 5 of 8, 3 carried |
 | 8 | Transport and protocols | 6 of 8, 2 carried, `M-8` untouched |
+| 9 | Cost, caching and context | 4 of 4 |
 
-- Next: **batch 9 — cost, caching and context** (`M-11`–`M-13`, `M-15`). There
-  is now something to account the cost of: `Usage` already separates DeepSeek's
-  cache-hit from cache-miss tokens, which differ by roughly fifty-fold in price.
+- Next: **batch 10 — local-server realities** (`M-16`–`M-20`): warming a link
+  before a batch, VRAM as a lease, throughput from TTFT, and `lmlink` peer
+  health. This is the batch where the open question about LM Link's transport
+  has to be settled by testing it.
 
 Carried, not done:
 
@@ -36,11 +38,11 @@ Carried, not done:
 
 ## Last green gates
 
-`perp gate all --root .. --step c2/b8/s08`, exit 0, pinned to `f528ae5`.
+`perp gate all --root .. --step c2/b9/s07`, exit 0, pinned to `cc3739d`.
 
 - lint · exit 0 · clean
 - build · exit 0 · clean
-- tests · exit 0 · **194/194** — 175 unit, 5 spine integration, 14 end-to-end
+- tests · exit 0 · **222/222** — 202 unit, 5 spine integration, 15 end-to-end
 - ids · exit 0 · 149 defined, no strays
 - links · exit 0 · 2 links, 9 roles, every role has a local option
 
@@ -63,9 +65,11 @@ and a recommendation. None blocks anything.
 no dependency, and the credential goes to `curl -K -` on stdin rather than into
 argv where any process listing would show it.
 
-**Still unproven:** DeepSeek has never actually been called. The transport can
-do HTTPS, but no `DEEPSEEK_API_KEY` is set on this machine and the loop will not
-invent one (`S-5`). LM Studio, by contrast, has been reached for real.
+**Still unproven:** no real model has answered. LM Studio is running here and
+has been reached, but it holds only an embeddings model — and downloading a chat
+model onto the operator's machine is not the loop's decision. DeepSeek has no
+key. Everything through batch 9 is proven against a real socket and recorded
+responses, which is not the same as proven against a model.
 
 ## Queued `/btw`
 
@@ -76,4 +80,4 @@ invent one (`S-5`). LM Studio, by contrast, has been reached for real.
 | Cycle | Batches | Features | Tests added | Version |
 |---|---|---|---|---|
 | 1 | 5 of 5 delivered | 38 | 128 | 0.1.0 (unreleased) |
-| 2 | 3 of 5 delivered | 17 | 194 | 0.1.0 (unreleased) |
+| 2 | 4 of 5 delivered | 21 | 222 | 0.1.0 (unreleased) |

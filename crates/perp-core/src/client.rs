@@ -181,6 +181,8 @@ pub struct Served {
     pub link: String,
     pub model: String,
     pub quantization: Option<String>,
+    pub role: String,
+    pub latency_ms: i64,
     /// Links tried before this one. Empty when the first choice answered.
     pub fell_through: Vec<Attempt>,
 }
@@ -188,6 +190,43 @@ pub struct Served {
 impl Served {
     pub fn was_substituted(&self) -> bool {
         !self.fell_through.is_empty()
+    }
+
+    /// The accounting for this call (`M-11`).
+    pub fn entry(&self, step: &crate::step::StepId, price: crate::cost::Price) -> crate::cost::Entry {
+        let usage = crate::cost::Usage::from_reply(
+            self.reply.usage.prompt_tokens,
+            self.reply.usage.completion_tokens,
+            self.reply.usage.cache_hit_tokens,
+            self.reply.usage.cache_miss_tokens,
+        );
+        crate::cost::Entry {
+            step: step.to_string(),
+            role: self.role.clone(),
+            link: self.link.clone(),
+            model: self.model.clone(),
+            charge: price.charge(&usage),
+            usage,
+            latency_ms: self.latency_ms,
+        }
+    }
+
+    /// The journal record, carrying both the provenance and the bill.
+    pub fn to_record(
+        &self,
+        step: crate::step::StepId,
+        at: i64,
+        price: crate::cost::Price,
+    ) -> crate::journal::Record {
+        let entry = self.entry(&step, price);
+        let record = crate::journal::Record::outcome(
+            step,
+            at,
+            true,
+            format!("{} — {}", self.role, self.provenance()),
+        )
+        .with_detail(self.provenance());
+        crate::cost::annotate(record, &entry)
     }
 
     /// The provenance line that goes in the journal and the commit trailer.
@@ -223,6 +262,7 @@ pub struct Client<'a> {
     /// every lookup still costs a round trip, and the TTL protects nothing.
     facts: Vec<(String, ModelFacts, i64)>,
     ttl_secs: i64,
+    permits: std::sync::Arc<crate::link::Permits>,
 }
 
 impl<'a> Client<'a> {
@@ -232,6 +272,7 @@ impl<'a> Client<'a> {
             cache: ProbeCache::new(3600),
             facts: Vec::new(),
             ttl_secs: 3600,
+            permits: std::sync::Arc::new(crate::link::Permits::new()),
         }
     }
 
@@ -388,6 +429,17 @@ impl<'a> Client<'a> {
                 }
             };
 
+            // `M-15`: one GPU serving one model does not want four parallel
+            // requests. A link at its limit is skipped rather than queued.
+            let Some(_permit) = self.permits.acquire(link) else {
+                fell_through.push(Attempt {
+                    link: link.name.clone(),
+                    outcome: format!("at its concurrency limit of {}", link.concurrency),
+                });
+                continue;
+            };
+
+            let started = std::time::Instant::now();
             match self.chat(link, request) {
                 Ok(reply) => {
                     return Ok(Served {
@@ -399,6 +451,8 @@ impl<'a> Client<'a> {
                         reply,
                         link: link.name.clone(),
                         quantization: facts.quantization.clone(),
+                        role: role.to_string(),
+                        latency_ms: started.elapsed().as_millis() as i64,
                         fell_through,
                     })
                 }
@@ -698,6 +752,76 @@ mod tests {
         let text = format!("{err}");
         assert!(text.contains("cloud"), "{text}");
         assert!(text.contains("here"), "{text}");
+    }
+
+    #[test]
+    fn a_call_records_what_it_cost_and_who_answered() {
+        // `M-11` end to end: the journal record carries the bill, and the
+        // ledger is rebuilt from it rather than accumulated in memory.
+        let transport = Canned::new(vec![Canned::ok(MODELS), Canned::ok(CHAT)]);
+        let mut client = Client::new(&transport);
+        let links = links();
+        let served = client
+            .call(
+                &links,
+                Role::Compactor,
+                &ChatRequest::new(vec![Message::user("hi")]),
+                &AssumeHealthy,
+                Mode::Any,
+                1000,
+            )
+            .expect("served");
+
+        assert_eq!(served.role, "compactor");
+        assert_eq!(served.quantization.as_deref(), Some("Q4_K_M"), "recorded, per M-10");
+
+        let price = crate::cost::Price { cache_hit: 0.0028, cache_miss: 0.14, output: 0.28 };
+        let step = crate::step::StepId::parse("c2/b9/s01").expect("step");
+        let record = served.to_record(step, 1000, price);
+        let ledger = crate::cost::Ledger::replay(&[record]);
+
+        assert_eq!(ledger.entries.len(), 1);
+        let entry = &ledger.entries[0];
+        assert_eq!(entry.link, "here");
+        assert_eq!(entry.role, "compactor");
+        // The fixture reports no cache split, so all input prices as a miss.
+        assert_eq!(entry.usage.cache_miss_tokens, 12);
+        assert_eq!(entry.usage.output_tokens, 3);
+        assert!(entry.charge > 0.0);
+    }
+
+    #[test]
+    fn a_link_at_its_limit_is_skipped_and_the_skip_is_recorded() {
+        // `M-15` through the call path: not queued, not exceeded, not silent.
+        let transport = Canned::new(vec![Canned::ok(MODELS), Canned::ok(CHAT)]);
+        let mut client = Client::new(&transport);
+        let links = links();
+        let permits = std::sync::Arc::clone(&client.permits);
+        let held = permits.acquire(links.get("here").expect("here")).expect("hold it");
+
+        let err = client
+            .call(
+                &links,
+                Role::Compactor,
+                &ChatRequest::new(vec![Message::user("hi")]),
+                &AssumeHealthy,
+                Mode::Any,
+                1000,
+            )
+            .expect_err("the only link is busy");
+        assert!(format!("{err}").contains("concurrency limit"), "{err}");
+
+        drop(held);
+        client
+            .call(
+                &links,
+                Role::Compactor,
+                &ChatRequest::new(vec![Message::user("hi")]),
+                &AssumeHealthy,
+                Mode::Any,
+                1000,
+            )
+            .expect("and once released, it goes through");
     }
 
     #[test]

@@ -63,6 +63,14 @@ role.classifier = here
 role.summarizer = here
 role.embedder   = here
 
+# Currency units per million tokens, verified 2026-07-28. In configuration
+# because they change — a harness that bakes them in reports yesterday's bill
+# with total confidence. A link with no price is free, which is right for a
+# local one and a visible zero for a cloud one.
+price.ds-fast.cache_hit  = 0.0028
+price.ds-fast.cache_miss = 0.14
+price.ds-fast.output     = 0.28
+
 deprecated.deepseek-chat     = deepseek-v4-flash
 deprecated.deepseek-reasoner = deepseek-v4-pro
 ```

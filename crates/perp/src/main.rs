@@ -16,6 +16,7 @@ use perp_core::gate::{self, Gate};
 use perp_core::git::Repo;
 use perp_core::journal::{Journal, Record};
 use perp_core::client::{ChatRequest, Client, Message};
+use perp_core::cost::Ledger;
 use perp_core::link::{AssumeHealthy, Links, Mode, Role};
 use perp_core::net::Curl;
 use perp_core::session::{Decision, Finding, Probe, Session};
@@ -59,9 +60,14 @@ usage:
       that role resolves to. With --local-only, do it as a run with no cloud —
       and report any role that loses its last option.
 
-  perp ask <prompt> [--role <role>] [--local-only] [--system <text>] [--root <dir>]
+  perp ask <prompt> [--role <role>] [--local-only] [--system <text>]
+           [--step <id>] [--root <dir>]
       Resolve a role to a link and ask it. Prints the reply, the provenance of
       whichever link answered, and any link that was tried first and failed.
+
+  perp cost [--root <dir>]
+      Replay the journal and report what the loop spent, by link and by role.
+      Local links show tokens and time and no money.
 
   perp version
 ";
@@ -97,6 +103,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("check") => cmd_check(&args[1..]),
         Some("links") => cmd_links(&args[1..]),
         Some("ask") => cmd_ask(&args[1..]),
+        Some("cost") => cmd_cost(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -266,6 +273,53 @@ fn cmd_links(args: &[&str]) -> std::result::Result<(), String> {
     Ok(())
 }
 
+/// What the loop spent (`M-11`).
+///
+/// Replayed from the journal, not accumulated: a process that died mid-batch
+/// still recorded every call it made.
+fn cmd_cost(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let ledger = Ledger::replay(&journal.read_all().map_err(|e| e.to_string())?);
+
+    if ledger.is_empty() {
+        println!("no model calls in the journal — nothing has been spent");
+        return Ok(());
+    }
+
+    let total = ledger.total();
+    println!(
+        "{} calls · {} tokens in ({} cached) · {} out · {:.1}s · {:.6}",
+        total.calls,
+        total.usage.input_tokens(),
+        total.usage.cache_hit_tokens,
+        total.usage.output_tokens,
+        total.latency_ms as f64 / 1000.0,
+        // Six places, not four: a single call costs tens of millionths, and a
+        // report that rounds every real amount to 0.0000 is decoration.
+        total.charge
+    );
+
+    println!("
+by link");
+    for (name, sub) in ledger.by_link() {
+        println!(
+            "  {name:<12} {:>5} calls  {:>9} tokens  {:>11.6}{}",
+            sub.calls,
+            sub.usage.total(),
+            sub.charge,
+            if sub.charge == 0.0 { "  (local — time, not money)" } else { "" }
+        );
+    }
+
+    println!("
+by role");
+    for (name, sub) in ledger.by_role() {
+        println!("  {name:<12} {:>5} calls  {:>9} tokens  {:>11.6}", sub.calls, sub.usage.total(), sub.charge);
+    }
+    Ok(())
+}
+
 /// Ask a role's link something (`M-9`, `M-10`).
 ///
 /// Prints where the answer came from, always — including the links that were
@@ -301,6 +355,13 @@ fn cmd_ask(args: &[&str]) -> std::result::Result<(), String> {
         println!("[reasoning, {} chars — kept out of the message]", reasoning.len());
     }
     println!("via: {}", served.provenance());
+    if let Some(step) = flag(args, "--step") {
+        let step = StepId::parse(step).map_err(|e| e.to_string())?;
+        let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+        journal
+            .append(&served.to_record(step, time::now(), links.price(&served.link)))
+            .map_err(|e| e.to_string())?;
+    }
     println!(
         "tokens: {} in ({} cached) / {} out",
         served.reply.usage.prompt_tokens,
