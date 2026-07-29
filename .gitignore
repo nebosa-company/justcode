@@ -56,3 +56,7 @@ Thumbs.db
 /write.lock
 /gate.lock
 crates/target/
+
+# `npm test` builds here rather than in `target`, so a running `tauri dev`
+# cannot turn the test run red by holding the lock on it.
+src-tauri/target-test/

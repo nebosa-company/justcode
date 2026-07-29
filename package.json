@@ -11,7 +11,10 @@
     "build:packed": "tauri build && node scripts/pack.mjs",
     "tauri": "tauri",
     "sync:associations": "node tools/sync-associations.mjs",
-    "check:associations": "node tools/sync-associations.mjs --check"
+    "check:associations": "node tools/sync-associations.mjs --check",
+    "test": "npm run test:js && npm run test:rust",
+    "test:js": "node --test \"tests/**/*.test.js\"",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib --target-dir src-tauri/target-test"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

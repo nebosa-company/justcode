@@ -294,8 +294,12 @@ function renderTabs() {
     tabs.append(button);
   }
 
-  const refreshButton = el("button", "perp-refresh", "Refresh");
+  const refreshButton = el("button", "perp-refresh");
   refreshButton.type = "button";
+  refreshButton.innerHTML = iconMarkup("refresh");
+  refreshButton.append(el("span", "perp-tab-label", "Refresh"));
+  refreshButton.title = "Re-read the journal now";
+  refreshButton.setAttribute("aria-label", refreshButton.title);
   refreshButton.addEventListener("click", () => refresh());
   tabs.append(refreshButton);
   return tabs;

@@ -1,7 +1,10 @@
 // A small inline icon set. Everything is drawn with strokes on a 24x24 grid and
 // inherits `currentColor`, so a single sprite works in both themes and needs no
 // network request (the app runs from file:// inside the webview).
-const PATHS = {
+// Exported so a test can check that every name a source file uses is defined
+// here. `iconMarkup` throws on an unknown one, at menu-render time, which is a
+// bad moment to find out.
+export const PATHS = {
   file: '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M13 2v7h7"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
@@ -66,6 +69,7 @@ const PATHS = {
   // The Harness menu and the panel's own tabs. Two lobes and a stem, drawn as a
   // pair of mirrored curves so it reads at 16px rather than turning to mush.
   brain: '<path d="M12 5.5A3 3 0 0 0 6.5 7a3 3 0 0 0-1.4 5.6A3 3 0 0 0 7 18a2.5 2.5 0 0 0 5 .5z"/><path d="M12 5.5A3 3 0 0 1 17.5 7a3 3 0 0 1 1.4 5.6A3 3 0 0 1 17 18a2.5 2.5 0 0 1-5 .5z"/><path d="M12 5.5v13"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>',
   timeline: '<path d="M5 4v16"/><circle cx="5" cy="8" r="1.6"/><circle cx="5" cy="16" r="1.6"/><path d="M9 8h10"/><path d="M9 16h6"/>',
   chat: '<path d="M20 12a7 7 0 0 1-7 7H9l-4 3v-4.6A7 7 0 0 1 13 5a7 7 0 0 1 7 7z"/>',
   approvals: '<path d="M4 7a2 2 0 0 1 2-2h9l5 5v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m8.5 13 2.5 2.5 4.5-5"/>',
