@@ -140,6 +140,13 @@ impl StepGuard<'_> {
         &self.step
     }
 
+    /// The journal this step is being written to, so a caller holding the
+    /// guard can append alongside the step without a second borrow of the
+    /// session (`M-11`).
+    pub fn journal(&self) -> &Journal {
+        self.journal
+    }
+
     pub fn close(mut self, ok: bool, summary: &str) -> Result<()> {
         self.journal.append(&self.outcome(ok, summary))?;
         self.closed = true;

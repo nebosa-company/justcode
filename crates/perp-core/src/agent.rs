@@ -93,6 +93,11 @@ pub struct Agent<'a> {
     /// Every turn taken, for the journal — a step that took nine round trips
     /// should say so rather than reporting the last one.
     pub turns: Vec<Turn>,
+    /// Cost records waiting to go in the journal (`M-11`).
+    pending: Vec<crate::journal::Record>,
+    /// The step the current item is running under, so its calls are attributed
+    /// to it rather than to nothing.
+    at_step: Option<crate::step::StepId>,
     now: fn() -> i64,
 }
 
@@ -115,6 +120,8 @@ impl<'a> Agent<'a> {
             at: 0,
             spend: crate::budget::Spend::default(),
             turns: Vec::new(),
+            pending: Vec::new(),
+            at_step: None,
             now: crate::time::now,
         }
     }
@@ -210,6 +217,18 @@ impl<'a> Agent<'a> {
 
             self.spend.tokens += served.reply.usage.prompt_tokens
                 + served.reply.usage.completion_tokens;
+
+            // `M-11`: one record per call, on the journal, so the ledger and
+            // the budget survive a restart. The in-memory figure above is for
+            // this run's boundary checks; this is the one that is true
+            // tomorrow.
+            if let Some(step) = self.at_step.clone() {
+                self.pending.push(served.to_record(
+                    step,
+                    (self.now)(),
+                    self.links.price(&served.link),
+                ));
+            }
             self.spend.money += self.links.price(&served.link).charge(&crate::cost::Usage::from_reply(
                 served.reply.usage.prompt_tokens,
                 served.reply.usage.completion_tokens,
@@ -343,6 +362,14 @@ impl Work for Agent<'_> {
 
     fn spend(&self) -> crate::budget::Spend {
         self.spend
+    }
+
+    fn drain_records(&mut self) -> Vec<crate::journal::Record> {
+        std::mem::take(&mut self.pending)
+    }
+
+    fn at_step(&mut self, step: &crate::step::StepId) {
+        self.at_step = Some(step.clone());
     }
 }
 
@@ -645,6 +672,55 @@ replace: after
 
         let task = Work::next(&mut agent).expect("one item");
         assert!(matches!(agent.perform(&task), Done::Ok { .. }));
+    }
+
+    #[test]
+    fn every_model_call_reaches_the_journal() {
+        // `M-11`, found by the first unattended cycle. The run reported
+        // `spent 37941 tokens, $0.001448` and `perp cost` on the same workspace
+        // said "nothing has been spent", because the ledger is replayed from
+        // the journal and the agent's spend lived only in memory.
+        //
+        // The consequence is worse than a wrong report: a restarted cycle began
+        // its budget at zero, and the one thing that restarts on purpose is the
+        // scheduler in `X-9`. A budget that resets on restart is not a budget.
+        let dir = tmpdir("agent-journalled-cost");
+        std::fs::write(dir.join("f.txt"), "x
+").expect("write");
+        let transport = Scripted::new(vec![
+            "```perp-call
+tool: read
+path: f.txt
+```",
+            "Read it.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("M-11", "read it", "read the file").expect("item")],
+        );
+
+        let step = crate::step::StepId::new(1, "b1", 1).expect("step");
+        Work::at_step(&mut agent, &step);
+        let task = Work::next(&mut agent).expect("one item");
+        agent.perform(&task);
+
+        let records = Work::drain_records(&mut agent);
+        assert_eq!(records.len(), 2, "one per call, both turns: {records:?}");
+        for record in &records {
+            assert_eq!(record.step, step, "attributed to the step that made it");
+            let entry = crate::cost::from_record(record).expect("a ledger entry");
+            assert_eq!(entry.link, "here");
+            assert!(entry.usage.total() > 0, "with real token counts");
+        }
+
+        // And the ledger — which is what `perp cost` reads — now sees them.
+        let ledger = crate::cost::Ledger::replay(&records);
+        assert_eq!(ledger.total().calls, 2);
+        assert!(Work::drain_records(&mut agent).is_empty(), "drained, not re-emitted");
     }
 
     #[test]

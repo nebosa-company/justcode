@@ -142,6 +142,17 @@ usage:
       is `perp resume`, never `perp run`: a restart reconciles what the last
       process left in flight before doing anything else.
 
+  perp cycle [--cycle <n>] [--phase <A-G>] [--batches <n>] [--items <n>]
+             [--local-only] [--root <dir>]
+      Run a whole cycle unattended. Reads the backlog off the requirements
+      source, works it against a model, gates every batch, journals everything,
+      and stops for one of exactly three reasons or a budget. Refuses to start
+      with no budget declared, or with a link whose credential is unset.
+
+      It does not mark its own work done. That marker means gates green with a
+      transcript, and a loop that awards it to itself is a loop whose status is
+      worth nothing.
+
   perp cost [--root <dir>]
       Replay the journal and report what the loop spent, by link and by role.
       Local links show tokens and time and no money.
@@ -191,6 +202,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("control") => cmd_control(&args[1..]),
         Some("rewind") => cmd_rewind(&args[1..]),
         Some("panel") => cmd_panel(&args[1..]),
+        Some("cycle") => cmd_cycle(&args[1..]),
         Some("capture") => cmd_capture(&args[1..]),
         Some("schedule") => cmd_schedule(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
@@ -1406,4 +1418,94 @@ fn cmd_schedule(args: &[&str]) -> std::result::Result<(), String> {
         }
     }
     outcome.map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// Run a whole cycle unattended (`L-1`, `L-14`).
+///
+/// The one command that leaves the machine alone with the work. Everything it
+/// can do is bounded before it starts: a budget from the binding, a batch
+/// allowance, a backlog it reads rather than invents, and a permission
+/// classifier it cannot argue with.
+fn cmd_cycle(args: &[&str]) -> std::result::Result<(), String> {
+    let root = root_of(args);
+    let binding = load(args).map_err(|e| e.to_string())?;
+
+    let cycle: u32 = flag(args, "--cycle")
+        .map(|t| t.parse().map_err(|_| format!("--cycle takes a number, not `{t}`")))
+        .transpose()?
+        .unwrap_or(1);
+    let batches: u32 = flag(args, "--batches")
+        .map(|t| t.parse().map_err(|_| format!("--batches takes a number, not `{t}`")))
+        .transpose()?
+        .unwrap_or(5);
+    let per_batch: usize = flag(args, "--items")
+        .map(|t| t.parse().map_err(|_| format!("--items takes a number, not `{t}`")))
+        .transpose()?
+        .unwrap_or(3);
+    let from = flag(args, "--phase")
+        .and_then(|t| t.chars().next())
+        .and_then(Phase::parse)
+        .unwrap_or(Phase::D);
+
+    let links = Links::load(&binding.resolve("path.links").map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+
+    // `M-24`, before anything is spent: a link whose variable is unset fails
+    // here rather than on the eleventh call.
+    let missing = links.missing_credentials();
+    if !missing.is_empty() {
+        for (link, variable) in &missing {
+            eprintln!("link `{link}` needs ${variable}, which is not set");
+        }
+        return Err("cannot run unattended with a link that cannot authenticate (`M-24`)".into());
+    }
+
+    let budgets = Engine::open(&root).map_err(|e| e.to_string())?.budgets();
+    if budgets.cycle.is_unlimited() && budgets.batch.is_unlimited() {
+        return Err(
+            "refusing to run unattended with no budget in any currency. Declare `budget.*` in \
+             the binding — an overnight run with no ceiling is a decision, and it should be \
+             made on purpose (`L-9`)"
+                .into(),
+        );
+    }
+
+    let source = std::fs::read_to_string(
+        binding.resolve("path.requirements").map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let waiting = perp_core::cycle::backlog(&source, usize::MAX).len();
+
+    println!("cycle {cycle}, from phase {from}");
+    println!("  backlog     {waiting} open requirement(s)");
+    println!("  allowance   {batches} batches x {per_batch} items");
+    println!("  budget      cycle {:?} / batch {:?}", budgets.cycle, budgets.batch);
+    println!("  workspace   {}", root.display());
+    println!();
+
+    let transport = Curl::new();
+    let mode = if args.contains(&"--local-only") { Mode::LocalOnly } else { Mode::Any };
+    let driver = perp_core::cycle::Driver {
+        root: root.clone(),
+        links: &links,
+        health: &AssumeHealthy,
+        mode,
+        batches,
+        items_per_batch: per_batch,
+        transport: &transport,
+    };
+
+    let outcome = driver.run(cycle, from).map_err(|e| e.to_string())?;
+    print!("{}", outcome.describe());
+
+    // The loop does not mark its own work done (`V-2`, Perpetum 0.7). It says
+    // what it did; a person reads the evidence and sets the marker.
+    println!();
+    println!("nothing was marked done — the loop writes evidence, a person reads it and marks");
+    println!("read it with: perp explain <requirement>");
+
+    match &outcome.stop {
+        Some(perp_core::phase::Stop::BatchBlocked { why, .. }) => Err(format!("blocked: {why}")),
+        _ => Ok(()),
+    }
 }

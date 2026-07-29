@@ -12,6 +12,7 @@
 //! |---|---|
 //! | [`binding`] | `L-21` |
 //! | [`agent`] | `M-8`, `C-2` — the `Work` that calls a model |
+//! | [`cycle`] | the phase driver — `L-1`, `L-14` |
 //! | [`engine`] | the driver — `L-1`, `L-9`, `L-14`, `L-17`, `L-20` |
 //! | [`phase`] | `L-1`, `L-2`, `L-14` |
 //! | [`budget`] | `L-9`, `L-10` |
@@ -70,6 +71,7 @@ pub mod client;
 pub mod command;
 pub mod control;
 pub mod cost;
+pub mod cycle;
 pub mod engine;
 pub mod error;
 pub mod gate;
@@ -109,6 +111,7 @@ pub use agent::{Agent, Item};
 pub use artifact::{Artifact, Provenance};
 pub use btw::Btw;
 pub use budget::{Budget, Budgets, Spend};
+pub use cycle::{Driver, Outcome};
 pub use engine::{Done, Engine, Gates, Task, Work};
 pub use capture::{Capture, Registration};
 pub use chat::{Streaming, Turn};

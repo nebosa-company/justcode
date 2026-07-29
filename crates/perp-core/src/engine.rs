@@ -100,6 +100,25 @@ pub trait Work {
     fn spend(&self) -> Spend {
         Spend::default()
     }
+
+    /// Records the work produced that are not its step outcome — a model call's
+    /// accounting, most importantly (`M-11`).
+    ///
+    /// Drained after each step and appended by the engine. Without this the
+    /// agent's spend lived only in memory: the run reported a real number and
+    /// `perp cost` reported nothing, because the ledger is replayed from the
+    /// journal. Worse, a restarted cycle began its budget at zero — and a
+    /// budget that resets on restart is not a budget, which matters most for
+    /// the one thing that restarts on purpose (`X-9`).
+    fn drain_records(&mut self) -> Vec<crate::journal::Record> {
+        Vec::new()
+    }
+
+    /// Which step the engine is about to run this task under.
+    ///
+    /// Told rather than guessed: a work that mints its own step ids would be a
+    /// second source of them, and every surface cites the same string (`L-22`).
+    fn at_step(&mut self, _step: &StepId) {}
 }
 
 /// What a run did.
@@ -306,6 +325,7 @@ impl Engine {
             report.last_step = Some(step.clone());
             report.steps += 1;
 
+            work.at_step(&step);
             let guard = self.session.begin_for(
                 step,
                 &task.summary,
@@ -313,6 +333,14 @@ impl Engine {
                 &task.requirements,
             )?;
             let done = work.perform(&task);
+
+            // `M-11`: whatever the work needs on the record goes on it *before*
+            // the step closes, so a crash between the two loses the outcome and
+            // not the accounting. Written through the guard's journal because
+            // the guard holds the borrow.
+            for record in work.drain_records() {
+                guard.journal().append(&record)?;
+            }
 
             match done {
                 Done::Ok { summary, detail } => {
