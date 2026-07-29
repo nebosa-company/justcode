@@ -775,7 +775,9 @@ fn cmd_explain(args: &[&str]) -> std::result::Result<(), String> {
 
     let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
     let records = journal.read_all().map_err(|e| e.to_string())?;
-    let chain = Chain::build(&subject, &records);
+    // : the diff is read from the repository at the pinned commit, not
+    // stored in the journal — git already keeps it, and two copies disagree.
+    let chain = Chain::build(&subject, &records).with_diff(&Repo::at(binding.root()));
     print!("{}", chain.render());
 
     // An empty chain is an answer, not a failure — but it is a non-zero one, so

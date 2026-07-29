@@ -276,14 +276,25 @@ pub struct Host {
     root: PathBuf,
     budget: usize,
     timeout: Duration,
+    /// Which hosts `fetch` may reach (`S-4`). Empty means none — a fetch tool
+    /// with no allowlist reaches nothing, which is the safe direction for the
+    /// one tool that leaves the machine.
+    egress: crate::security::Egress,
 }
 
 impl Host {
+    /// Which hosts `fetch` may reach. Without this it reaches none.
+    pub fn with_egress(mut self, egress: crate::security::Egress) -> Host {
+        self.egress = egress;
+        self
+    }
+
     pub fn new(root: impl Into<PathBuf>) -> Host {
         Host {
             root: root.into(),
             budget: DEFAULT_BUDGET,
             timeout: Duration::from_secs(120),
+            egress: crate::security::Egress::default(),
         }
     }
 
@@ -370,10 +381,25 @@ impl Host {
                 ))
             }
             Tool::Fetch => {
-                return Err(Error::refused(
-                    "fetch",
-                    "reached execute() without an approval, which cannot happen",
-                ))
+                // Reached only through `run_approved`: `classify` puts fetch on
+                // the Approve list, and `run` refuses it before it ever gets
+                // here. An approval is not enough on its own — the egress
+                // allowlist applies too, because approving *a* fetch is not
+                // approving *any* host (`S-4`).
+                let url = call.need("url")?;
+                self.egress.check(url).map_err(|refusal| {
+                    Error::refused(refusal.host, format!("{} (`S-4`)", refusal.why))
+                })?;
+
+                let request = crate::net::Request::get(url)
+                    .with_deadline(Duration::from_secs(5), self.timeout);
+                let transport = crate::net::Curl::new();
+                let response = crate::net::Transport::send(&transport, &request)?;
+                // Status and body both. A 404's body is often the useful part,
+                // and hiding it behind an error loses it.
+                format!("HTTP {}
+
+{}", response.status, response.body)
             }
         };
         Ok(Output::of(call.tool, text, self.budget))
@@ -425,6 +451,41 @@ pub fn patch(path: &Path, expect: &str, replace: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fetch_needs_an_approval_and_then_still_needs_the_allowlist() {
+        // `T-1` with `S-4`. Approving *a* fetch is not approving *any* host, so
+        // both apply: `run` refuses without an approval, and `run_approved`
+        // refuses a host nobody allowed.
+        let dir = tmpdir("tool-fetch");
+        let call = Call::new(Tool::Fetch).arg("url", "https://example.com/x");
+
+        let host = Host::new(&dir);
+        let err = host.run(&call).expect_err("fetch is approval-gated");
+        assert!(format!("{err}").contains("needs approval"), "{err}");
+
+        // Approved, but no allowlist — reaches nothing, which is the safe
+        // direction for the one tool that leaves the machine.
+        let err = host
+            .run_approved(&call, "the operator")
+            .expect_err("an approval is not an allowlist");
+        assert!(format!("{err}").contains("S-4"), "{err}");
+    }
+
+    #[test]
+    fn a_fetch_to_an_allowlisted_host_gets_past_the_classifier() {
+        // The point is that the path exists and the two checks are in the right
+        // order; the call itself then fails on the network, which is the
+        // transport's business rather than the classifier's.
+        let dir = tmpdir("tool-fetch-allowed");
+        let host = Host::new(&dir)
+            .with_egress(crate::security::Egress::new(vec!["127.0.0.1".into()]));
+        // Port 9 is discard: nothing listens, so this fails fast and locally.
+        let call = Call::new(Tool::Fetch).arg("url", "http://127.0.0.1:9/nothing");
+        let outcome = host.run_approved(&call, "the operator");
+        let err = format!("{}", outcome.expect_err("nothing is listening"));
+        assert!(!err.contains("S-4"), "it got past the allowlist: {err}");
+    }
     use crate::testutil::tmpdir;
 
     fn host() -> (Host, PathBuf) {

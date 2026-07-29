@@ -173,7 +173,7 @@ An unattended loop with no ceiling is a billing incident.
 | ✅ ~~`L-17`~~ | One feature in flight at a time by default. Batch-level parallelism is opt-in and requires per-feature git worktrees (`G-11`). |
 | ✅ ~~`L-18`~~ | Gate runs are serialised per workspace. Two builds in one target directory is a false red. |
 | ✅ ~~`L-19`~~ | A parked approval never blocks the loop: the engine moves to the next eligible item and revisits parked items at the next phase boundary (Perpetum E, F.3). |
-| 🟡 `L-20` | Exactly one writer at a time. While the loop holds the write lock, chat is read-only unless paused (`C-3`). |
+| ✅ ~~`L-20`~~ | Exactly one writer at a time. While the loop holds the write lock, chat is read-only unless paused (`C-3`). |
 
 ---
 
@@ -278,7 +278,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 
 | id | Requirement |
 |---|---|
-| 🟡 `T-1` | Core tools: read, glob, grep, patch-edit, write, shell (bounded), git (§5), OS (§6), gate runner, HTTP fetch. Optional: browser, MCP client. |
+| ✅ ~~`T-1`~~ | Core tools: read, glob, grep, patch-edit, write, shell (bounded), git (§5), OS (§6), gate runner, HTTP fetch. Optional: browser, MCP client. |
 | ✅ ~~`T-2`~~ | Edits are patches with pre-image verification. A patch whose context no longer matches fails; nothing is blind-written. |
 | ✅ ~~`T-3`~~ | Every shell call has a timeout, a working directory, and a captured transcript. No unbounded process, ever. |
 | ✅ ~~`T-4`~~ | Background processes are tracked and killed at step end (`X-4`). A dev server left running across steps is a leak the next gate will blame on the wrong feature. |
@@ -398,7 +398,7 @@ decides whether a week of unattended running produced software or a fiction.
 | 🟡 `C-4` | Responses stream and are interruptible mid-generation; the interrupted partial is journalled, not discarded. |
 | ✅ ~~`C-5`~~ | The conversation is journalled in the same stream as the loop, interleaved by time. "Why did it do that in cycle 3" is answerable months later. |
 | ✅ ~~`C-6`~~ | Slash commands are engine-side, never model-interpreted: `/status` `/pause` `/resume` `/step` `/approve` `/reject` `/rewind` `/links` `/cost` `/board` `/gate` `/explain` `/btw`. An unknown slash command is an error, not a prompt. |
-| 🟡 `C-7` | `/explain <id\|sha\|step>` renders the evidence chain for a decision: the requirement, the reality check, the diff, the gate transcripts, the verifier's verdict, and the link that wrote it. |
+| ✅ ~~`C-7`~~ | `/explain <id\|sha\|step>` renders the evidence chain for a decision: the requirement, the reality check, the diff, the gate transcripts, the verifier's verdict, and the link that wrote it. |
 
 ### 8.2 `/btw` — the side channel
 
@@ -423,7 +423,7 @@ other durable output of a cycle deserves the same treatment.
 |---|---|
 | ✅ ~~`A-1`~~ | Artifact kinds: progress board, cycle report, batch plan, release notes draft, gate evidence bundle, architecture or dependency diagram, conflict register. |
 | ✅ ~~`A-2`~~ | Artifacts are generated from the journal, are self-contained (no external fetches, no CDN, assets inlined), and are written under `docs/perpetum/artifacts/` with a stable name per kind, so a re-render replaces rather than accumulates. |
-| 🟡 `A-3` | The progress board is regenerated at step 7 of every feature (Perpetum Appendix 2) — file and rendered view both. |
+| ✅ ~~`A-3`~~ | The progress board is regenerated at step 7 of every feature (Perpetum Appendix 2) — file and rendered view both. |
 | ✅ ~~`A-4`~~ | Rendering locally is `auto`. Publishing an artifact anywhere outside the workspace is `approve` — that is Perpetum 0.4's "posting publicly", regardless of how private the destination claims to be. |
 | ✅ ~~`A-5`~~ | Artifacts render in the JustCode panel and standalone in a browser, with no server and no build step. |
 | ✅ ~~`A-6`~~ | Every artifact carries provenance: cycle, batch, commit sha, generation time, and the links used. An artifact without provenance is decoration. |

@@ -228,6 +228,14 @@ pub struct Chain {
     pub sha: Option<String>,
     /// Which link wrote it, if a call was journalled on the step (`M-10`).
     pub links: Vec<String>,
+    /// The reality check that ran before the work (`V-1`), if one did.
+    pub reality_check: Option<String>,
+    /// The verifier's verdict and whether it was independent (`V-5`).
+    pub verdict: Option<String>,
+    /// The diff, read from the repository at the pinned commit — not stored in
+    /// the journal. A diff in a record would be a second copy of something git
+    /// already keeps, and the two would eventually disagree.
+    pub diff: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -261,6 +269,9 @@ impl Chain {
             transcripts: Vec::new(),
             sha: None,
             links: Vec::new(),
+            reality_check: None,
+            verdict: None,
+            diff: None,
         };
 
         for record in records.iter().filter(|r| matches(r)) {
@@ -284,6 +295,16 @@ impl Chain {
                     }
                 }
             }
+            if let Some(detail) = &record.detail {
+                // `V-1` and `V-5` write their own prefixes, so the chain can
+                // find them without a schema.
+                if detail.starts_with("reality:") && chain.reality_check.is_none() {
+                    chain.reality_check = Some(detail.clone());
+                }
+                if detail.starts_with("verdict:") && chain.verdict.is_none() {
+                    chain.verdict = Some(detail.clone());
+                }
+            }
             if let Some(entry) = crate::cost::from_record(record) {
                 if !chain.links.contains(&entry.link) {
                     chain.links.push(entry.link);
@@ -291,6 +312,18 @@ impl Chain {
             }
         }
         chain
+    }
+
+    /// Read the diff from the repository at the pinned commit (`C-7`).
+    ///
+    /// Read rather than stored. A diff in a journal record would be a second
+    /// copy of something git already keeps, and the two would eventually
+    /// disagree — which is the failure mode this whole design is built against.
+    pub fn with_diff(mut self, repo: &crate::git::Repo) -> Chain {
+        if let Some(sha) = &self.sha {
+            self.diff = repo.plumbing(&["show", "--stat", "--format=%s", sha]).ok();
+        }
+        self
     }
 
     /// Whether there is anything here at all. An empty chain is reported as
@@ -327,6 +360,34 @@ impl Chain {
             };
             out.push_str(&format!("  {mark} {} — {}\n", link.step, link.summary));
         }
+        match &self.reality_check {
+            Some(check) => out.push_str(&format!("
+reality check
+  {}
+", check.trim())),
+            None => out.push_str("
+no reality check recorded (`V-1`)
+"),
+        }
+        match &self.verdict {
+            Some(verdict) => out.push_str(&format!("
+verdict
+  {}
+", verdict.trim())),
+            // Said out loud rather than left as an absence: an unreviewed change
+            // and a change that passed review look identical if the field is
+            // simply missing.
+            None => out.push_str("
+no verifier verdict recorded (`V-5`)
+"),
+        }
+        if let Some(diff) = &self.diff {
+            out.push_str(&format!("
+diff
+{diff}
+"));
+        }
+
         if self.transcripts.is_empty() {
             // Said out loud rather than left as an absence: a claim with no
             // transcript is exactly what `V-2` says not to believe.
@@ -353,6 +414,36 @@ fn sha_from(transcript: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_chain_names_what_is_missing_rather_than_omitting_it() {
+        // `C-7` lists six things. An unreviewed change and one that passed
+        // review look identical if the field is simply absent, so the absence
+        // is printed.
+        let records = vec![Record::outcome(step(1), 200, true, "done").for_requirements(["C-7"])];
+        let rendered = Chain::build(&Subject::Requirement("C-7".into()), &records).render();
+        assert!(rendered.contains("no reality check recorded"), "{rendered}");
+        assert!(rendered.contains("no verifier verdict recorded"), "{rendered}");
+    }
+
+    #[test]
+    fn a_recorded_reality_check_and_verdict_reach_the_chain() {
+        let records = vec![
+            Record::outcome(step(1), 100, true, "checked")
+                .for_requirements(["C-7"])
+                .with_detail("reality: the file exists and the function is not there"),
+            Record::outcome(step(2), 200, true, "reviewed")
+                .for_requirements(["C-7"])
+                .with_detail("verdict: ds-fast reviewed what here wrote — no objection"),
+        ];
+        let chain = Chain::build(&Subject::Requirement("C-7".into()), &records);
+        assert!(chain.reality_check.is_some());
+        assert!(chain.verdict.is_some());
+
+        let rendered = chain.render();
+        assert!(rendered.contains("ds-fast reviewed what here wrote"), "{rendered}");
+        assert!(!rendered.contains("no verifier verdict"), "{rendered}");
+    }
 
     fn step(n: u32) -> StepId {
         StepId::new(3, "b13", n).expect("step")

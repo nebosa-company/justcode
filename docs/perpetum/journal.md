@@ -2817,3 +2817,105 @@ they were built:
 
 **Batch 19 status:** 13 delivered, 0 carried, 0 blocked. 448 tests.
 **137 requirements done, 12 in progress, 1 external-gated.**
+
+
+---
+
+## Phase D — Batch 20, closing the carried
+
+Branch `perp/c4/b20`. Four carried requirements finished, each by building the
+half that was missing rather than by re-reading the marker more generously.
+
+### c4/b20/s01 — `L-20` was already done
+
+Batch 12 marked it in progress because `chat_mode` was a function with no chat
+to apply it to. Batch 13 built the chat and wired it: `perp chat` reads the lock
+file, refuses a writing command while the loop holds the workspace, and says
+which command and why. Verified first, then marked — not the other way round.
+
+### c4/b20/s02 — `T-1`: fetch, and two gates rather than one
+
+Fetch had no execution path at all, deliberately: an HTTP client that exists
+before its approval flow does is a client someone will call.
+
+Now it has one, reached **only** through `run_approved` — and an approval is not
+enough on its own. The egress allowlist applies too, because **approving *a*
+fetch is not approving *any* host** (`S-4`). A `Host` with no allowlist reaches
+nothing, which is the safe direction for the one tool that leaves the machine.
+
+Both gates are tested: unapproved is refused by the classifier,
+approved-but-not-allowlisted is refused by egress, and allowlisted gets past both
+and then fails on the network — which is the transport's business rather than the
+classifier's.
+
+The body comes back with its status even on a 4xx. A 404's body is often the
+useful part, and hiding it behind an error loses it.
+
+### c4/b20/s03 — `A-3`: the engine writes the board
+
+Rendering on demand means *"when someone remembers"*, and the board is the
+surface a person checks precisely when they were **not** watching. So the engine
+rewrites it after every closed step.
+
+`A-7` still holds: a board that will not render is a warning on the report and
+the step still closes green. The test makes the artifacts directory a *file*, so
+the write genuinely cannot succeed, and checks the run reports one step, zero
+failures, and one warning.
+
+### c4/b20/s04 — `C-7`: three of six was not done
+
+The requirement lists six things `/explain` renders: the requirement, the reality
+check, the diff, the gate transcripts, the verifier's verdict, and the link that
+wrote it. Batch 13 shipped three and carried it.
+
+All six now, with two decisions:
+
+- **The diff is read from git, not stored in the journal.** A diff in a record
+  would be a second copy of something git already keeps, and the two would
+  eventually disagree — which is the failure this entire design is built
+  against.
+- **A missing reality check or verdict is printed as missing.** An unreviewed
+  change and one that passed review look identical if the field is simply
+  absent.
+
+### c4/b20/s05 — Gates and red run
+
+- **gates:** green. 434 unit + 5 spine + 15 end-to-end = **454 tests**.
+- **red run: 5 mutations, 5 red**, after two corrections:
+
+  ```
+  tool.rs     an approved fetch skips the allowlist   fetch_needs_an_approval_and_then  101 red
+  engine.rs   the board is not written by the engine  the_board_is_rewritten_by_engine  101 red
+  engine.rs   a board write failure is swallowed      a_board_that_will_not_render      101 red
+  command.rs  a missing verdict is silently omitted   the_chain_names_what_is_missing   101 red
+  command.rs  the verdict is not collected            a_recorded_reality_check_reaches  101 red
+  ```
+
+**Both corrections were mis-aimed mutations, not weak tests.** The board one
+edited the *render*-error arm while the fixture makes the *write* fail, so the
+mutation sat in a branch that test never reaches. The verdict one failed to
+apply at all: the source has a real newline inside the string literal rather than
+an escape, so the pattern did not match.
+
+Neither is a defect in the code, and both are worth writing down, because a
+mutation that lands in an unreachable branch and one that never lands produce
+exactly the same reassuring green.
+
+### c4/b20/s06 — What is still carried, and why
+
+Eight, and they cluster:
+
+- **`M-21`, `M-23`, `C-4`** — the `/v1/responses` protocol and streaming. All
+  three need a transport that does server-sent events, and `curl` invoked
+  per-request does not. This is one piece of work wearing three requirement
+  numbers.
+- **`M-8`** — the ladder is complete and proven at every rung; nothing drives it
+  against a live model, because the loop's only `Work` is `Gates`.
+- **`C-2`** — the rule refuses anything without a requirement id, and nothing
+  yet builds work that came out of a conversation.
+- **`X-6`, `X-9`** — screenshot capture waits for `V-6` to consume it; scheduler
+  registration is three unrelated OS interfaces of which one matters.
+- **`I-3`** — the panel's diff view, and therefore approving from the panel.
+
+**Batch 20 status:** 4 delivered, 0 blocked. 454 tests.
+**141 requirements done, 8 in progress, 1 external-gated.**
