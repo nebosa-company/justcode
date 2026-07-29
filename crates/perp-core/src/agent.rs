@@ -45,9 +45,17 @@ pub const MAX_TURNS: u32 = 40;
 /// for being careful.
 ///
 /// `L-11` already had the right rule — *N consecutive steps with no workspace
-/// change*. A turn that writes, patches or runs a command is progress. A turn
-/// that only reads is not, and four of those in a row is a model going in
-/// circles rather than one being thorough.
+/// change*. Counting only writes was the first reading of it, and a later run
+/// showed it was still too blunt: a model finished `T-12`, said "let me verify
+/// the final state of both files", read four precise ranges to check its own
+/// work, and was killed one turn before it could report. The work was done and
+/// the step was recorded as a failure.
+///
+/// So a turn is quiet only when it learned nothing *and* changed nothing —
+/// which is `L-12`'s repetition rule, and the reason [`Call::signature`] exists.
+/// Reading a range not read before is information. Reading the same bytes for
+/// the fourth time is going in circles. The forty-turn ceiling is what stops a
+/// model that keeps finding new things to read forever.
 pub const MAX_QUIET_TURNS: u32 = 4;
 
 /// Whether a call changes the workspace, and so counts as progress (`L-11`).
@@ -202,6 +210,8 @@ impl<'a> Agent<'a> {
         let mut transcript = String::new();
         let mut turns = 0;
         let mut quiet = 0;
+        // Every call signature this step has already made (`L-12`).
+        let mut asked: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         loop {
             turns += 1;
@@ -312,7 +322,11 @@ impl<'a> Agent<'a> {
                 }
                 Next::Calls(calls) => {
                     // A turn that wrote, patched or ran something is progress.
-                    if calls.iter().any(is_progress) {
+                    // New information counts the same as a change: a call whose
+                    // signature has not been made before in this step told the
+                    // model something it did not have (`L-11`, `L-12`).
+                    let learned = calls.iter().any(|call| asked.insert(call.signature()));
+                    if learned || calls.iter().any(is_progress) {
                         quiet = 0;
                     } else {
                         quiet += 1;
@@ -875,6 +889,80 @@ content: b
     }
 
     #[test]
+    fn verifying_finished_work_by_reading_new_ranges_is_not_spinning() {
+        // Taken from a real step. The model finished `T-12`, said "let me verify
+        // the final state of both files is correct", and read four precise
+        // ranges to check its own work. Counting only writes as progress, that
+        // was four quiet turns and the step was recorded as a failure with the
+        // function implemented, the test written and the import updated.
+        let dir = tmpdir("agent-verify");
+        std::fs::write(dir.join("f.txt"), "a
+").expect("write");
+
+        let script = vec![
+            "```perp-call
+tool: write
+path: f.txt
+content: done
+```",
+            // Six reads in a row, each a range it has not asked for before.
+            "```perp-call
+tool: read
+path: f.txt
+from: 1
+to: 10
+```",
+            "```perp-call
+tool: read
+path: f.txt
+from: 11
+to: 20
+```",
+            "```perp-call
+tool: read
+path: f.txt
+from: 21
+to: 30
+```",
+            "```perp-call
+tool: read
+path: f.txt
+from: 31
+to: 40
+```",
+            "```perp-call
+tool: read
+path: f.txt
+from: 41
+to: 50
+```",
+            "```perp-call
+tool: read
+path: f.txt
+from: 51
+to: 60
+```",
+            "Verified. Done.",
+        ];
+
+        let transport = Scripted::new(script);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("T-12", "do it", "then check it").expect("item")],
+        );
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+        assert!(
+            matches!(done, Done::Ok { .. }),
+            "it reached its own conclusion rather than being cut off: {done:?}"
+        );
+    }
+
+    #[test]
     fn a_step_that_argues_with_itself_fails_rather_than_looping() {
         // Not a budget — `L-9` owns those. A step that has asked a model twelve
         // times is not making progress.
@@ -906,7 +994,10 @@ content: b
         // the mutation, so raising the ceiling to the turn cap stayed green in a
         // red run: the spinner would have burned forty turns and the test would
         // still have agreed with it.
-        assert_eq!(agent.turns.len(), 4, "it stopped after four quiet turns, not forty");
+        //
+        // Five, not four: the first read is a signature never made before, so it
+        // is information and resets the count. The four after it are repeats.
+        assert_eq!(agent.turns.len(), 5, "one informative turn, then four that were not");
     }
 
     #[test]
