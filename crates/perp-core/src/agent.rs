@@ -902,8 +902,11 @@ content: b
         let done = agent.perform(&task);
         let Done::Failed { summary, .. } = &done else { panic!("{done:?}") };
         assert!(summary.contains("changed nothing"), "the no-progress rule fired: {summary}");
-        assert_eq!(u32::try_from(agent.turns.len()).unwrap_or(0), MAX_QUIET_TURNS,
-            "and it stopped after four quiet turns rather than forty");
+        // The literal, not the constant. Asserting `== MAX_QUIET_TURNS` moves with
+        // the mutation, so raising the ceiling to the turn cap stayed green in a
+        // red run: the spinner would have burned forty turns and the test would
+        // still have agreed with it.
+        assert_eq!(agent.turns.len(), 4, "it stopped after four quiet turns, not forty");
     }
 
     #[test]
