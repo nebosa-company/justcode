@@ -356,10 +356,10 @@ The loop runs on a real machine, and half of "exercise the real artefact"
 | ✅ ~~`X-3`~~ | Toolchain discovery at cycle start: locate and record versions of the interpreters, compilers, package managers and `git` the binding names. "Works on my machine" becomes a journal entry instead of a mystery. |
 | ✅ ~~`X-4`~~ | Children are spawned into a job object (Windows) or process group (POSIX) so a step's whole process tree dies with the step, including on kill -9 of the engine (`N-1`). |
 | ✅ ~~`X-5`~~ | Notifications go to the OS notifier as one implementation of the sink in `O-6`: approval needed, batch blocked, budget hit, cycle complete. |
-| 🟡 `X-6` | Screenshot and window capture are available as evidence for `V-6`, stored beside the journal and referenced from the artifact (`A-6`). |
+| ✅ ~~`X-6`~~ | Screenshot and window capture are available as evidence for `V-6`, stored beside the journal and referenced from the artifact (`A-6`). |
 | ✅ ~~`X-7`~~ | Opening a workspace file or a localhost URL in the default app is `auto`. Any other URL or path is `approve`. |
 | ✅ ~~`X-8`~~ | Clipboard read is `approve` — it is user data the loop did not create. Clipboard write is `auto`. |
-| 🟡 `X-9` | The harness can register itself with the OS scheduler (Task Scheduler, systemd, launchd) so a cycle resumes after a reboot. Registration is `approve`; resumption then reconciles per `L-7`. |
+| ✅ ~~`X-9`~~ | The harness can register itself with the OS scheduler (Task Scheduler, systemd, launchd) so a cycle resumes after a reboot. Registration is `approve`; resumption then reconciles per `L-7`. |
 | ✅ ~~`X-10`~~ | Sleep and resume are survivable: a loop that wakes to a stale peer, an expired token or a moved clock reconciles rather than continuing on stale assumptions. |
 | ✅ ~~`X-11`~~ | GUI automation — driving the mouse and keyboard of other applications — is out of scope. If ever added, it is `never` while unattended. |
 | ✅ ~~`X-12`~~ | Gates run with a declared environment, not the ambient shell's. The unattended run and the operator's terminal must not disagree about `PATH`. |

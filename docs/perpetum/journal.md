@@ -3273,3 +3273,91 @@ same reassuring green, and neither is visible from a coverage number.
 
 **Batch 23 status:** 2 delivered, 0 carried. 495 tests.
 **148 requirements done, 3 in progress, 1 external-gated.**
+
+
+---
+
+## Phase D — Batch 24, evidence and surviving a reboot
+
+Branch `perp/c4/b24`. `X-6` and `X-9`.
+
+### c4/b24/s01 — `X-6`: a screenshot with no claim is a picture
+
+Captures live **beside** the journal, not in it: a PNG in a JSONL record is a
+megabyte of base64 in a file meant to be read with `tail`. The record holds the
+path, the size and the **content hash**.
+
+The hash is the point. Evidence that cannot be checked is decoration — a
+verifier reading this in six months needs to know the file was not replaced, and
+`is_intact()` answers that. A missing file is not intact either.
+
+The claim is **required**. `perp capture` refuses without one, because a
+screenshot with nothing attached says only that a screen existed.
+
+```
+$ perp capture "the harness at batch 24"
+D:/repos/justcode/docs/perpetum/evidence/c4-evidence-s68.png · 3460640 bytes
+evidence of: the harness at batch 24
+```
+
+That is a real 3.4 MB screenshot, taken through PowerShell's own .NET types — no
+extra tool, no dependency, present on every Windows install.
+
+### c4/b24/s02 — Two path defects, both found by running it
+
+The first capture wrote nothing and reported a missing file, twice, for two
+different reasons.
+
+**One: a relative path resolved against the wrong directory.** The capture tool
+runs with its own working directory, and `.\docs/perpetum\evidence\x.png`
+meant something else there. Absolute now.
+
+**Two — the interesting one: `canonicalize` adds `\\?\` on Windows**, the
+extended-length prefix. `normalise` then turned it into `//?/D:/…`, which no API
+recognises, and PowerShell silently wrote nothing. The prefix is stripped now,
+with a test, and the read-back goes through *the same* normalisation the command
+was given, so a mismatch between the two is impossible rather than merely
+unlikely.
+
+Both are exactly the class `N-4` exists for — *path handling tested on Windows,
+not assumed* — and both were invisible until something actually ran.
+
+### c4/b24/s03 — `X-9`: the approval names the command
+
+Registration is approval-gated, and the ask carries **the exact command**:
+
+```
+$ perp schedule --root .
+would register `PerpetumHarness` to run at boot
+  schtasks /Create /F /TN PerpetumHarness /SC ONSTART /TR "…perp.exe resume --root ."
+undo with:
+  schtasks /Delete /F /TN PerpetumHarness
+perp: not done — registering outlives this cycle and this session, and needs
+      `--approve <your name>` (`X-9`)
+```
+
+An approval for *"register with the scheduler"* is not one anybody can evaluate.
+An approval for a command they can read is.
+
+Three decisions:
+
+- **The scheduled command is `resume`, never `run`.** `L-7` says a process that
+  restarts reconciles what the last one left in flight *before* doing anything
+  else. Booting straight into new work is how a half-applied step gets built on
+  top of.
+- **One fixed task name**, so a second registration replaces the first. The
+  failure otherwise is a machine running four copies of the loop after four
+  experiments.
+- **Every registration says how to undo it**, in the same breath as asking. A
+  harness that installs itself and does not mention removal is the thing this
+  project should never become.
+
+### c4/b24/s04 — Gates and red run
+
+- **gates:** green. 487 unit + 5 spine + 15 end-to-end = **507 tests**.
+- **red run: 8 mutations, 8 red**, after three corrections — two mis-aimed
+  patterns and one mutation that added an unused constant instead of changing
+  the name it was supposed to change.
+
+**Batch 24 status:** 2 delivered, 0 carried. 507 tests.
+**150 requirements done, 1 in progress, 1 external-gated.**

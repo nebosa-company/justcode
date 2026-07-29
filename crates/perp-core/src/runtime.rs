@@ -162,7 +162,15 @@ pub fn normalise(path: &Path) -> String {
     // Forward slashes everywhere. Windows accepts them in every API the harness
     // uses, and a journal that mixes separators is one where the same file
     // appears twice in a diff of two runs.
-    path.display().to_string().replace('\\', "/")
+    //
+    // The `\\?\` prefix comes off first. `canonicalize` adds it on Windows, and
+    // it is an extended-length marker that many tools do not understand — the
+    // screen-capture command took `//?/D:/…` and wrote nothing, which is how
+    // this was found. It is only needed past 260 characters, and a path that
+    // long is its own problem.
+    let text = path.display().to_string();
+    let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+    text.replace('\\', "/")
 }
 
 /// Strip a trailing carriage return (`N-4`).
@@ -246,6 +254,21 @@ mod tests {
         // appears twice in a diff of two runs.
         assert_eq!(normalise(Path::new("crates\\perp-core\\src")), "crates/perp-core/src");
         assert_eq!(normalise(Path::new("crates/perp-core/src")), "crates/perp-core/src");
+    }
+
+    #[test]
+    fn a_windows_extended_length_path_loses_its_prefix() {
+        // `canonicalize` adds the extended-length prefix on Windows, and many
+        // tools do not understand it. Found by the screen-capture command,
+        // which was handed `//?/D:/…` and wrote nothing at all — the prefix
+        // survived, and the slash conversion then turned it into something no
+        // API recognises.
+        assert_eq!(
+            normalise(Path::new(r"\\?\D:\repos\justcode\shot.png")),
+            "D:/repos/justcode/shot.png"
+        );
+        // And an ordinary path is untouched by the stripping.
+        assert_eq!(normalise(Path::new(r"D:\repos\x")), "D:/repos/x");
     }
 
     #[test]

@@ -24,6 +24,7 @@
 //! | [`metrics`] | `O-5`, `O-7` |
 //! | [`security`] | `S-1`, `S-3`–`S-6`, `N-6` |
 //! | [`os`] | `X-1`–`X-3`, `X-5`–`X-11` |
+//! | [`capture`] | `X-6`, `X-9` |
 //! | [`job`] | `X-4` — the only module allowed `unsafe` |
 //! | [`control`] | `O-3`, `O-4`, `O-6` |
 //! | [`panel`] | `I-1`–`I-5` |
@@ -63,6 +64,7 @@ pub mod atomic;
 pub mod binding;
 pub mod btw;
 pub mod budget;
+pub mod capture;
 pub mod chat;
 pub mod client;
 pub mod command;
@@ -108,6 +110,7 @@ pub use artifact::{Artifact, Provenance};
 pub use btw::Btw;
 pub use budget::{Budget, Budgets, Spend};
 pub use engine::{Done, Engine, Gates, Task, Work};
+pub use capture::{Capture, Registration};
 pub use chat::{Streaming, Turn};
 pub use command::{Chain, Command, Input};
 pub use control::{Channel, Control, Rewind};

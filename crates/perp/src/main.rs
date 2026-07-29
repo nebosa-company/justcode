@@ -131,6 +131,17 @@ usage:
       chat, pending /btw and artifacts. Rendered from the journal every time —
       the panel is a view, not a second source of truth.
 
+  perp capture <what it shows> [--root <dir>]
+      Take a screenshot as evidence, stored beside the journal and recorded
+      with its hash. The claim is required: a screenshot with no claim attached
+      is a picture, not evidence.
+
+  perp schedule [--every <minutes>] [--approve <your name>] [--root <dir>]
+      Show the exact command that would register the harness with this
+      platform's scheduler, and — with an approval — run it. The scheduled run
+      is `perp resume`, never `perp run`: a restart reconciles what the last
+      process left in flight before doing anything else.
+
   perp cost [--root <dir>]
       Replay the journal and report what the loop spent, by link and by role.
       Local links show tokens and time and no money.
@@ -180,6 +191,8 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("control") => cmd_control(&args[1..]),
         Some("rewind") => cmd_rewind(&args[1..]),
         Some("panel") => cmd_panel(&args[1..]),
+        Some("capture") => cmd_capture(&args[1..]),
+        Some("schedule") => cmd_schedule(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -1311,4 +1324,83 @@ fn cmd_panel(args: &[&str]) -> std::result::Result<(), String> {
     let view = View::of(&records, &Approvals::new(), artifacts, time::now());
     println!("{}", view.to_json());
     Ok(())
+}
+
+/// Screen evidence (`X-6`) and scheduler registration (`X-9`).
+fn cmd_capture(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal_path = binding.resolve("out.journal").map_err(|e| e.to_string())?;
+    let journal = Journal::at(&journal_path);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+
+    let claim = positionals(args)
+        .first()
+        .copied()
+        .ok_or_else(|| "expected what this is evidence of — a screenshot with no claim \
+                        attached is a picture, not evidence (`A-6`)".to_string())?;
+
+    let step = next_step_for(&records, "evidence");
+    let shot = perp_core::capture::capture(&journal_path, &step, claim)
+        .map_err(|e| e.to_string())?;
+    journal
+        .append(&shot.record(step, time::now()))
+        .map_err(|e| e.to_string())?;
+
+    println!("{} · {} bytes", shot.path.display(), shot.bytes);
+    println!("evidence of: {claim}");
+    Ok(())
+}
+
+/// Register with the OS scheduler so a cycle survives a reboot (`X-9`).
+///
+/// Prints the exact command and refuses without `--approve`: an approval for
+/// "register with the scheduler" is not one anybody can evaluate.
+fn cmd_schedule(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let when = match flag(args, "--every") {
+        Some(text) => perp_core::capture::When::Every {
+            minutes: text.parse().map_err(|_| format!("--every takes minutes, not `{text}`"))?,
+        },
+        None => perp_core::capture::When::AtBoot,
+    };
+
+    let program = std::env::current_exe().map_err(|e| e.to_string())?;
+    let plan = perp_core::capture::Registration::plan(&program, binding.root(), when);
+
+    println!("would register `{}` to run {}", plan.name, plan.when);
+    println!("  {}", plan.command);
+    println!("undo with:");
+    println!("  {}", plan.removal);
+
+    let Some(who) = flag(args, "--approve") else {
+        return Err(
+            "not done — registering outlives this cycle and this session, and needs \
+             `--approve <your name>` (`X-9`)"
+                .into(),
+        );
+    };
+
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+    let step = next_step_for(&records, "schedule");
+    let outcome = plan.install(who);
+    match &outcome {
+        Ok(message) => {
+            journal
+                .append(&plan.record(step, time::now(), who))
+                .map_err(|e| e.to_string())?;
+            println!("{message}");
+        }
+        Err(e) => {
+            journal
+                .append(&Record::outcome(
+                    step,
+                    time::now(),
+                    false,
+                    format!("scheduler registration failed: {e}"),
+                ))
+                .map_err(|err| err.to_string())?;
+        }
+    }
+    outcome.map(|_| ()).map_err(|e| e.to_string())
 }
