@@ -32,12 +32,19 @@ pub struct Gate {
     pub command: String,
     pub cwd: PathBuf,
     pub timeout: Duration,
+    /// Where the command executes (`T-9`). The command itself is the binding's
+    /// and is never rewritten — a binding holding `wsl -d Ubuntu -- cargo test`
+    /// works on exactly one machine and stops describing what green means.
+    pub runtime: crate::runtime::Runtime,
 }
 
 impl Gate {
     /// Read the gates the binding declares — `gate.lint`, `gate.build`,
     /// `gate.test` — resolving `gate.cwd` and `gate.timeout` if present.
     pub fn from_binding(binding: &Binding) -> Result<Vec<Gate>> {
+        let entries: Vec<(String, String)> =
+            binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let runtime = crate::runtime::Runtime::from_entries(&entries)?;
         let cwd = match binding.get("gate.cwd") {
             Ok(rel) => binding.root().join(rel),
             Err(_) => binding.root().to_path_buf(),
@@ -61,6 +68,7 @@ impl Gate {
                     command: value.to_string(),
                     cwd: cwd.clone(),
                     timeout,
+                    runtime: runtime.clone(),
                 })
             })
             .collect();
@@ -101,8 +109,22 @@ impl Gate {
             return Err(Error::unbound("gate", complaint));
         }
         let spec = Spec::new(&self.command, &self.cwd, self.timeout).with_env(Env::declared());
+        // `T-9`: the command is the binding's; the runtime only decides where
+        // it executes. `Runtime::Host` returns it untouched.
+        let spec = self.runtime.wrap(&spec)?;
         let run = process::run(&spec)?;
-        Ok(GateResult { name: self.name.clone(), run, sha: None })
+        Ok(GateResult {
+            name: self.name.clone(),
+            run,
+            sha: None,
+            runtime: self.runtime.to_string(),
+        })
+    }
+
+    /// Run this gate somewhere other than the host (`T-9`).
+    pub fn in_runtime(mut self, runtime: crate::runtime::Runtime) -> Gate {
+        self.runtime = runtime;
+        self
     }
 }
 
@@ -138,6 +160,9 @@ pub fn self_lock_complaint(cwd: &Path) -> Option<String> {
 pub struct GateResult {
     pub name: String,
     pub run: Run,
+    /// Where it ran (`T-9`). On the transcript so nobody compares a container
+    /// green with a host red and averages them.
+    pub runtime: String,
     /// The commit the gate ran against. A green gate at a sha that no longer
     /// exists is not evidence (`G-6`); filling this in is batch 4's job.
     pub sha: Option<String>,
@@ -274,6 +299,7 @@ mod tests {
 
     fn red(stderr: &str) -> GateResult {
         GateResult {
+            runtime: "host".to_string(),
             name: "build".into(),
             run: fake_run("cargo build", Exit::Code(101), stderr),
             sha: None,
@@ -282,6 +308,7 @@ mod tests {
 
     fn green() -> GateResult {
         GateResult {
+            runtime: "host".to_string(),
             name: "build".into(),
             run: fake_run("cargo build", Exit::Code(0), ""),
             sha: None,
@@ -387,9 +414,51 @@ mod tests {
     }
 
     #[test]
+    fn the_gate_runs_where_the_runtime_says_and_records_it() {
+        // `T-9`, found missing by the red run: nothing checked that `Gate::run`
+        // actually applies the runtime, so removing the call left every test
+        // green.
+        //
+        // A container engine that is not installed is the cheap proof: the
+        // command has to reach it to fail on it.
+        let dir = tmpdir("gate-runtime");
+        let gate = Gate {
+            name: "test".into(),
+            command: "cargo test".into(),
+            cwd: dir.clone(),
+            timeout: Duration::from_secs(30),
+            runtime: crate::runtime::Runtime::Container {
+                image: "rust:1".into(),
+                engine: "perp-not-a-real-container-engine".into(),
+            },
+        };
+
+        match gate.run() {
+            Ok(result) => {
+                assert!(!result.is_green(), "there is no such engine");
+                assert_eq!(result.runtime, "perp-not-a-real-container-engine:rust:1");
+                assert!(
+                    result.evidence().contains("perp-not-a-real-container-engine"),
+                    "the wrapped command is on the transcript: {}",
+                    result.evidence()
+                );
+            }
+            // Spawning a program that does not exist fails before it runs on
+            // some platforms. Either way the runtime was applied — an
+            // unwrapped `cargo test` would not mention the engine at all.
+            Err(e) => assert!(
+                format!("{e}").contains("perp-not-a-real-container-engine")
+                    || format!("{e}").to_lowercase().contains("not found"),
+                "{e}"
+            ),
+        }
+    }
+
+    #[test]
     fn a_missing_working_directory_is_an_error_not_a_red_gate() {
         let root = tmpdir("gate-nocwd");
         let gate = Gate {
+            runtime: crate::runtime::Runtime::Host,
             name: "test".into(),
             command: "cargo test".into(),
             cwd: root.join("does-not-exist"),
@@ -405,8 +474,8 @@ mod tests {
         let fail = if cfg!(windows) { "cmd /C \"exit 1\"" } else { "sh -c \"exit 1\"" };
         let pass = if cfg!(windows) { "cmd /C \"exit 0\"" } else { "sh -c \"exit 0\"" };
         let gates = vec![
-            Gate { name: "lint".into(), command: fail.into(), cwd: dir.clone(), timeout: Duration::from_secs(30) },
-            Gate { name: "build".into(), command: pass.into(), cwd: dir.clone(), timeout: Duration::from_secs(30) },
+            Gate { runtime: crate::runtime::Runtime::Host, name: "lint".into(), command: fail.into(), cwd: dir.clone(), timeout: Duration::from_secs(30) },
+            Gate { runtime: crate::runtime::Runtime::Host, name: "build".into(), command: pass.into(), cwd: dir.clone(), timeout: Duration::from_secs(30) },
         ];
         let results = run_all(&gates).expect("run");
         assert_eq!(results.len(), 1, "the build must not run after lint went red");
@@ -426,6 +495,7 @@ mod tests {
         assert!(complaint.contains("Copy `perp` somewhere outside"), "the fix is in the message");
 
         let gate = Gate {
+            runtime: crate::runtime::Runtime::Host,
             name: "build".into(),
             command: "cargo build".into(),
             cwd: workspace,

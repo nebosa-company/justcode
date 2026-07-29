@@ -2919,3 +2919,117 @@ Eight, and they cluster:
 
 **Batch 20 status:** 4 delivered, 0 blocked. 454 tests.
 **141 requirements done, 8 in progress, 1 external-gated.**
+
+
+---
+
+## Phase D — Batch 21, the last two open requirements
+
+Branch `perp/c4/b21`. `T-9` and `N-4` — the only two requirements in the whole
+document that had never been started.
+
+### c4/b21/s01 — `T-9`: the binding says what, the runtime says where
+
+That split is the requirement, and it is worth stating why it matters.
+
+A binding holding `gate.test = wsl -d Ubuntu -- cargo test` works on exactly one
+machine. Worse, it stops being *a description of what green means* and becomes a
+description of one developer's setup — so the same repository checked on the
+host and in a container can no longer be compared, because the two are running
+different commands.
+
+So the command is **never rewritten**. `Runtime::wrap` changes only its
+surroundings:
+
+```
+host        cargo test --workspace
+wsl2        wsl -d Ubuntu --cd /mnt/d/repos/justcode/crates -- cargo test --workspace
+container   docker run --rm --network none -v "…":/w -w /w rust:1 cargo test --workspace
+```
+
+Three decisions inside that:
+
+- **`--cd` rather than `cd … &&`.** The shell inside would re-parse the path,
+  and a workspace under `C:\Program Files` would become two arguments.
+- **`--rm`**, because a container per gate that is never removed is a disk that
+  fills up over a weekend.
+- **`--network none`** by default, which is `N-6`: a flaky connection must not
+  manufacture a red.
+
+The runtime is on the `GateResult`, so a transcript says where it ran. A gate
+green in a container and red on the host has told you something, and a report
+that does not distinguish them would average it away.
+
+### c4/b21/s02 — `N-4` is a test file, not a paragraph
+
+*Path handling, line endings and shell quoting are tested on Windows, not
+assumed.*
+
+Windows being the primary platform is exactly why its assumptions are the least
+examined — everyone carries a mental model of POSIX and nobody carries one of
+`cmd`'s re-parsing rules. So:
+
+- `D:\repos\justcode` → `/mnt/d/repos/justcode`, and a **UNC path is refused**
+  rather than mangled into something that silently resolves to nothing inside
+  the distribution.
+- Paths are written with forward slashes everywhere. A journal that mixes
+  separators is one where the same file appears twice in a diff of two runs.
+- A trailing `\r` is stripped before any comparison. Git on Windows checks out
+  CRLF by default, so a file the harness reads and a string it compares against
+  differ by one invisible byte — and the assertion that fails then says the two
+  are different **without showing anything different**, which is among the worst
+  failure messages a test can produce.
+- `C:\Program Files` is in the container-mount test, because it is the case
+  every quoting bug is about and on Windows it is not hypothetical.
+
+### c4/b21/s03 — The red run found a hole again
+
+**8 mutations, 8 red** — after one that came back `DID NOT RUN` because the test
+it named did not exist.
+
+That was the finding: nothing checked that `Gate::run` **applies** the runtime.
+Seven tests covered `Runtime::wrap` in isolation, and deleting the one line that
+calls it left every one of them green. The wiring had no test at all.
+
+Written now, and cheaply: a container engine that is not installed. The command
+has to reach it to fail on it, so an unwrapped `cargo test` could not produce
+that error. Red.
+
+```
+runtime.rs  the runtime rewrites the binding's command  the_binding_says_what      101 red
+runtime.rs  a container gate gets the network           a_container_gate_gets_none 101 red
+runtime.rs  a unc path is mangled instead of refused    a_windows_path_becomes     101 red
+runtime.rs  path separators are left mixed              a_path_is_written_one_way  101 red
+runtime.rs  a carriage return survives                  a_carriage_return_does_not 101 red
+runtime.rs  a mount path with a space is unquoted       a_path_with_a_space        101 red
+runtime.rs  an unknown runtime falls back to the host   an_unreadable_runtime      101 red
+gate.rs     the gate ignores the runtime                the_gate_runs_where_it_says 101 red
+```
+
+Seven batches in a row where the red run found something the suite alone did
+not. Four of those were tests that did not exist rather than tests that were
+wrong — which is the failure mode a coverage number cannot see, because the code
+*is* covered, just not by anything that would notice it changing.
+
+**Batch 21 status:** 2 delivered, 0 carried, 0 blocked. 465 tests.
+
+---
+
+## Where the document stands
+
+**143 of 152 done. 8 in progress. 1 external-gated. 0 conflicting.**
+
+The eight remaining are not a backlog of unstarted work — every one is built up
+to a boundary that needs something outside itself:
+
+| | what is missing |
+|---|---|
+| `M-21` `M-23` `C-4` | a transport that does server-sent events; `curl` per request does not. One piece of work, three requirement numbers |
+| `M-8` | a live model call to drive the ladder; the loop's only `Work` is `Gates` |
+| `C-2` | something that builds work which came out of a conversation |
+| `X-6` | `V-6`, which is what would consume a screenshot as evidence |
+| `X-9` | Task Scheduler, systemd and launchd — three unrelated interfaces, one of which matters |
+| `I-3` | the panel's diff view, and therefore approving from the panel |
+
+And `M-25` stays ⛔: inference on an LM Link peer is unreachable from outside LM
+Studio. Measured in `c2/b10/s01`, not assumed.

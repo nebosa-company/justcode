@@ -609,6 +609,7 @@ mod tests {
 
     fn gate(name: &str, code: i32) -> GateResult {
         GateResult {
+            runtime: "host".to_string(),
             name: name.to_string(),
             run: Run {
                 command: "cargo test".into(),

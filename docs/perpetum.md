@@ -10,14 +10,14 @@ in between cycles.
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 3, batch 13: **88 of 152 requirements are done**, 13 in progress, 1
+As of cycle 4, batch 21: **143 of 152 requirements are done**, 8 in progress, 1
 external-gated (`M-25`), 0 parked as conflicting. What exists is the spine
 (binding, steps, journal, projection), the gate runner and its evidence, the
 recovery and watchdog layer, the git harness, the verification machinery, the
 model router over a `curl` transport exercised against a live LM Studio, cost
 accounting replayed from the journal, the tool host and its permission
 classifier, **the loop driver**, and the chat surface with `/btw` — in
-[`crates/`](../crates/), std-only, 330 tests, at version 0.2.0.
+[`crates/`](../crates/), 465 tests, at version 0.2.0.
 
 **The harness runs a batch on its own.** `perp run` takes the write lock, walks
 steps, journals an intent before each and an outcome after, checks budgets at
@@ -291,7 +291,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | id | Requirement |
 |---|---|
 | ✅ ~~`T-8`~~ | Windows host is the primary runtime — this repo is a Tauri/Windows project and the loop must run where the build runs. |
-| `T-9` | Runtimes are pluggable: host, WSL2, container. The gate commands come from `binding.md`; the runtime decides where they execute. |
+| ✅ ~~`T-9`~~ | Runtimes are pluggable: host, WSL2, container. The gate commands come from `binding.md`; the runtime decides where they execute. |
 | ✅ ~~`T-10`~~ | Work happens on a branch, never on `main` (`G-1`). |
 | ✅ ~~`T-11`~~ | A `BLOCKED` feature leaves the tree clean: its work is committed to its own branch or shelved, never abandoned half-applied in the working copy. |
 
@@ -479,7 +479,7 @@ Speculative, and the reason this document lives in this repo.
 | ✅ ~~`N-1`~~ | **Crash-only.** Kill -9 at any moment loses at most the in-flight step. No clean-shutdown path is required for correctness. |
 | ✅ ~~`N-2`~~ | A cold start reads only the binding and the journal. No hidden state in a cache, a temp file, or a model's memory. |
 | ✅ ~~`N-3`~~ | Single binary, no daemon required, no container required for the default host runtime. |
-| `N-4` | Cross-platform: Windows first, then Linux/WSL2 and macOS. Path handling, line endings and shell quoting are tested on Windows, not assumed. |
+| ✅ ~~`N-4`~~ | Cross-platform: Windows first, then Linux/WSL2 and macOS. Path handling, line endings and shell quoting are tested on Windows, not assumed. |
 | ✅ ~~`N-5`~~ | Deterministic replay of the journal for inspection: the same journal renders the same state file and the same board, on any machine. |
 | ✅ ~~`N-6`~~ | Gates run without network access wherever the project allows it, so a flaky connection cannot manufacture a red. |
 | ✅ ~~`N-7`~~ | Engine overhead is bounded and reported: tokens spent on compaction, classification and routing are counted separately from work tokens. |
