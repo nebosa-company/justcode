@@ -114,6 +114,8 @@ pub struct Report {
     pub took_over: Option<String>,
     pub first_step: Option<StepId>,
     pub last_step: Option<StepId>,
+    /// Controls the operator applied mid-run, in order (`O-3`).
+    pub controls: Vec<String>,
 }
 
 impl Report {
@@ -141,6 +143,8 @@ pub struct Engine {
     budgets: Budgets,
     concurrency: Concurrency,
     root: PathBuf,
+    /// Where the operator asks for a pause, a single step, or a stop (`O-3`).
+    channel: crate::control::Channel,
     /// The clock. Injected so a budget test does not have to wait out a
     /// wall-clock limit in real seconds.
     now: fn() -> i64,
@@ -160,6 +164,7 @@ impl Engine {
             budgets,
             concurrency: Concurrency::default(),
             root: root.to_path_buf(),
+            channel: crate::control::Channel::at(root),
             now: time::now,
         })
     }
@@ -223,6 +228,7 @@ impl Engine {
             took_over,
             first_step: None,
             last_step: None,
+            controls: Vec::new(),
         };
 
         loop {
@@ -241,6 +247,29 @@ impl Engine {
                 report.park = Some(park);
                 break;
             }
+
+            // `O-3`: the operator's control, read at the boundary and never
+            // mid-step — the same rule as the budget, for the same reason.
+            let control = self.channel.read()?;
+            if let crate::control::Control::Abort { who } = &control {
+                let stop = Stop::HumanStop { who: who.clone() };
+                self.record_end(cycle, stage, Some(&stop), None)?;
+                report.stop = Some(stop);
+                break;
+            }
+            if !control.keeps_running() {
+                let park = Park {
+                    reason: format!("paused by the operator ({control})"),
+                    resumable: true,
+                };
+                self.record_end(cycle, stage, None, Some(&park))?;
+                report.park = Some(park);
+                break;
+            }
+            if !matches!(control, crate::control::Control::Run) {
+                report.controls.push(control.to_string());
+            }
+            self.channel.consume(&control)?;
 
             let Some(task) = work.next() else {
                 let stop = Stop::BacklogExhausted;
@@ -710,6 +739,76 @@ mod tests {
 
         let pinned = Gates::from_binding(&binding, &root.join("target")).expect("gates");
         assert!(pinned.sha.is_some(), "and here there is one");
+    }
+
+    #[test]
+    fn a_pause_stops_the_loop_at_the_next_boundary_and_parks() {
+        // `O-3`. Not a signal: the operator and the loop are separate
+        // processes, often on separate days, and a control file works when
+        // only one of them is alive.
+        let root = workspace("engine-pause");
+        crate::control::Channel::at(&root)
+            .ask(&crate::control::Control::Pause)
+            .expect("ask");
+
+        let mut engine = Engine::open(&root).expect("open");
+        let report = engine.run(4, "b17", &mut Fixed::new(tasks(3)), 0).expect("run");
+
+        assert_eq!(report.steps, 0, "paused before the first step");
+        assert!(report.stop.is_none(), "a pause is not one of `L-14`'s stops");
+        let park = report.park.expect("parked");
+        assert!(park.resumable, "and it resumes");
+        assert!(park.reason.contains("operator"), "{}", park.reason);
+    }
+
+    #[test]
+    fn a_single_step_runs_exactly_one_and_then_pauses() {
+        let root = workspace("engine-single-step");
+        let channel = crate::control::Channel::at(&root);
+        channel.ask(&crate::control::Control::Step).expect("ask");
+
+        let mut engine = Engine::open(&root).expect("open");
+        let report = engine.run(4, "b17", &mut Fixed::new(tasks(5)), 0).expect("run");
+
+        assert_eq!(report.steps, 1, "exactly one, out of five available");
+        assert!(report.park.is_some(), "and then it parked");
+        assert_eq!(
+            channel.read().expect("read"),
+            crate::control::Control::Pause,
+            "the control consumed itself"
+        );
+    }
+
+    #[test]
+    fn an_abort_writes_a_human_stop_rather_than_a_park() {
+        let root = workspace("engine-abort");
+        crate::control::Channel::at(&root)
+            .ask(&crate::control::Control::Abort { who: "the operator".into() })
+            .expect("ask");
+
+        let mut engine = Engine::open(&root).expect("open");
+        let report = engine.run(4, "b17", &mut Fixed::new(tasks(3)), 0).expect("run");
+
+        assert_eq!(report.stop, Some(Stop::HumanStop { who: "the operator".into() }));
+        assert!(report.park.is_none(), "an abort is terminal, a pause is not");
+        let last = records(&root).pop().expect("a record");
+        assert_eq!(last.detail.as_deref(), Some("stop=human-stop"));
+    }
+
+    #[test]
+    fn an_injection_applies_once_and_is_on_the_report() {
+        let root = workspace("engine-inject");
+        let channel = crate::control::Channel::at(&root);
+        channel
+            .ask(&crate::control::Control::Inject { text: "prefer the other helper".into() })
+            .expect("ask");
+
+        let mut engine = Engine::open(&root).expect("open");
+        let report = engine.run(4, "b17", &mut Fixed::new(tasks(2)), 0).expect("run");
+
+        assert_eq!(report.steps, 2, "an injection does not stop the loop");
+        assert_eq!(report.controls.len(), 1, "and it applied once, not at every boundary");
+        assert!(report.controls[0].contains("other helper"), "{:?}", report.controls);
     }
 
     #[test]

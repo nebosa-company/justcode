@@ -15,6 +15,7 @@ use perp_core::binding::Binding;
 use perp_core::artifact;
 use perp_core::btw;
 use perp_core::chat;
+use perp_core::control::{Channel, Control, Rewind};
 use perp_core::command::{self, Chain, Command, Input, Subject};
 use perp_core::engine::{Engine, Gates};
 use perp_core::metrics::Snapshot;
@@ -107,6 +108,15 @@ usage:
       and queued /btw. Derived from the journal every time rather than tallied,
       so two watchers agree.
 
+  perp control [status|pause|resume|step|inject <text>|redirect <id>|abort]
+      Live control. Written to a file the engine reads at the next step
+      boundary, never mid-step. Works whether or not a loop is running.
+
+  perp rewind <step> [--approve <your name>]
+      Show what returning to a step would undo, and — with an approval — do it
+      by reverting rather than resetting, so nothing is destroyed on either
+      side. The journal keeps every superseded step; it is append-only.
+
   perp cost [--root <dir>]
       Replay the journal and report what the loop spent, by link and by role.
       Local links show tokens and time and no money.
@@ -153,6 +163,8 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("explain") => cmd_explain(&args[1..]),
         Some("artifact") => cmd_artifact(&args[1..]),
         Some("watch") => cmd_watch(&args[1..]),
+        Some("control") => cmd_control(&args[1..]),
+        Some("rewind") => cmd_rewind(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -859,12 +871,27 @@ fn run_command(
             journal.append(&item.record(step)).map_err(|e| e.to_string())?;
             Ok(ack)
         }
-        // Everything else moves the loop, and the loop driver owns it. Said
-        // plainly rather than half-implemented: a `/pause` that printed
-        // "paused" without pausing anything is worse than one that is absent.
-        other => Err(format!(
-            "{other} moves the loop, and this build answers it from `perp run` only \
-             — it is not yet wired to a running engine"
+        // `O-3`: these write the control file the engine reads at its next
+        // step boundary. They work whether or not a loop is running, which is
+        // the point of a file rather than a signal.
+        Command::Pause => ask_control(binding, &Control::Pause),
+        Command::Resume => ask_control(binding, &Control::Run),
+        Command::Step => ask_control(binding, &Control::Step),
+        // `/rewind` and `/approve` stay out of chat deliberately. Both are
+        // `needs_confirmation()`, and a confirmation typed into the same box as
+        // everything else is not a confirmation.
+        Command::Rewind { to } => Err(format!(
+            "rewinding to {to} undoes work - run `perp rewind {to}` to see what, \
+             then `--approve <your name>` (`O-4`)"
+        )),
+        Command::Approve { id } | Command::Reject { id } => Err(format!(
+            "approval #{id} is answered where the queue is, not in chat - an approval \
+             typed into the same box as everything else is not an approval (`T-7`)"
+        )),
+        Command::Gate { name } => Err(format!(
+            "run `perp gate {}` - a gate is only green if the harness ran it and kept \
+             the transcript (`V-2`)",
+            name.clone().unwrap_or_else(|| "all".into())
         )),
     }
 }
@@ -940,4 +967,116 @@ fn cmd_watch(args: &[&str]) -> std::result::Result<(), String> {
         println!("---");
         std::thread::sleep(std::time::Duration::from_secs(seconds));
     }
+}
+
+/// Live control (`O-3`). Writes what the operator asked for; the engine reads
+/// it at the next step boundary and never mid-step.
+fn cmd_control(args: &[&str]) -> std::result::Result<(), String> {
+    let root = root_of(args);
+    load(args).map_err(|e| e.to_string())?;
+    let channel = Channel::at(&root);
+
+    let what = positionals(args).first().copied().unwrap_or("status");
+    let control = match what {
+        "status" => {
+            let current = channel.read().map_err(|e| e.to_string())?;
+            println!("{current}");
+            return Ok(());
+        }
+        "run" | "resume" => Control::Run,
+        "pause" => Control::Pause,
+        "step" => Control::Step,
+        "abort" => Control::Abort {
+            who: flag(args, "--who").unwrap_or("the operator").to_string(),
+        },
+        "inject" => Control::Inject {
+            text: positionals(args)
+                .get(1)
+                .copied()
+                .ok_or_else(|| "inject takes a message".to_string())?
+                .to_string(),
+        },
+        "redirect" => Control::Redirect {
+            requirement: positionals(args)
+                .get(1)
+                .copied()
+                .ok_or_else(|| "redirect takes a requirement id".to_string())?
+                .to_string(),
+        },
+        other => {
+            return Err(format!(
+                "`{other}` is not a control — try status, pause, resume, step, inject, \
+                 redirect, abort"
+            ))
+        }
+    };
+
+    channel.ask(&control).map_err(|e| e.to_string())?;
+    println!("{control} — takes effect at the next step boundary");
+    Ok(())
+}
+
+/// Rewind (`O-4`). Prints what would be discarded and refuses to do it without
+/// `--approve`, because it is the one operation here that destroys work.
+fn cmd_rewind(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+
+    let target = positionals(args)
+        .first()
+        .copied()
+        .ok_or_else(|| "expected a step id to rewind to".to_string())?;
+    let target = StepId::parse(target).map_err(|e| e.to_string())?;
+    let plan = Rewind::plan(&target, &records).map_err(|e| e.to_string())?;
+
+    println!("{}", plan.describe());
+
+    if plan.discards_nothing() {
+        return Ok(());
+    }
+    if !plan.is_restorable() {
+        return Err(
+            "that step has no commit, so there is nothing to revert back to. Moving the \
+             journal alone would leave the record and the tree disagreeing (`L-4`)"
+                .into(),
+        );
+    }
+    let Some(who) = flag(args, "--approve") else {
+        // The plan is free; the destruction is not. Printing what would happen
+        // and stopping is the whole design of this command.
+        return Err(
+            "not done — rewind discards work and needs `--approve <your name>` (`O-4`)".into(),
+        );
+    };
+
+    // The record goes in first. The journal is append-only (`L-3`): rewinding
+    // the workspace does not rewind the record, and a reader later sees both
+    // the work and the decision to abandon it.
+    let step = next_step_for(&records, "rewind");
+    journal
+        .append(&plan.record(step.clone(), time::now()))
+        .map_err(|e| e.to_string())?;
+
+    let sha = plan.commit.clone().unwrap_or_default();
+    let repo = Repo::at(binding.root());
+    // Revert, never reset: `G-10` makes `reset --hard` a Never and `G-8` makes
+    // revert the right answer. Nothing is destroyed on either side.
+    let outcome = repo.revert_since(&sha, who);
+    let record = match &outcome {
+        Ok(_) => Record::outcome(step, time::now(), true, format!("reverted to {sha} by {who}")),
+        Err(e) => Record::outcome(step, time::now(), false, format!("rewind failed: {e}")),
+    };
+    journal.append(&record).map_err(|e| e.to_string())?;
+    outcome.map_err(|e| e.to_string())?;
+
+    println!("workspace returned to {sha} by revert — the old commits are still in history");
+    println!("the journal keeps every superseded step too; it is append-only (`L-3`)");
+    Ok(())
+}
+
+/// Write a control from chat. The engine picks it up at the next boundary.
+fn ask_control(binding: &Binding, control: &Control) -> std::result::Result<String, String> {
+    Channel::at(binding.root()).ask(control).map_err(|e| e.to_string())?;
+    Ok(format!("{control} — takes effect at the next step boundary"))
 }

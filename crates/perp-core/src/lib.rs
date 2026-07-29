@@ -24,6 +24,7 @@
 //! | [`security`] | `S-1`, `S-3`–`S-6`, `N-6` |
 //! | [`os`] | `X-1`–`X-3`, `X-5`–`X-11` |
 //! | [`job`] | `X-4` — the only module allowed `unsafe` |
+//! | [`control`] | `O-3`, `O-4`, `O-6` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -59,6 +60,7 @@ pub mod budget;
 pub mod chat;
 pub mod client;
 pub mod command;
+pub mod control;
 pub mod cost;
 pub mod engine;
 pub mod error;
@@ -97,6 +99,7 @@ pub use budget::{Budget, Budgets, Spend};
 pub use engine::{Done, Engine, Gates, Task, Work};
 pub use chat::{Streaming, Turn};
 pub use command::{Chain, Command, Input};
+pub use control::{Channel, Control, Rewind};
 pub use error::{Error, Result};
 pub use gate::{Attempts, Gate, GateResult, Verdict};
 pub use journal::{Journal, Kind, Record};

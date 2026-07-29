@@ -1,14 +1,14 @@
 # Perpetum state
 
-Cycle: 4 · Stage: b16 · Updated: 2026-07-29
+Cycle: 4 · Stage: b17 · Updated: 2026-07-29
 
 Generated from the journal by `perp state`. The journal is the truth; if this file disagrees with it, this file is wrong.
 
 ## Position
 
-- Last step: `c4/b16/s42` — closed
+- Last step: `c4/b17/s49` — closed
 - Nothing in flight.
-- Steps: 69 done, 1 blocked
+- Steps: 74 done, 3 blocked
 
 ## Blocked
 
@@ -27,6 +27,18 @@ Generated from the journal by `perp state`. The journal is the truth; if this fi
   
   Caused by:
     Access is denied. (os error 5)
+  ```
+
+- `c4/b17/s43` — parked: paused by the operator (pause)
+
+  ```
+  stop=park
+  ```
+
+- `c4/b17/s45` — parked: paused by the operator (pause)
+
+  ```
+  stop=park
   ```
 
 
@@ -114,6 +126,13 @@ These survive a restart. A steer lands at the next step boundary; a requirement 
 | `c4/b16/s40` | done | gate build is green |
 | `c4/b16/s41` | done | gate test is green |
 | `c4/b16/s42` | done | stopped: the backlog is exhausted |
+| `c4/b17/s43` | blocked | parked: paused by the operator (pause) |
+| `c4/b17/s44` | done | gate lint is green |
+| `c4/b17/s45` | blocked | parked: paused by the operator (pause) |
+| `c4/b17/s46` | done | gate lint is green |
+| `c4/b17/s47` | done | gate build is green |
+| `c4/b17/s48` | done | gate test is green |
+| `c4/b17/s49` | done | stopped: the backlog is exhausted |
 
 ## History
 
@@ -122,6 +141,6 @@ These survive a restart. A steer lands at the next step boundary; a requirement 
 | 1 | 17 | 1 | 13 | 11 | 0 | $0.0000 | 35m |
 | 2 | 18 | 0 | 18 | 0 | 0 | $0.0000 | 1h02m |
 | 3 | 31 | 0 | 24 | 1 | 0 | $0.0000 | 58m |
-| 4 | 4 | 0 | 3 | 1 | 0 | $0.0000 | 12s |
+| 4 | 11 | 2 | 7 | 1 | 0 | $0.0000 | 10m |
 
 Every figure counted from `journal.jsonl`. Elapsed is wall-clock between the first and last record of the cycle, which for an unattended run is mostly the machine waiting — not effort.

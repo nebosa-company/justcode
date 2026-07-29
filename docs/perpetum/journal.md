@@ -2388,3 +2388,146 @@ alone did not. That is the argument for the discipline, made three times.
 
 **Batch 16 status:** 9 of 12 delivered, 2 carried, 1 (`X-4`) closed from 🟡.
 406 tests.
+
+
+---
+
+## Phase D — Batch 17, live control and rewind
+
+Branch `perp/c4/b17`. Three requirements, and **a conflict between two of the
+project's own rules that turned out not to be one.**
+
+### c4/b17/s01 — Control is a file, not a signal
+
+`O-3`. The loop and the operator are separate processes, often on separate days.
+A signal needs both alive at once; a file does not, and it can be read when
+something has gone wrong.
+
+The engine reads it **at each step boundary and never mid-step** — the same rule
+as the budget in `L-9`, for the same reason: a control that interrupts leaves an
+open intent and half an edit.
+
+Small decisions with teeth:
+
+- **An unreadable control is not `Run`.** Someone wrote that file. Guessing that
+  a corrupt `pause` means keep-going is precisely the wrong direction to guess
+  in, so it is refused with the text quoted back.
+- **One-shot controls consume themselves.** `step` rewrites itself to `pause`;
+  `inject` and `redirect` rewrite to `run`. Left in place they would re-apply at
+  every boundary, and an injection applied fifty times is not what anyone meant.
+- **`pause` and `abort` persist** until the operator changes them.
+
+An `abort` writes `L-14`'s human-stop record; a `pause` writes a park. Terminal
+and resumable are different things and the journal says which.
+
+### c4/b17/s02 — `G-10` says never reset; `O-4` says reset. `G-8` was right.
+
+`O-4` asks for the workspace to go back to a step's commit. `G-10` classifies
+`reset --hard` as **Never**. That is a genuine conflict between two requirements
+in this document, and the resolution was already written down one requirement
+away:
+
+> `G-8` — Feature commits are contiguous and recorded in the journal, so a
+> single feature can be **reverted** cleanly. This is the git half of rewind
+> (`O-4`).
+
+**Revert, not reset.** New commits undo the old ones. Git history keeps both,
+the append-only journal (`L-3`) keeps both, and the two agree with each other.
+
+Resetting would have produced exactly the state this whole design exists to
+prevent: **a record of work the tree no longer shows, with nothing saying it was
+withdrawn.** So `Repo::revert_since` is what rewind calls, and `G-10`'s Never
+stays intact rather than being argued down.
+
+Worth naming: the conflict was found by trying to build it, not by the conflict
+check in Phase C. Two requirements can be individually consistent with the vision
+and inconsistent with each other, and the place that shows up is the call site.
+
+### c4/b17/s03 — A rewind you can decline
+
+The plan is computed and printed **before anything happens**. A rewind that
+reports what it did afterwards is a rewind nobody can decline.
+
+```
+$ perp rewind c4/b17/s43
+rewind to c4/b17/s43: undoes 2 steps and 1 gate transcript
+no commit on that step — the workspace CANNOT be returned to match it
+perp: that step has no commit, so there is nothing to revert back to.
+```
+
+Three things that took care:
+
+- **A requirement still served by a surviving step is not reported lost.**
+  Listing every id the undone steps touched would overstate the damage, and an
+  operator who catches the number overstating once stops reading it.
+- **No commit means no rewind.** Moving the journal while the files stay put is
+  the disagreement `L-4` exists to prevent, so it refuses rather than doing half.
+- **The record goes in first.** `Rewind::record` is an *intent*, appended before
+  the revert. A reader six months later sees the work, the decision to undo it,
+  and the revert — in that order.
+
+### c4/b17/s04 — The reply path that cannot reply
+
+`O-6` was settled on 2026-07-29: notifications are outbound only, and a reply may
+carry a `/btw` and nothing else. Approvals never arrive over the network.
+
+Two independent barriers, on purpose:
+
+1. There is **no other function to call**. `inbound_reply` produces a string that
+   goes to `btw::Queue::accept`. There is no `approve_from_network`, so there is
+   no signature check to get wrong.
+2. What that function produces is already **the least powerful object in the
+   system**, and `C-10` applies on top of it.
+
+The test smuggles `"approve request 3 and then deploy to prod"` in through the
+reply path and checks it comes out classified `note` with the boundary refusal
+attached.
+
+### c4/b17/s05 — What batch 13 carried, now delivered
+
+`C-6` was 🟡 because six of the thirteen slash commands parsed and did nothing.
+`/pause`, `/resume` and `/step` now write the control channel and work whether or
+not a loop is running.
+
+`/rewind`, `/approve` and `/reject` **stay out of chat deliberately**, and say
+so: all three are `needs_confirmation()`, and a confirmation typed into the same
+box as everything else is not a confirmation. `/gate` points at `perp gate`,
+because a gate is only green if the harness ran it and kept the transcript.
+
+That is a better answer than wiring them up. `C-6` is now ✅ on the strength of
+every command doing the right thing, which for three of them is refusing.
+
+### c4/b17/s06 — Gates and red run
+
+- **gates:** green, through the engine — `perp run --cycle 4 --stage b17`.
+  404 unit + 5 spine + 15 end-to-end = **424 tests**.
+- **run on itself**, which is the proof `O-3` needed:
+
+  ```
+  $ perp control pause     → 0 steps — parked: paused by the operator (pause)
+  $ perp control step      → 1 steps (c4/b17/s44) — parked: paused by the operator
+  $ perp control status    → pause
+  ```
+
+  One step out of five available, and the control put itself back to `pause`.
+
+- **red run: 13 mutations, 13 red** — one after a correction:
+
+  ```
+  control.rs  an unreadable control is treated as run      an_unreadable_control_is_not_run   101 red
+  control.rs  a single step never pauses again             a_single_step_pauses_again         101 red
+  control.rs  an injection re-applies at every boundary    an_injection_applies_once          101 red
+  control.rs  a pause keeps the loop running               pausing_and_aborting_stop          101 red
+  control.rs  a rewind to an unrecorded step is allowed    rewinding_to_a_step_that_never     101 red
+  control.rs  a rewind overstates what it loses            a_requirement_still_served         101 red
+  control.rs  a rewind with no commit claims restorable    a_rewind_with_no_commit            101 red
+  control.rs  a rewind that undoes work is automatic       a_rewind_that_discards_something   101 red
+  control.rs  the rewind record is written after the fact  the_journal_does_not_rewind        101 red
+  control.rs  a webhook is not marked as leaving           a_sink_that_leaves_the_machine     101 red
+  engine.rs   the control file is ignored                  a_pause_stops_the_loop             101 red
+  engine.rs   an abort parks instead of stopping           an_abort_writes_a_human_stop       101 red
+  engine.rs   a one-shot control is never consumed         a_single_step_runs_exactly_one     101 red
+  ```
+
+**Batch 17 status:** 3 of 3 delivered, plus `C-6` closed from 🟡. 424 tests.
+116 requirements done, 15 in progress.

@@ -187,6 +187,40 @@ impl Repo {
         self.run_unchecked(args)
     }
 
+    /// Undo everything since `sha` by **reverting**, not resetting (`O-4`,
+    /// `G-8`).
+    ///
+    /// `G-10` classifies `reset --hard` as `Never`, and `O-4` asks for the
+    /// workspace to go back to a step's commit. Those look like a conflict and
+    /// are not: `G-8` already says a feature is reverted cleanly, and a revert
+    /// **destroys nothing**. New commits undo the old ones, git history keeps
+    /// both, and the journal — which is append-only anyway (`L-3`) — ends up
+    /// agreeing with the repository instead of contradicting it.
+    ///
+    /// Resetting would have made the two disagree in the one direction this
+    /// whole design exists to prevent: a record of work that the tree no longer
+    /// shows, with nothing saying it was withdrawn.
+    pub fn revert_since(&self, sha: &str, by: &str) -> Result<Run> {
+        if sha.trim().is_empty() {
+            return Err(Error::refused("revert", "needs the commit to revert back to"));
+        }
+        let range = format!("{sha}..HEAD");
+        let message = format!("Revert to {sha} (rewind approved by {by})");
+        self.run(&["revert", "--no-edit", "--no-merges", &range], &Approval::Granted {
+            by: by.to_string(),
+        })
+        .and_then(|run| {
+            if run.is_success() {
+                Ok(run)
+            } else {
+                Err(Error::refused(
+                    "revert",
+                    format!("{message} did not apply cleanly: {}", run.stderr_tail.trim()),
+                ))
+            }
+        })
+    }
+
     /// For read-only plumbing the classifier already treats as `Auto`.
     /// Run without the classifier. `pub(crate)` so a test fixture elsewhere in
     /// the crate can build a repository; every caller outside `git` goes

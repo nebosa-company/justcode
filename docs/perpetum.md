@@ -397,7 +397,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`C-3`~~ | Chat while the loop runs is read-only by default: it answers from the journal, the state file and read tools. A write from chat requires either a pause or a target outside the loop's current feature (`L-20`). |
 | 🟡 `C-4` | Responses stream and are interruptible mid-generation; the interrupted partial is journalled, not discarded. |
 | ✅ ~~`C-5`~~ | The conversation is journalled in the same stream as the loop, interleaved by time. "Why did it do that in cycle 3" is answerable months later. |
-| 🟡 `C-6` | Slash commands are engine-side, never model-interpreted: `/status` `/pause` `/resume` `/step` `/approve` `/reject` `/rewind` `/links` `/cost` `/board` `/gate` `/explain` `/btw`. An unknown slash command is an error, not a prompt. |
+| ✅ ~~`C-6`~~ | Slash commands are engine-side, never model-interpreted: `/status` `/pause` `/resume` `/step` `/approve` `/reject` `/rewind` `/links` `/cost` `/board` `/gate` `/explain` `/btw`. An unknown slash command is an error, not a prompt. |
 | 🟡 `C-7` | `/explain <id\|sha\|step>` renders the evidence chain for a decision: the requirement, the reality check, the diff, the gate transcripts, the verifier's verdict, and the link that wrote it. |
 
 ### 8.2 `/btw` — the side channel
@@ -437,10 +437,10 @@ other durable output of a cycle deserves the same treatment.
 |---|---|
 | ✅ ~~`O-1`~~ | `journal.jsonl` is the source of truth and is replayable: given the journal and the repo at a commit, the engine can reconstruct what the loop believed at any step. |
 | ✅ ~~`O-2`~~ | The progress board (`A-3`) is the status-at-a-glance surface and is written to disk as well as rendered. |
-| `O-3` | Live controls: pause at next step boundary, resume, single-step, inject a message, redirect to another requirement, abort the cycle cleanly. |
-| `O-4` | **Rewind:** resume from any journal step, discarding later work, with the workspace reset to that step's commit (`G-8`). This is how a bad batch is recovered without re-running the cycle. |
+| ✅ ~~`O-3`~~ | Live controls: pause at next step boundary, resume, single-step, inject a message, redirect to another requirement, abort the cycle cleanly. |
+| ✅ ~~`O-4`~~ | **Rewind:** resume from any journal step, discarding later work, with the workspace reset to that step's commit (`G-8`). This is how a bad batch is recovered without re-running the cycle. |
 | ✅ ~~`O-5`~~ | A watch mode streams: phase, batch, feature, link in use, tokens and money this cycle, gate state, blocked and gated counts, pending approvals, queued `/btw`. |
-| `O-6` | Notification sink is pluggable (OS notifier, webhook, mail) and is **outbound only**, with exactly one exception: a reply may carry a `/btw` note and nothing else. **Approvals never arrive over the network.** The phone tells you something needs you; you still walk to the machine. Resolved 2026-07-29 — the authentication problem is removed rather than solved, because one bug in a signature check reopens the approval boundary. |
+| ✅ ~~`O-6`~~ | Notification sink is pluggable (OS notifier, webhook, mail) and is **outbound only**, with exactly one exception: a reply may carry a `/btw` note and nothing else. **Approvals never arrive over the network.** The phone tells you something needs you; you still walk to the machine. Resolved 2026-07-29 — the authentication problem is removed rather than solved, because one bug in a signature check reopens the approval boundary. |
 | ✅ ~~`O-7`~~ | Cycle metrics (Perpetum F.5) are appended to the state file's history table by the engine, from counted facts, not from a summary. |
 
 ### 9.1 JustCode integration
