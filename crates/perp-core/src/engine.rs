@@ -448,6 +448,14 @@ pub struct Gates {
     /// of the run: a transcript pinned to a sha the tree has since moved past
     /// would be worse than one with no sha at all.
     sha: Option<String>,
+    /// The requirements this gate is evidence *for* (`G-6`).
+    ///
+    /// A gate step used to cite `V-2` and nothing else, so `perp explain T-2`
+    /// answered "no gate transcript on any of these steps" for a requirement
+    /// whose batch had gone green minutes earlier. The transcript existed; no
+    /// requirement could reach it. Citing the batch's ids as well is what makes
+    /// the evidence chain a chain.
+    covering: Vec<String>,
     pub results: Vec<gate::GateResult>,
 }
 
@@ -463,8 +471,19 @@ impl Gates {
             // ran — and the transcript then says nothing rather than implying a
             // commit it does not have.
             sha: crate::git::Repo::at(binding.root()).head_sha().ok(),
+            covering: Vec::new(),
             results: Vec::new(),
         })
+    }
+
+    /// Name the requirements this gate stands as evidence for (`G-6`).
+    pub fn covering<I, S>(mut self, ids: I) -> Gates
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.covering = ids.into_iter().map(Into::into).collect();
+        self
     }
 
     pub fn all_green(&self) -> bool {
@@ -475,7 +494,12 @@ impl Gates {
 impl Work for Gates {
     fn next(&mut self) -> Option<Task> {
         let gate = self.gates.get(self.next)?;
-        Some(Task::new(format!("gate: {}", gate.name)).idempotent().for_requirements(["V-2"]))
+        // `V-2` first: the gate is always evidence for the rule that says only a
+        // gate may call something green, and the batch's own ids come after so
+        // each of them can find this transcript.
+        let mut ids = vec!["V-2".to_string()];
+        ids.extend(self.covering.iter().cloned());
+        Some(Task::new(format!("gate: {}", gate.name)).idempotent().for_requirements(ids))
     }
 
     fn perform(&mut self, _task: &Task) -> Done {
@@ -794,6 +818,31 @@ mod tests {
 
         let first = records(&root).into_iter().next().expect("a record");
         assert!(first.summary.contains("abandoned write lock"), "{}", first.summary);
+    }
+
+    #[test]
+    fn a_gate_is_evidence_for_the_batch_it_gated_not_only_for_the_rule() {
+        // Found by reading an evidence chain the harness produced. `T-2` passed,
+        // the batch gate went green in the same leg, and `perp explain T-2`
+        // said "no gate transcript on any of these steps" — because the gate
+        // step cited `V-2` and nothing else, so no requirement could reach it.
+        let root = workspace("engine-covering");
+        let binding = crate::Binding::load(&root).expect("binding");
+        let target = root.join("target");
+
+        let mut bare = Gates::from_binding(&binding, &target).expect("gates");
+        let task = Work::next(&mut bare).expect("a gate");
+        assert_eq!(task.requirements, vec!["V-2".to_string()], "V-2 alone when nothing is covered");
+
+        let mut covering = Gates::from_binding(&binding, &target)
+            .expect("gates")
+            .covering(["T-2", "T-3"]);
+        let task = Work::next(&mut covering).expect("a gate");
+        assert_eq!(
+            task.requirements,
+            vec!["V-2".to_string(), "T-2".to_string(), "T-3".to_string()],
+            "and the batch's own ids alongside it, so each can find this transcript"
+        );
     }
 
     #[test]

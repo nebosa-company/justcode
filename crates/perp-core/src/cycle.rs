@@ -390,6 +390,10 @@ impl Driver<'_> {
         // Everything this cycle already attempted comes off the list first.
         let seen = engine.session().journal().read_all()?;
         let items = remaining(&source, &seen, cycle, self.items_per_batch);
+        // Taken before the items move into the agent: the gate cites these too,
+        // so each requirement in the batch can reach the transcript that cleared
+        // it (`G-6`).
+        let covered: Vec<String> = items.iter().map(|item| item.requirement.clone()).collect();
 
         // An empty backlog is `L-14`'s exhausted condition, and the engine
         // reaches it by being handed no work rather than by being told.
@@ -406,7 +410,8 @@ impl Driver<'_> {
         // Work then gates, as one run, so the leg produces one terminal record
         // and the evidence sits beside the work it is evidence for.
         let target = self.root.join("crates/target");
-        let gates = Gates::from_binding(engine.session().binding(), &target)?;
+        let gates = Gates::from_binding(engine.session().binding(), &target)?
+            .covering(covered);
         let mut leg = Then::new(agent, gates);
         engine.run(cycle, &stage, &mut leg, 0)
     }
