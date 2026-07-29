@@ -89,22 +89,45 @@ test("every harness tab has a label, a hint and an icon", () => {
   assert.deepEqual(missing, [], `a tab with no name renders blank:\n${missing.join("\n")}`);
 });
 
-test("a menu item's enabled and checked are references, not calls", () => {
-  // `menu.js` does `if (item.enabled && !item.enabled())`, so passing the result
-  // hands it a boolean to call. `enabled: canCopy()` did exactly that: with no
-  // file open the result was `false` and short-circuited, and with a file open it
-  // was `true`, `true()` threw, and because the render happens on the line before
-  // the dropdown is unhidden the entire Edit menu opened as nothing.
+test("every menu item's enabled, checked and submenu is a function", () => {
+  // `menu.js` calls all three: `item.enabled()`, `item.checked?.()`,
+  // `item.submenu()`. Anything else is a `TypeError` at render time, and the
+  // render happens on the line *before* the dropdown is unhidden — so the whole
+  // menu opens as nothing rather than as a broken row.
   //
-  // It survived because the failing case is the useful one — a menu only breaks
-  // once there is something to edit.
+  // `enabled: canCopy()` did exactly that. With no file open the result was
+  // `false`, the `&&` short-circuited, nothing was called and the menu worked;
+  // with a file open it was `true`, and `true()` threw. It survived because the
+  // failing case is the useful one — a menu only breaks once there is something
+  // to edit.
+  //
+  // Checking the shape rather than just the `foo()` form, because `enabled: true`
+  // and `enabled: someFlag` fail the same way and read as harmless.
   const offenders = [];
   for (const { name, text } of sources()) {
-    for (const match of text.matchAll(/\b(enabled|checked):\s*([a-zA-Z_$][\w$.]*)\(\)/g)) {
-      offenders.push(`${name}: ${match[1]}: ${match[2]}()`);
+    // Function declarations and function-valued consts, to vouch for a value
+    // written as a bare identifier.
+    const functions = new Set([
+      ...[...text.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]),
+      ...[...text.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|function)/g)].map(
+        (m) => m[1],
+      ),
+    ]);
+
+    for (const match of text.matchAll(/\b(enabled|checked|submenu):\s*([^,\n]*)/g)) {
+      const property = match[1];
+      const value = match[2].trim().replace(/[}\s]+$/, "");
+      if (!value) continue;
+      // An arrow or a function expression is fine however it continues.
+      if (/^(\(|async\s*\(|function\b)/.test(value)) continue;
+      // A bare identifier is fine when this file declares it as a function.
+      if (/^[A-Za-z_$][\w$]*$/.test(value) && functions.has(value)) continue;
+      // `.bind(...)` still yields a function.
+      if (/\.bind\(/.test(value)) continue;
+      offenders.push(`${name}: ${property}: ${value}`);
     }
   }
-  assert.deepEqual(offenders, [], `evaluated once and then called:\n${offenders.join("\n")}`);
+  assert.deepEqual(offenders, [], `called at render time, so not callable:\n${offenders.join("\n")}`);
 });
 
 test("top-level menu mnemonics are lowercase and unique", () => {
