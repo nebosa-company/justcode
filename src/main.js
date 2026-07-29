@@ -104,6 +104,7 @@ const STORAGE = {
   newFavourites: "justcode.newFavourites",
   session: "justcode.session",
   terminalDock: "justcode.terminalDock",
+  perpPanel: "justcode.perpPanel",
 };
 
 const MAX_RECENT_FILES = 15;
@@ -2591,7 +2592,16 @@ function buildMenus() {
       { label: t("view.language"), icon: "globe", run: chooseAppLanguage },
       { separator: true },
       { label: t("view.problems"), icon: "warning", accel: "F8", run: showProblems },
-      { label: "Perpetum panel", icon: "clock", accel: "Ctrl+Alt+P", run: togglePerpPanel },
+      {
+        label: t("view.perpetumPanel"),
+        icon: "clock",
+        accel: "Ctrl+Alt+P",
+        // Its siblings show their state; this one did not, so the menu could not
+        // answer "is it open?" — and `menu.js` has supported `checked` all along,
+        // `aria-checked` included.
+        checked: () => Boolean(perpHost) && !perpHost.hidden,
+        run: togglePerpPanel,
+      },
       {
         label: t("view.nextProblem"),
         icon: "arrowDown",
@@ -3040,6 +3050,18 @@ async function loadStartupState() {
   sessionReady = true;
   rememberSession();
 
+  // Reopen the panel if it was open, like the toolbar and the status bar. After
+  // the session, because the panel resolves its workspace from an open file and
+  // there is nothing to resolve before then. Off by default: an editor that has
+  // never met the harness should not grow a panel about it.
+  if (localStorage.getItem(STORAGE.perpPanel) === "true" && perpHost?.hidden) {
+    // Only when a workspace actually resolves. `togglePerpPanel` tells you to
+    // open a project file if none does, and a modal at every launch because you
+    // last closed the app on a scratch file is worse than a panel that stays
+    // shut until you ask.
+    if (await perpRoot()) await togglePerpPanel();
+  }
+
   if (localeReady) await localeReady;
 
   // Syntax highlighting for whatever ended up on screen, so the first paint is
@@ -3169,6 +3191,7 @@ async function togglePerpPanel() {
   if (!perpHost) return;
   if (!perpHost.hidden) {
     perpHost.hidden = true;
+    localStorage.setItem(STORAGE.perpPanel, "false");
     // Hidden, not detached: the status-bar signal keeps working, so closing the
     // panel does not blind you to a run that is still going.
     perp.detach();
@@ -3182,6 +3205,7 @@ async function togglePerpPanel() {
     return;
   }
   perpHost.hidden = false;
+  localStorage.setItem(STORAGE.perpPanel, "true");
   perp.mount(perpHost);
   perpAttachedRoot = root;
   await perp.attach(root);

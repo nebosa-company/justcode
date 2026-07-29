@@ -102,6 +102,7 @@ export const EN = {
   "view.autismThemeHint": "Muted, low-contrast colours for sensory sensitivity",
   "view.bionicReading": "Bionic Reading",
   "view.problems": "Problems",
+  "view.perpetumPanel": "Perpetum Panel",
   "view.nextProblem": "Next Problem",
   "view.previousProblem": "Previous Problem",
   "view.language": "Language…",

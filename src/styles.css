@@ -210,6 +210,14 @@ body {
      than the window — a long translation must wrap rather than be clipped. */
   min-width: 320px;
   max-width: calc(100vw - 8px);
+  /* And never taller than the window. The horizontal case above was thought
+     about; the vertical one was not, and the View menu had outgrown the window —
+     everything below "Problems" was rendered off the bottom edge with no way to
+     reach it, including the panel toggle. Reported as "I do not see a menu
+     called View | Perpetum", which is exactly what it looked like. */
+  max-height: calc(100vh - 2.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   white-space: nowrap;
   padding: 4px;
   background: var(--menu-bg);
@@ -226,6 +234,9 @@ body {
   top: 0;
   inset-inline-start: 0;
   min-width: 240px;
+  /* It opens at the pointer rather than under the menubar, so it gets the whole
+     window as its budget and the same overflow rule as its parent. */
+  max-height: calc(100vh - 1rem);
   z-index: 70;
 }
 
