@@ -2531,3 +2531,140 @@ every command doing the right thing, which for three of them is refusing.
 
 **Batch 17 status:** 3 of 3 delivered, plus `C-6` closed from 🟡. 424 tests.
 116 requirements done, 15 in progress.
+
+
+---
+
+## Phase D — Batch 18, the JustCode panel
+
+Branch `perp/c4/b18`. Five requirements, and **the first batch to touch the
+shipped editor.**
+
+### c4/b18/s01 — Runtime churn is not documentation
+
+Before anything else: `perp control` had been leaving a `control` file at the
+repository root, untracked, since batch 17. `G-13` splits exactly this — the
+journal, the state file, the board and the artifacts are documentation and are
+versioned on purpose; the control file and the locks are churn. Now ignored.
+
+### c4/b18/s02 — The panel holds nothing
+
+`I-5` is the requirement the whole design hangs from: *a view onto the journal,
+not a second source of truth*. Every other property falls out of it.
+
+**Closing the editor cannot stop the loop, and reopening cannot lose one** —
+because there is nothing to attach *to*. Attachment is a read. The panel runs
+`perp panel`, gets one JSON document, renders it, and forgets it.
+
+The document is assembled in **one pass** so every section describes the same
+moment. Fetching chat and approvals separately could show an approval the
+timeline says was already answered.
+
+Two small honesty details in the JSON:
+
+- An unknown cycle is `null`, not `0`. Zero is a claim.
+- Money is present even at `0.000000`. A missing figure reads as unknown; a zero
+  reads as free, and a local-only cycle really is free.
+
+### c4/b18/s03 — Sidecar, not library
+
+`I-2`. The editor invokes a **separate process**. An agent loop must not be able
+to take the editor down with it, and must outlive the editor window — both are
+properties of *being a different process*, not of careful coding.
+
+The Tauri command that does it has three rules, and they are the whole function:
+
+- **The subcommand comes from a fixed list**: `panel`, `state`, `cost`,
+  `explain`, `check`, `links`, `version`. `run`, `rewind` and `control` are
+  deliberately absent, so a bug or an injected string in the front-end cannot
+  become `perp rewind --approve`. The panel reads; it does not act.
+- **Arguments go as argv, never through a shell.** No quoting to get wrong.
+- **A missing binary is an ordinary answer.** It comes back as
+  `not-installed:` and the panel renders a sentence.
+
+Checked, not asserted: `grep -rn "crates/" src/ src-tauri/src/` returns only
+comments. Nothing under `src/` depends on `crates/` — vision clause 6's
+enforceable half.
+
+### c4/b18/s04 — Reusing the editor's own surfaces
+
+`I-4`. Gate failures go to the **Problems** panel and transcripts to the
+**terminal dock**, rather than to a second list of red things and a viewer
+invented for this panel. A developer already knows where problems appear;
+somewhere else to look is somewhere else to forget to look.
+
+`View::problems()` and `View::transcripts()` exist on the Rust side for exactly
+this, so the mapping is tested rather than living in JavaScript.
+
+### c4/b18/s05 — Verified running, not just building
+
+`npm run build` proves the module graph — a syntax error or a bad import fails
+it. It does **not** prove the editor still works, and this batch touched a
+shipped product, so:
+
+```
+panelElementExists   true
+panelHiddenByDefault true
+editorStillWorks     true
+perpStylesLoaded     true
+console errors       none
+```
+
+And the render path, exercised with no workspace and no harness:
+
+```
+rendered: "No workspace open."
+```
+
+Which is the point of `Sidecar::explain`: **absent, not broken.** A blank panel
+reads as a bug.
+
+### c4/b18/s06 — Gates and red run
+
+- **gates:** green. 412 unit + 5 spine + 15 end-to-end = **432 tests**.
+  The editor's own gate — `npm run build` — green.
+- **red run: 7 mutations, 7 red**, after two corrections:
+
+  ```
+  panel.rs  the panel keeps state of its own              the_panel_is_a_view            101 red
+  panel.rs  chat is not pulled out of the shared stream   the_conversation_comes_back    101 red
+  panel.rs  gate failures do not reach problems           gate_failures_go_to_problems   101 red
+  panel.rs  transcripts are dropped from the timeline     transcripts_go_to_the_dock     101 red
+  panel.rs  the document omits its version                the_document_describes_one     101 red
+  panel.rs  an unknown cycle is reported as zero          an_empty_journal_produces      101 red
+  panel.rs  a missing harness reads as broken             a_missing_harness_reads        101 red
+  ```
+
+**Both corrections are worth recording.**
+
+The first mutation *did not compile* — it replaced `if let Some(line) = …` with
+`if false {`, leaving `line` undefined. A mutation that does not build is not a
+red; it is a mutation that never ran. Re-aimed at
+`chat_line(record).filter(|_| false)`, which compiles and changes behaviour.
+
+The second came back green because the test compares **two views of the same
+records**, so it catches non-determinism and not any deterministic change. That
+is not a weak test — determinism *is* what "holds nothing of its own" means
+operationally — but it needs a mutation that introduces outside state. A static
+counter added to the metrics: red.
+
+That is five batches running where the red run found something the suite alone
+did not.
+
+### c4/b18/s07 — What is carried
+
+**`I-3`** lists five things the panel hosts: chat, the approvals queue, the
+current diff, the artifact view and a journal timeline — and *"approving from
+the panel opens the diff first."*
+
+Four are built. **The diff is not**, and therefore neither is approving from the
+panel. That is deliberate rather than unfinished: approving is
+`needs_confirmation()`, and a confirmation shown next to a diff that does not
+exist would be the exact thing `I-3` was written to prevent. It waits for the
+diff.
+
+Also delivered from earlier batches: **`A-5`** (artifacts render in the panel)
+and **`C-11`** (`/btw` from the panel path).
+
+**Batch 18 status:** 4 of 5 delivered, 1 carried, plus `A-5` and `C-11` closed
+from 🟡. 432 tests. 122 requirements done, 14 in progress.

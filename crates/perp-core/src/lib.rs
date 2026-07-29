@@ -25,6 +25,7 @@
 //! | [`os`] | `X-1`–`X-3`, `X-5`–`X-11` |
 //! | [`job`] | `X-4` — the only module allowed `unsafe` |
 //! | [`control`] | `O-3`, `O-4`, `O-6` |
+//! | [`panel`] | `I-1`–`I-5` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -75,6 +76,7 @@ pub mod local;
 pub mod metrics;
 pub mod lock;
 pub mod net;
+pub mod panel;
 pub mod phase;
 pub mod os;
 pub mod probe;
@@ -108,6 +110,7 @@ pub use link::{Link, Links, Mode, Role};
 pub use metrics::{Cycle, Snapshot};
 pub use job::{Containment, Job};
 pub use os::{Capability, Toolchain, WakeCheck};
+pub use panel::View;
 pub use lock::{Concurrency, Lock};
 pub use phase::{Machine, Measured, Park, Phase, Stop};
 pub use probe::{Capabilities, ModelFacts, ProbeCache};

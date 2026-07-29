@@ -411,7 +411,7 @@ step in flight.
 | ✅ ~~`C-8`~~ | `/btw <text>` is accepted at any time, acknowledged immediately, and never aborts the current step. |
 | ✅ ~~`C-9`~~ | Each `/btw` is classified into exactly one of: **steer** — applies to the current feature, injected at the next step boundary; **requirement** — filed to the requirements source with source `operator`; **constraint** — added to the policy for the rest of the cycle; **note** — journalled only. The classification is shown and is correctable with a follow-up. |
 | ✅ ~~`C-10`~~ | A `/btw` can never cross the approval boundary. It cannot approve a parked action, raise a budget, disable a gate, or reclassify a `never`. Those are explicit commands with their own confirmation. A casual aside must not be able to unlock the dangerous half of the harness. |
-| 🟡 `C-11` | `/btw` is available from the CLI, the JustCode panel, and the reply path of the notification sink (`O-6`), and is queued when the engine is not running — the next cycle picks it up at Phase B. |
+| ✅ ~~`C-11`~~ | `/btw` is available from the CLI, the JustCode panel, and the reply path of the notification sink (`O-6`), and is queued when the engine is not running — the next cycle picks it up at Phase B. |
 | ✅ ~~`C-12`~~ | Queued and unclassified `/btw` items appear in `state.md`, so they survive a restart and are visible to whoever resumes the loop. |
 
 ### 8.3 Artifacts
@@ -425,7 +425,7 @@ other durable output of a cycle deserves the same treatment.
 | ✅ ~~`A-2`~~ | Artifacts are generated from the journal, are self-contained (no external fetches, no CDN, assets inlined), and are written under `docs/perpetum/artifacts/` with a stable name per kind, so a re-render replaces rather than accumulates. |
 | 🟡 `A-3` | The progress board is regenerated at step 7 of every feature (Perpetum Appendix 2) — file and rendered view both. |
 | ✅ ~~`A-4`~~ | Rendering locally is `auto`. Publishing an artifact anywhere outside the workspace is `approve` — that is Perpetum 0.4's "posting publicly", regardless of how private the destination claims to be. |
-| 🟡 `A-5` | Artifacts render in the JustCode panel and standalone in a browser, with no server and no build step. |
+| ✅ ~~`A-5`~~ | Artifacts render in the JustCode panel and standalone in a browser, with no server and no build step. |
 | ✅ ~~`A-6`~~ | Every artifact carries provenance: cycle, batch, commit sha, generation time, and the links used. An artifact without provenance is decoration. |
 | ✅ ~~`A-7`~~ | Artifact generation is never on the critical path. A failed render is a warning; it never blocks a feature or fails a gate. |
 
@@ -449,11 +449,11 @@ Speculative, and the reason this document lives in this repo.
 
 | id | Requirement |
 |---|---|
-| `I-1` | The engine is a Rust core with two front-ends: a CLI (`perp run`, `perp chat`, `perp status`, `perp approve`, `perp rewind`) and a JustCode panel. |
-| `I-2` | In JustCode the engine runs as a **sidecar process**, not in the Tauri main process. An agent loop must not be able to take the editor down with it, and must outlive the editor window. |
-| `I-3` | The panel hosts chat, the approvals queue, the current diff, the artifact view and a journal timeline. Approving from the panel opens the diff first. |
-| `I-4` | Existing editor surfaces are reused where they fit: the Problems panel for gate failures, the terminal dock for gate transcripts, tabs for the files under edit. |
-| `I-5` | The panel is a view onto the journal, not a second source of truth. Closing the editor does not stop the loop; reopening re-attaches. |
+| ✅ ~~`I-1`~~ | The engine is a Rust core with two front-ends: a CLI (`perp run`, `perp chat`, `perp status`, `perp approve`, `perp rewind`) and a JustCode panel. |
+| ✅ ~~`I-2`~~ | In JustCode the engine runs as a **sidecar process**, not in the Tauri main process. An agent loop must not be able to take the editor down with it, and must outlive the editor window. |
+| 🟡 `I-3` | The panel hosts chat, the approvals queue, the current diff, the artifact view and a journal timeline. Approving from the panel opens the diff first. |
+| ✅ ~~`I-4`~~ | Existing editor surfaces are reused where they fit: the Problems panel for gate failures, the terminal dock for gate transcripts, tabs for the files under edit. |
+| ✅ ~~`I-5`~~ | The panel is a view onto the journal, not a second source of truth. Closing the editor does not stop the loop; reopening re-attaches. |
 
 ---
 

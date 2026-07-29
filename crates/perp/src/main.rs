@@ -18,7 +18,9 @@ use perp_core::chat;
 use perp_core::control::{Channel, Control, Rewind};
 use perp_core::command::{self, Chain, Command, Input, Subject};
 use perp_core::engine::{Engine, Gates};
+use perp_core::approval::Queue as Approvals;
 use perp_core::metrics::Snapshot;
+use perp_core::panel::View;
 use perp_core::phase::{Machine, Measured, Phase};
 use perp_core::gate::{self, Gate};
 use perp_core::git::Repo;
@@ -117,6 +119,11 @@ usage:
       by reverting rather than resetting, so nothing is destroyed on either
       side. The journal keeps every superseded step; it is append-only.
 
+  perp panel [--root <dir>]
+      One JSON document of everything a panel shows: position, spend, timeline,
+      chat, pending /btw and artifacts. Rendered from the journal every time —
+      the panel is a view, not a second source of truth.
+
   perp cost [--root <dir>]
       Replay the journal and report what the loop spent, by link and by role.
       Local links show tokens and time and no money.
@@ -165,6 +172,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("watch") => cmd_watch(&args[1..]),
         Some("control") => cmd_control(&args[1..]),
         Some("rewind") => cmd_rewind(&args[1..]),
+        Some("panel") => cmd_panel(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -1079,4 +1087,31 @@ fn cmd_rewind(args: &[&str]) -> std::result::Result<(), String> {
 fn ask_control(binding: &Binding, control: &Control) -> std::result::Result<String, String> {
     Channel::at(binding.root()).ask(control).map_err(|e| e.to_string())?;
     Ok(format!("{control} — takes effect at the next step boundary"))
+}
+
+/// The panel's data surface (`I-1`, `I-5`). One JSON document from the journal,
+/// which is what the editor renders — it holds nothing of its own.
+fn cmd_panel(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+
+    let dir = binding.root().join("docs/perpetum/artifacts");
+    let artifacts = std::fs::read_dir(&dir)
+        .map(|entries| {
+            let mut names: Vec<String> = entries
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .filter(|name| name.ends_with(".html"))
+                .collect();
+            names.sort();
+            names
+        })
+        .unwrap_or_default();
+
+    // Approvals live in a running engine's memory, so a panel reading the
+    // journal alone reports none rather than guessing at some.
+    let view = View::of(&records, &Approvals::new(), artifacts, time::now());
+    println!("{}", view.to_json());
+    Ok(())
 }

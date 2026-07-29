@@ -619,6 +619,62 @@ fn files_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<FileTarget> {
 /// Files passed on the command line — how Explorer hands over a double-clicked
 /// document once the extensions are associated with the app. Uses `args_os` so a
 /// path that is not valid Unicode is decoded lossily rather than panicking.
+/// Run the Perpetum harness and hand back what it printed (`I-2`).
+///
+/// The harness is a **sidecar**: a separate process this editor invokes, never
+/// a library it links. An agent loop must not be able to take the editor down
+/// with it, and must outlive the editor window — both are properties of being
+/// a different process rather than of careful coding.
+///
+/// Three rules here, and they are the whole function:
+///
+/// - **The subcommand comes from a fixed list.** The panel cannot ask for an
+///   arbitrary one, so a bug or an injected string in the front-end cannot turn
+///   into `perp rewind --approve`. Anything that needs an approval is not on
+///   the list at all.
+/// - **Arguments go as argv, never through a shell.** No quoting to get wrong.
+/// - **A missing binary is an ordinary answer.** JustCode must build, start and
+///   work with `crates/` deleted, so "not installed" comes back as a message
+///   rather than an error the panel has to special-case.
+#[tauri::command]
+fn perp_run(subcommand: String, args: Vec<String>, root: String) -> Result<String, String> {
+    // Read-only subcommands only. `run`, `rewind`, `control` and `approve`
+    // change what the loop does and are deliberately absent: the panel shows
+    // the journal, and acting on it is done where the confirmation is.
+    const ALLOWED: &[&str] = &["panel", "state", "cost", "explain", "check", "links", "version"];
+    if !ALLOWED.contains(&subcommand.as_str()) {
+        return Err(format!(
+            "`{subcommand}` is not a panel subcommand. The panel reads; it does not act."
+        ));
+    }
+
+    let program = std::env::var("PERP_BIN").unwrap_or_else(|_| "perp".to_string());
+    let mut command = std::process::Command::new(&program);
+    command.arg(&subcommand).args(&args).arg("--root").arg(&root);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    match command.output() {
+        Ok(output) if output.status.success() => {
+            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        }
+        Ok(output) => Err(format!(
+            "perp {subcommand} exited {}: {}",
+            output.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(format!(
+            "not-installed: the Perpetum harness ({program}) was not found.              JustCode works without it; the panel has nothing to show."
+        )),
+        Err(e) => Err(format!("could not run {program}: {e}")),
+    }
+}
+
 #[tauri::command]
 fn startup_files() -> Vec<FileTarget> {
     files_from_args(std::env::args_os().map(|arg| arg.to_string_lossy().into_owned()))
@@ -1518,6 +1574,7 @@ pub fn run() {
             open_url,
             run_script,
             reveal_in_file_manager,
+            perp_run,
             startup_files,
             report_ready,
             associated_extensions,

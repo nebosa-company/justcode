@@ -1747,3 +1747,135 @@ button.primary:hover {
 #app.hide-statusbar #statusbar {
   display: none;
 }
+
+/* The Perpetum panel (`I-3`). Docked right, and styled from the editor's own
+   variables so it follows the theme rather than declaring its own colours. */
+#perp-panel {
+  display: flex;
+  flex-direction: column;
+  width: 26rem;
+  min-width: 18rem;
+  max-width: 40vw;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.85rem;
+}
+
+#perp-panel[hidden] {
+  display: none;
+}
+
+.perp-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.perp-where {
+  font-weight: 600;
+}
+
+.perp-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.perp-ok { color: var(--ok, #2e8b57); }
+.perp-bad { color: var(--error, #c0392b); }
+.perp-flight { opacity: 0.75; font-style: italic; }
+
+.perp-tabs {
+  display: flex;
+  gap: 0.15rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.perp-tabs button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0.2rem 0.45rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  opacity: 0.7;
+}
+
+.perp-tabs button:hover { background: var(--hover, rgba(127, 127, 127, 0.15)); }
+.perp-tabs button.active { opacity: 1; font-weight: 600; }
+.perp-tabs .perp-refresh { margin-left: auto; }
+
+.perp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+}
+
+.perp-empty,
+.perp-error {
+  opacity: 0.7;
+  line-height: 1.5;
+}
+
+.perp-error { color: var(--error, #c0392b); opacity: 1; }
+
+.perp-timeline,
+.perp-btw,
+.perp-artifacts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.perp-timeline li,
+.perp-btw li,
+.perp-artifacts li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.perp-timeline li.bad .perp-summary { color: var(--error, #c0392b); }
+
+.perp-step,
+.perp-class {
+  opacity: 0.6;
+  white-space: nowrap;
+  font-size: 0.9em;
+}
+
+.perp-summary { flex: 1; min-width: 8rem; }
+.perp-reqs { opacity: 0.55; font-size: 0.9em; white-space: nowrap; }
+
+.perp-link {
+  background: none;
+  border: none;
+  color: var(--accent, #3a7bd5);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.perp-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.perp-turn p { margin: 0.15rem 0 0; white-space: pre-wrap; }
+.perp-speaker { opacity: 0.6; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
+.perp-partial { opacity: 0.7; font-style: italic; font-size: 0.85em; }
