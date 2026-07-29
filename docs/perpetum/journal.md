@@ -1415,3 +1415,81 @@ first.
 It still cannot drive itself. The loop that would call any of this — the phase
 machine, the tool host, the budget — is batches 11 and 12, and until then the
 thing running Perpetum is still a person following a document.
+
+
+---
+---
+
+# Perpetum journal — cycle 3
+
+Branch `perp/c3/init`. The cycle's goal in one line, from the operator: **stop
+being the thing that types `perp gate`.**
+
+## Phase B — Requirements gathering, 2026-07-29
+
+### c3/B/s01 — The market pass that was due
+- Cycle 2 skipped this source because it was the same day. The day changed, so
+  it was re-read rather than skipped again.
+- **Nothing moved in 24 hours.** `deepseek-chat` and `deepseek-reasoner` are now
+  fully retired — calls route nowhere — and V4 pricing is unchanged. The
+  configuration is still correct, which is the point: had an id moved, `M-14`
+  turns it into a startup error instead of a failure on the eleventh call.
+
+### c3/B/s02 — User voice, and four decisions
+- **Every pending decision was answered**, after two cycles of silence:
+  `I-3` full panel, `O-6` outbound-only, `G-13` split, `windows-sys` approved,
+  and the scope instruction *make it self-running first*.
+- **A method finding worth more than any of them:** the same three conflicts,
+  presented *as a batch* per Perpetum C.6, went unanswered twice. Presented
+  **one at a time**, on the operator's instruction, they were answered in
+  minutes. C.6 is right that conflicts must not block the cycle; it is wrong
+  that batching them is the way to ask.
+
+### c3/B/s03 — The rest
+- Security: `S-8` still open from the cycle 2 release review, now scheduled into
+  batch 15. Crash, support and analytics unchanged and unavailable.
+- Backlog: 152 requirements, 64 done, **88 remaining**.
+
+**Phase B exit:** every source read or recorded, dated. ✅
+
+---
+
+## Phase C — Prioritisation
+
+### c3/C/s04 — Conflicts resolved, and the texts amended
+- All three requirement texts were **rewritten to say what was decided**, not
+  annotated with a note. A requirement that still describes the rejected design
+  is a trap for whoever reads it next.
+- **`I-3` was not my recommendation.** I proposed the read-only panel and the
+  operator chose the full one. Option B carried a condition — *"clause 6 must be
+  edited in the same breath"* — and it has been honoured: vision clause 6 now
+  records the decision and keeps only its enforceable half, that the harness is
+  a sidecar and the editor must run without it. A vision quietly contradicted
+  stops being able to detect the next conflict.
+- `X-4` un-gated. `M-25` stays ⛔ and is in no batch: LM Studio does not expose
+  per-request device selection, measured rather than assumed.
+- **Conflicting count is now zero**, for the first time since cycle 1.
+
+### c3/C/s05 — A plan that covers all 88
+- Fifteen batches, in
+  [`../prioritization/batches-cycle3.md`](../prioritization/batches-cycle3.md) —
+  batches 11–15 this cycle, 16–25 named so the plan is complete rather than
+  open-ended.
+- **Batch 25 is reserved for what cycles 3 and 4 mint.** Eleven requirements
+  were minted while building across two cycles and none were foreseeable from a
+  document; planning fifteen batches and pretending nothing new appears would be
+  the optimism Perpetum C.4 warns about.
+- **The critical path is two batches.** The tool host with its permission
+  classifier, then the loop driver. After batch 12, `perp run` executes a batch
+  on its own and cycles 4–5 are the loop building the rest of itself under its
+  own gates.
+- **The classifier ships with the tool host, not after it.** An unattended loop
+  that can act before it can refuse is the one shape this design must never
+  ship, even for one batch.
+- **Security enforcement is batch 15, not batch 11** — against instinct, and
+  deliberately. `S-1`–`S-8` are enforcement *of* the tool host and the
+  transport; a policy written against an imaginary tool host is a policy that
+  will be wrong.
+
+**Phase C exit:** 15 batches written covering every remaining requirement;
+conflicts resolved rather than parked; state updated. ✅

@@ -118,8 +118,24 @@ the other seven requirements in that batch were.
 
 ---
 
-## Asked
+## Answered — 2026-07-29
 
-CONFLICT-1 and CONFLICT-2 presented to the operator on 2026-07-28 as a batch,
-per C.6. CONFLICT-3 added the same day, from batch 4. The cycle continued
-without waiting (C.6). No answers recorded yet.
+All three, after surviving two full cycles of being asked at the end of a phase.
+Presented one at a time on the operator's instruction, which is worth recording:
+asked as a batch they went unanswered twice; asked singly they were answered in
+minutes.
+
+| | Decision | Not the recommendation? |
+|---|---|---|
+| CONFLICT-1 `I-3` | **Full panel as specified** | Yes — I recommended the read-only panel. The operator chose the fuller one, so **vision clause 6 was rewritten in the same breath**. That was the condition attached to option B and it has been honoured, not skipped: a vision quietly contradicted stops being able to detect the next conflict. |
+| CONFLICT-2 `O-6` | **Outbound only, `/btw` the sole return path** | No — recommendation taken. Approvals never arrive over the network. |
+| CONFLICT-3 `G-13` | **Split the requirement** | No — recommendation taken. Churn is never committed; the journal and its siblings are documentation, deliberately versioned. |
+
+Each requirement's text in [`../perpetum.md`](../perpetum.md) was **amended to
+say what was decided**, rather than left as written with a note attached. A
+requirement that still describes the rejected design is a trap for whoever reads
+it next.
+
+Separately, `X-4`'s dependency (`windows-sys`) was approved, and it is no longer
+gated. `M-25` remains external-gated and is not a conflict — it is a limitation
+of LM Studio, measured in `c2/b10/s01`.

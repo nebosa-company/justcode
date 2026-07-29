@@ -47,9 +47,17 @@ built.
    consumes endpoints; it does not become one.
 5. **Never a second source of truth.** The journal on disk is the truth. Any UI,
    board or artifact is a view of it.
-6. **Never an IDE.** JustCode stays a small editor. The harness is a sidecar
-   process with a panel, and the editor must run perfectly with the harness
-   absent, uninstalled, or crashed.
+6. **Never an IDE *by accident*.** Amended 2026-07-29, when the operator chose
+   the full panel in `I-3`: chat, the approvals queue, diff review, artifacts
+   and a journal timeline all live in JustCode. That is a deliberate decision,
+   not drift, and it is written here so the next conflict check measures against
+   what was actually decided.
+
+   What did not change is the enforceable half: the harness is a **sidecar**.
+   The editor must run perfectly with it absent, uninstalled, or crashed, and
+   nothing under `src/` or `src-tauri/` may depend on `crates/`. A conflict
+   check can test that; "small" was never testable, which is why the clause
+   read as a rule and behaved as a mood.
 7. **Never a team product.** No multi-user state, no shared queue, no
    collaboration server.
 8. **Never a benchmark chaser.** No feature exists to make an autonomy score
