@@ -170,7 +170,7 @@ An unattended loop with no ceiling is a billing incident.
 
 | id | Requirement |
 |---|---|
-| 🟡 `L-17` | One feature in flight at a time by default. Batch-level parallelism is opt-in and requires per-feature git worktrees (`G-11`). |
+| ✅ ~~`L-17`~~ | One feature in flight at a time by default. Batch-level parallelism is opt-in and requires per-feature git worktrees (`G-11`). |
 | ✅ ~~`L-18`~~ | Gate runs are serialised per workspace. Two builds in one target directory is a false red. |
 | ✅ ~~`L-19`~~ | A parked approval never blocks the loop: the engine moves to the next eligible item and revisits parked items at the next phase boundary (Perpetum E, F.3). |
 | 🟡 `L-20` | Exactly one writer at a time. While the loop holds the write lock, chat is read-only unless paused (`C-3`). |
@@ -256,7 +256,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ✅ ~~`M-12`~~ | Prompts are assembled **stable-prefix first**: system rules, binding, tool schemas, then slowly-changing state, then the volatile task tail. Never reorder the stable region between calls in a batch. |
 | ✅ ~~`M-13`~~ | Context compaction is a first-class step run by the `compactor` role on a local link. Compaction output is journalled, so what was dropped is recoverable. |
 | ✅ ~~`M-14`~~ | Model ids, prices, context limits and endpoint paths live in config, refreshed from the provider's model list at startup. A deprecated or missing model id is a startup error naming the replacement, never a silent fallback. |
-| `M-24` | Declared credentials are checked when the project is bound, not at first use. A link whose `auth_env` names an unset variable must fail `perp bind`, not the eleventh call of a batch — by which point the loop has spent an hour to discover a typo. Found in `c2/b8/s06`, where a local link with an optional token failed before it ever tried to connect. |
+| ✅ ~~`M-24`~~ | Declared credentials are checked when the project is bound, not at first use. A link whose `auth_env` names an unset variable must fail `perp bind`, not the eleventh call of a batch — by which point the loop has spent an hour to discover a typo. Found in `c2/b8/s06`, where a local link with an optional token failed before it ever tried to connect. |
 | ✅ ~~`M-15`~~ | Per-link concurrency limits are respected. One GPU serving one model does not want four parallel requests. |
 
 ### 3.4 Local-server realities
@@ -290,10 +290,10 @@ means prompt *layout* is an engineering requirement, not a style preference.
 
 | id | Requirement |
 |---|---|
-| `T-8` | Windows host is the primary runtime — this repo is a Tauri/Windows project and the loop must run where the build runs. |
+| ✅ ~~`T-8`~~ | Windows host is the primary runtime — this repo is a Tauri/Windows project and the loop must run where the build runs. |
 | `T-9` | Runtimes are pluggable: host, WSL2, container. The gate commands come from `binding.md`; the runtime decides where they execute. |
-| `T-10` | Work happens on a branch, never on `main` (`G-1`). |
-| `T-11` | A `BLOCKED` feature leaves the tree clean: its work is committed to its own branch or shelved, never abandoned half-applied in the working copy. |
+| ✅ ~~`T-10`~~ | Work happens on a branch, never on `main` (`G-1`). |
+| ✅ ~~`T-11`~~ | A `BLOCKED` feature leaves the tree clean: its work is committed to its own branch or shelved, never abandoned half-applied in the working copy. |
 
 ### 4.3 Approvals
 
@@ -326,7 +326,7 @@ actually did, and the only thing that can undo it.
 | ✅ ~~`G-2`~~ | One feature, one commit (or a tight, ordered series). Commit messages follow the binding's convention and carry trailers: requirement ids, journal step id, and the link + model + quantization that authored the change. A line of code traces back to a requirement and to the model that wrote it. |
 | ✅ ~~`G-3`~~ | The staged set is computed from the step's touched files. `git add -A` and `git commit -a` are forbidden — an unattended loop must never sweep up an unrelated change it did not make. |
 | ✅ ~~`G-4`~~ | Hooks run and are never bypassed. `--no-verify` is `never` (`T-13`). A hook failure is a gate failure and follows Perpetum 0.5. |
-| `G-5` | Local commits are `auto`. Push, PR/MR creation, tagging a release, and publishing anything are `approve` (`T-12`, `S-7`). |
+| ✅ ~~`G-5`~~ | Local commits are `auto`. Push, PR/MR creation, tagging a release, and publishing anything are `approve` (`T-12`, `S-7`). |
 | ✅ ~~`G-6`~~ | Every gate transcript records the exact commit sha it ran against (`V-2`). A green gate at a sha that no longer exists is not evidence and does not count. |
 
 ### 5.2 History as a signal, and as an undo
@@ -335,11 +335,11 @@ actually did, and the only thing that can undo it.
 |---|---|
 | ✅ ~~`G-7`~~ | `log`, `blame`, `show` and `diff` are Phase B and C inputs: churn hotspots feed prioritisation, and blame answers "was this already built?" faster than grep alone (Perpetum 0.7, `V-1`). |
 | ✅ ~~`G-8`~~ | Feature commits are contiguous and recorded in the journal, so a single feature can be reverted cleanly. This is the git half of rewind (`O-4`). |
-| `G-9` | Conflict handling is bounded: one automated attempt on non-overlapping hunks, then park as `blocked` with the conflict text verbatim. The loop never resolves a semantic conflict by picking a side quietly. |
+| ✅ ~~`G-9`~~ | Conflict handling is bounded: one automated attempt on non-overlapping hunks, then park as `blocked` with the conflict text verbatim. The loop never resolves a semantic conflict by picking a side quietly. |
 | ✅ ~~`G-10`~~ | Rewriting published history, force-push, and `reset --hard` on a dirty tree are `never`. Any destructive git operation stashes first and journals the stash ref. |
-| `G-11` | Worktrees are lifecycle-managed: created per feature when `L-17` parallelism is on, removed on merge or abandon, never left stale. |
-| `G-12` | Submodules, LFS and in-repo hooks are detected at binding time and either supported or declared unsupported loudly. A loop that silently skips a submodule ships half a change. |
-| `G-13` | The loop never commits **churn** — caches, build output, `crates/target/`, scratch files — and `.gitignore` is respected by every tool. The journal, state file, board and artifacts are **documentation, deliberately versioned**: they are the evidence a reviewer reads, and what makes `perp resume` work on a fresh clone. Resolved 2026-07-29, after implementing batch 4 showed the original wording contradicted the binding it was written alongside. |
+| ✅ ~~`G-11`~~ | Worktrees are lifecycle-managed: created per feature when `L-17` parallelism is on, removed on merge or abandon, never left stale. |
+| ✅ ~~`G-12`~~ | Submodules, LFS and in-repo hooks are detected at binding time and either supported or declared unsupported loudly. A loop that silently skips a submodule ships half a change. |
+| ✅ ~~`G-13`~~ | The loop never commits **churn** — caches, build output, `crates/target/`, scratch files — and `.gitignore` is respected by every tool. The journal, state file, board and artifacts are **documentation, deliberately versioned**: they are the evidence a reviewer reads, and what makes `perp resume` work on a fresh clone. Resolved 2026-07-29, after implementing batch 4 showed the original wording contradicted the binding it was written alongside. |
 | ✅ ~~`G-14`~~ | Repo state is asserted before each batch: expected branch, clean tree, no rebase or merge in progress, no detached HEAD. A surprising state parks the cycle rather than committing into it. |
 
 ---
@@ -377,7 +377,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`V-2`~~ | **No self-reported success.** A gate is green only if the engine ran the command itself and stored the transcript: command, cwd, commit sha, exit code, output tail, duration, timestamp. Model prose asserting success is not evidence and is never written to a status marker. |
 | ✅ ~~`V-3`~~ | **The red run.** A new test must be executed against the tree *without* the change and observed to fail, then with the change and observed to pass. Both transcripts are stored. A test that passes in both runs does not satisfy Perpetum's gate 4, and the feature stays open. |
 | ✅ ~~`V-4`~~ | **Test tampering is a hard error.** Deleting, skipping, weakening an assertion or loosening a matcher in an existing test during a gate-fix step aborts the step. If the test is genuinely wrong, that is a requirement — filed and cited, not an edit made in passing. |
-| `V-5` | **Independent verification.** The verifier role must resolve to a different link than the one that authored the change. Self-review by the same model on the same context is not review. |
+| ✅ ~~`V-5`~~ | **Independent verification.** The verifier role must resolve to a different link than the one that authored the change. Self-review by the same model on the same context is not review. |
 | ✅ ~~`V-6`~~ | **Exercise the artefact.** Once per batch, run the real thing — launch the app, open the page, run the CLI — and store the evidence (exit code, screenshot, log). Perpetum 0.7's second half is a step, not a suggestion. |
 | ✅ ~~`V-7`~~ | Status markers are derived from journal evidence. The engine writes them; the model proposes. |
 | ✅ ~~`V-8`~~ | Gated items (`external-gated`, `credential-gated`, `approval-gated`, `blocked`) are counted separately from done, forever, and are never re-picked without their reason changing. |
@@ -462,13 +462,13 @@ Speculative, and the reason this document lives in this repo.
 | id | Requirement |
 |---|---|
 | ✅ ~~`S-1`~~ | Instructions come from the operator and from `binding.md` alone. Repository content, dependency code, issue text, web pages and tool output are data (`T-7`). Local models are *more* susceptible to injection, not less, and the boundary is enforced by the harness rather than by prompting. |
-| `S-2` | Secrets are referenced by environment variable name in config, never stored in it. Keys are never placed in a prompt, a journal record, an artifact, or a commit. |
+| ✅ ~~`S-2`~~ | Secrets are referenced by environment variable name in config, never stored in it. Keys are never placed in a prompt, a journal record, an artifact, or a commit. |
 | ✅ ~~`S-3`~~ | Outbound prompt content is redacted against a configurable secret pattern set before it reaches any `cloud` link. |
 | ✅ ~~`S-4`~~ | Egress policy: an allowlist of hosts the loop may reach. Everything else is refused and journalled. |
 | ✅ ~~`S-5`~~ | `credential-gated` items are recognised and parked. The harness never invents, requests, or types a credential to get past a gate. |
 | ✅ ~~`S-6`~~ | A `local-only` run makes exactly zero outbound connections beyond the configured local and LM Link peers, and this is assertable from the journal. |
 | ✅ ~~`S-8`~~ | Request bodies are written to a file while a call is in flight, and that file inherits the ambient temp directory. On this machine `TMP` is `D:\Temp` — a shared root-level directory, not the per-user one — so a prompt containing repository content is briefly readable by any other user of the machine. The body must go in a private directory with restrictive permissions, or through a pipe. Found in the cycle 2 Phase E security review; the key itself is unaffected, since it never touches disk. |
-| 🟡 `S-7` | Push, PR creation, tagging and publishing are `approve` (`G-5`). Nothing leaves the machine unattended. |
+| ✅ ~~`S-7`~~ | Push, PR creation, tagging and publishing are `approve` (`G-5`). Nothing leaves the machine unattended. |
 
 ---
 
@@ -482,12 +482,12 @@ Speculative, and the reason this document lives in this repo.
 | `N-4` | Cross-platform: Windows first, then Linux/WSL2 and macOS. Path handling, line endings and shell quoting are tested on Windows, not assumed. |
 | ✅ ~~`N-5`~~ | Deterministic replay of the journal for inspection: the same journal renders the same state file and the same board, on any machine. |
 | ✅ ~~`N-6`~~ | Gates run without network access wherever the project allows it, so a flaky connection cannot manufacture a red. |
-| `N-7` | Engine overhead is bounded and reported: tokens spent on compaction, classification and routing are counted separately from work tokens. |
+| ✅ ~~`N-7`~~ | Engine overhead is bounded and reported: tokens spent on compaction, classification and routing are counted separately from work tokens. |
 | ✅ ~~`N-8`~~ | Config, journal and artifact formats are versioned with forward-compatible readers. A loop mid-cycle must survive a harness upgrade. |
 | ✅ ~~`N-9`~~ | No panic on a runtime-fallible path. Parsing, IO and process execution return typed errors; `unwrap`/`expect` appear only where the invariant is local and proven. A harness that panics mid-batch cannot honour `L-7`. |
 | ✅ ~~`N-10`~~ | Derived files (state, board, artifacts) are written atomically — temp file, then rename — so a crash mid-write cannot leave a truncated projection that contradicts the journal. |
 | ✅ ~~`N-12`~~ | End-to-end tests drive `perp` as a subprocess, not just its library. Perpetum D extends E2E coverage every five batches; unit tests over a library cannot catch an argument parsed wrongly, a path resolved from the wrong root, or an exit code that lies. |
-| `N-11` | Dependency policy: standard library first; every third-party crate carries a recorded reason at the point it is added; the workspace builds from a warm cache with no network. A cold-cache failure blocks the batch rather than silently changing the plan. |
+| ✅ ~~`N-11`~~ | Dependency policy: standard library first; every third-party crate carries a recorded reason at the point it is added; the workspace builds from a warm cache with no network. A cold-cache failure blocks the batch rather than silently changing the plan. |
 
 ---
 

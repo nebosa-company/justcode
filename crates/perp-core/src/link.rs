@@ -410,6 +410,24 @@ impl Links {
     /// which is right for a local one and a visible zero for a cloud one —
     /// a bill of nothing next to a cloud link is a configuration bug you can
     /// see, rather than a guess at what DeepSeek costs this week.
+    /// Every link whose `auth_env` names a variable that is not set (`M-24`).
+    ///
+    /// Checked when the project is bound, not at first use. A typo in a
+    /// variable name that surfaces on the eleventh call of a batch has already
+    /// cost an hour, and the 401 it produces then blames the request rather
+    /// than the configuration. Found in `c2/b8/s06`.
+    ///
+    /// Returns the **variable names**, never their values (`S-2`).
+    pub fn missing_credentials(&self) -> Vec<(String, String)> {
+        self.links
+            .iter()
+            .filter_map(|link| {
+                let name = link.auth_env.as_ref()?;
+                std::env::var(name).is_err().then(|| (link.name.clone(), name.clone()))
+            })
+            .collect()
+    }
+
     pub fn price(&self, name: &str) -> crate::cost::Price {
         self.prices
             .iter()
@@ -624,6 +642,37 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_credential_is_checked_when_the_project_is_bound() {
+        // `M-24`. A typo that surfaces on the eleventh call has already cost an
+        // hour, and the 401 it produces then blames the request rather than the
+        // configuration.
+        std::env::remove_var("PERP_DEFINITELY_UNSET_KEY");
+        let links = Links::parse(
+            "```perp-links
+             link.here.kind = lmstudio
+             link.here.base_url = http://localhost:1234
+             link.here.model = small
+             link.cloud.kind = deepseek
+             link.cloud.base_url = https://api.deepseek.com
+             link.cloud.model = m
+             link.cloud.auth_env = PERP_DEFINITELY_UNSET_KEY
+             role.chat = here
+```
+",
+        )
+        .expect("parse");
+
+        let missing = links.missing_credentials();
+        assert_eq!(missing.len(), 1, "{missing:?}");
+        assert_eq!(missing[0].0, "cloud");
+        assert_eq!(missing[0].1, "PERP_DEFINITELY_UNSET_KEY", "the name, never the value");
+
+        std::env::set_var("PERP_DEFINITELY_UNSET_KEY", "sk-should-never-appear");
+        assert!(links.missing_credentials().is_empty(), "set is not missing");
+        std::env::remove_var("PERP_DEFINITELY_UNSET_KEY");
+    }
 
     const CONFIG: &str = "\
 ```perp-links

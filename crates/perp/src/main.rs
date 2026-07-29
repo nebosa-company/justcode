@@ -21,6 +21,7 @@ use perp_core::engine::{Engine, Gates};
 use perp_core::approval::Queue as Approvals;
 use perp_core::metrics::Snapshot;
 use perp_core::panel::View;
+use perp_core::repo::Survey;
 use perp_core::phase::{Machine, Measured, Phase};
 use perp_core::gate::{self, Gate};
 use perp_core::git::Repo;
@@ -226,6 +227,44 @@ fn cmd_bind(args: &[&str]) -> Result<()> {
             println!("  {key:<22} {value}");
         }
     }
+
+    // `G-12`: submodules, LFS and in-repo hooks are detected here and declared
+    // loudly. A loop that silently skips a submodule ships half a change and
+    // passes its own gates doing it.
+    let survey = Survey::of(binding.root());
+    println!();
+    println!("repository");
+    print!("{}", survey.render());
+
+    // `M-24`: a link whose `auth_env` names an unset variable fails here, not
+    // on the eleventh call of a batch — by which point the loop has spent an
+    // hour to discover a typo, and the 401 blames the request rather than the
+    // configuration.
+    if let Ok(path) = binding.resolve("path.links") {
+        if let Ok(links) = Links::load(&path) {
+            let missing = links.missing_credentials();
+            if missing.is_empty() {
+                println!("credentials      every declared link's variable is set");
+            } else {
+                println!();
+                for (link, variable) in &missing {
+                    // The variable name, never a value (`S-2`).
+                    println!("link `{link}` needs ${variable}, which is not set");
+                }
+                return Err(perp_core::Error::unbound(
+                    "credentials",
+                    format!("{} link(s) declare a variable that is not set (`M-24`)", missing.len()),
+                ));
+            }
+        }
+    }
+
+    if !survey.is_safe_to_run() {
+        return Err(perp_core::Error::refused(
+            "repository",
+            "has a feature the loop does not support (`G-12`). Run attended, or remove it              from the workspace",
+        ));
+    }
     Ok(())
 }
 
@@ -368,6 +407,10 @@ fn cmd_cost(args: &[&str]) -> std::result::Result<(), String> {
         // report that rounds every real amount to 0.0000 is decoration.
         total.charge
     );
+
+    // `N-7`: the harness talking to itself, counted apart from the work.
+    println!();
+    print!("{}", perp_core::cost::Split::of(&ledger).render());
 
     println!("
 by link");

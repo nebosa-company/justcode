@@ -2668,3 +2668,152 @@ and **`C-11`** (`/btw` from the panel path).
 
 **Batch 18 status:** 4 of 5 delivered, 1 carried, plus `A-5` and `C-11` closed
 from 🟡. 432 tests. 122 requirements done, 14 in progress.
+
+
+---
+
+## Phase D — Batch 19, the completion batch
+
+Branch `perp/c4/b19`. Thirteen requirements — seven built, six verified and
+marked, one carried requirement closed by wiring the path that made it
+reachable.
+
+### c4/b19/s01 — `M-24`, and it caught something on the first run
+
+*A link whose `auth_env` names an unset variable must fail `perp bind`, not the
+eleventh call of a batch — by which point the loop has spent an hour to discover
+a typo.*
+
+Built, wired into `perp bind`, and it failed immediately on this machine:
+
+```
+$ perp bind --root .
+link `ds-fast` needs $DEEPSEEK_API_KEY, which is not set
+perp: binding key `credentials`: 1 link(s) declare a variable that is not set
+```
+
+That is correct and it is the point. The variable really is unset here, and
+before this the loop would have discovered it by spending real time and then
+reporting a 401 that blames the request rather than the configuration.
+
+The report names the **variable**, never a value (`S-2`).
+
+### c4/b19/s02 — `G-12`: declared loudly, or not run at all
+
+Submodules, LFS and in-repo hooks are detected at binding time. Submodules and
+LFS are **NOT SUPPORTED** and `perp bind` refuses; in-repo hooks are supported
+and reported, because `--no-verify` is already refused (`G-4`) so they run, and
+that is the intended behaviour rather than a gap.
+
+The failure this prevents is quiet: the loop stages explicit paths (`G-3`), so a
+change spanning a submodule would be committed half-applied — and would pass
+every gate the harness runs while doing it.
+
+### c4/b19/s03 — `G-9`: there is no second attempt to make
+
+The requirement says *one automated attempt on non-overlapping hunks, then park*.
+Building it produced a simplification worth recording:
+
+**git already merges the non-overlapping hunks itself.** It only reports a
+conflict when they overlap. So the "one automated attempt" is the merge command,
+and anything git could not do is semantic — which is exactly what the second
+half of the requirement forbids touching.
+
+So `read_merge` classifies and stops. The conflict text goes in the journal
+**verbatim** (Perpetum 0.5): a summarised conflict is one nobody can resolve
+from the record.
+
+### c4/b19/s04 — `G-11` and the `L-17` marker I nearly got wrong
+
+Worktrees are created per feature, listed from **git** rather than from a list
+the harness keeps — a remembered list goes stale exactly when it matters — and
+`stale()` reports trees whose directory is gone.
+
+They live in a **sibling** directory, never inside the repository: a worktree
+under the repo is a directory the loop's own globs walk into and whose files its
+gates compile twice.
+
+**The near-miss.** Having built `G-11`, I marked `L-17` ✅ — and then checked.
+`Engine::run` still passed `worktrees_available: false` unconditionally, so
+opting into parallelism was *unreachable*, not merely unused. Marking it done
+would have been a claim about a code path nothing could take.
+
+Wired properly instead: `Engine::with_worktrees` turns it on, and the test
+checks that without a worktree root the refusal still names `G-11`. The red run
+confirms it — mutating the flag to `true` makes the test fail.
+
+This is the third time this cycle a marker was nearly applied to something
+almost true. The check that catches it is always the same one: *what code path
+takes this, and can anything reach it?*
+
+### c4/b19/s05 — `T-11`: shelve, never discard
+
+A blocked feature leaves a **clean tree** — otherwise the next feature's gate
+runs against a mixture of two features and blames the wrong one.
+
+Shelved, not discarded. The work is evidence of what was attempted, and a
+blocked feature is precisely the one someone will want to look at. `land_blocked`
+**verifies the tree is clean afterwards** rather than assuming the stash worked:
+a stash that silently did nothing leaves the exact half-applied tree the function
+exists to prevent.
+
+### c4/b19/s06 — `V-5`: self-review is not review
+
+*The verifier must resolve to a different link than the one that authored the
+change.* The same model on the same context is the same distribution sampled
+twice — it agrees with itself for the same reasons it was wrong the first time.
+
+The author is read **from the journal** (`M-10`), not asserted. And when nothing
+says who authored a step, the answer is `AuthorUnknown` and the review does
+**not** count. Assuming independence there would let an unjournalled call launder
+a self-review.
+
+### c4/b19/s07 — `N-7`: the harness talking to itself
+
+Compaction, classification, summarising and embedding are counted apart from the
+work. A report that folds them together makes the loop look more productive per
+dollar than it is, and hides the one number that says whether the harness is
+worth its own cost.
+
+Derived from the **role**, which is already on every record (`M-11`) — so no new
+field, and nothing that can disagree with one.
+
+And a share of nothing is `—`, not `0%`. Zero out of zero is no data.
+
+### c4/b19/s08 — Six verified rather than assumed
+
+Marked ✅ this batch because they were already true and were checked, not because
+they were built:
+
+| | how it was verified |
+|---|---|
+| `T-8` | every batch of this project has run on Windows |
+| `T-10` | `is_protected` refuses `main`, tested since batch 6 |
+| `G-13` | resolved in batch 18; the runtime churn is ignored and the documentation is not |
+| `S-2` | `Secret` holds a variable *name*; the transcript test has been green since cycle 2 |
+| `N-11` | `windows-sys` carries its reason in `Cargo.toml`, and the whole workspace builds with `--offline` |
+| `G-5` | `push` and `tag` both classify `Approve`; `S-7` restates it |
+
+### c4/b19/s09 — Gates and red run
+
+- **gates:** green. 428 unit + 5 spine + 15 end-to-end = **448 tests**.
+- **red run: 13 mutations, 13 red**, first time:
+
+  ```
+  repo.rs    a submodule is treated as supported          a_submodule_is_declared_unsupported 101 red
+  repo.rs    lfs is not detected                          lfs_is_detected_from_attributes     101 red
+  repo.rs    a conflict is reported as clean              a_clean_merge_and_a_conflicted_one  101 red
+  repo.rs    the conflict text is summarised              a_conflict_is_parked_rather_than    101 red
+  repo.rs    a worktree is created inside the repo        a_worktree_directory_is_a_sibling   101 red
+  repo.rs    shelving does not say how to recover         shelving_says_how_to_get_it_back    101 red
+  link.rs    an unset credential is not reported          a_credential_is_checked_at_bind     101 red
+  verify.rs  a self-review counts                         a_review_by_the_same_link           101 red
+  verify.rs  an unknown author counts as independent      independence_cannot_be_claimed      101 red
+  cost.rs    compaction counts as work                    the_harness_talking_to_itself       101 red
+  cost.rs    overhead is folded into the work total        the_split_adds_up_and_reports       101 red
+  cost.rs    a share of nothing is reported as 0%          a_share_of_nothing_is_not_a_pct     101 red
+  engine.rs  parallelism is available without worktrees   parallel_batches_are_reachable      101 red
+  ```
+
+**Batch 19 status:** 13 delivered, 0 carried, 0 blocked. 448 tests.
+**137 requirements done, 12 in progress, 1 external-gated.**

@@ -496,9 +496,112 @@ pub fn defined_ids(source: &str) -> Result<BTreeSet<String>> {
     Ok(ids)
 }
 
+/// Whether a review counts (`V-5`).
+///
+/// **The verifier must resolve to a different link than the one that authored
+/// the change.** Self-review by the same model on the same context is not
+/// review: it is the same distribution sampled twice, and it agrees with itself
+/// for the same reasons it was wrong the first time.
+///
+/// Enforced by comparing the link the author used — read from the journal, not
+/// asserted — against the link the verifier role resolves to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Independence {
+    /// Different link. The review counts.
+    Independent { author: String, verifier: String },
+    /// Same link. It does not.
+    SameLink { link: String },
+    /// Nothing in the journal says who authored it, so independence cannot be
+    /// claimed. Reported as unknown rather than assumed either way.
+    AuthorUnknown,
+}
+
+impl Independence {
+    pub fn counts(&self) -> bool {
+        matches!(self, Independence::Independent { .. })
+    }
+
+    pub fn describe(&self) -> String {
+        match self {
+            Independence::Independent { author, verifier } => {
+                format!("{verifier} reviewed what {author} wrote")
+            }
+            Independence::SameLink { link } => format!(
+                "{link} would be reviewing its own work. Self-review by the same model on the                  same context is not review (`V-5`)"
+            ),
+            Independence::AuthorUnknown => {
+                "no journalled call says which link authored this, so the review cannot claim                  independence (`V-5`)"
+                    .into()
+            }
+        }
+    }
+}
+
+/// Which link authored a step, from the journal (`M-10`).
+pub fn author_of(step: &crate::step::StepId, records: &[Record]) -> Option<String> {
+    records
+        .iter()
+        .filter(|record| record.step == *step)
+        .find_map(|record| crate::cost::from_record(record).map(|entry| entry.link))
+}
+
+/// Check a proposed review before it is run, so a pointless call is not paid
+/// for (`V-5`).
+pub fn independence(
+    step: &crate::step::StepId,
+    verifier_link: &str,
+    records: &[Record],
+) -> Independence {
+    match author_of(step, records) {
+        None => Independence::AuthorUnknown,
+        Some(author) if author == verifier_link => Independence::SameLink { link: author },
+        Some(author) => {
+            Independence::Independent { author, verifier: verifier_link.to_string() }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_review_by_the_same_link_is_not_a_review() {
+        // `V-5`. The same model on the same context is the same distribution
+        // sampled twice — it agrees with itself for the same reasons it was
+        // wrong the first time.
+        let step = crate::step::StepId::new(4, "b19", 1).expect("step");
+        let entry = crate::cost::Entry {
+            step: step.to_string(),
+            role: "coder".into(),
+            link: "here".into(),
+            model: "small".into(),
+            usage: crate::cost::Usage::from_reply(10, 5, 0, 0),
+            latency_ms: 10,
+            charge: 0.0,
+        };
+        let records =
+            vec![crate::cost::annotate(Record::outcome(step.clone(), 100, true, "wrote it"), &entry)];
+
+        let same = independence(&step, "here", &records);
+        assert!(!same.counts());
+        assert!(same.describe().contains("V-5"), "{}", same.describe());
+
+        let different = independence(&step, "ds-fast", &records);
+        assert!(different.counts());
+        assert!(different.describe().contains("ds-fast reviewed what here wrote"));
+    }
+
+    #[test]
+    fn independence_cannot_be_claimed_when_the_author_is_unknown() {
+        // Reported as unknown rather than assumed either way. Assuming
+        // independent would let an unjournalled call launder a self-review.
+        let step = crate::step::StepId::new(4, "b19", 2).expect("step");
+        let records = vec![Record::outcome(step.clone(), 100, true, "no call recorded")];
+        let verdict = independence(&step, "ds-fast", &records);
+        assert_eq!(verdict, Independence::AuthorUnknown);
+        assert!(!verdict.counts(), "unknown is not independent");
+    }
     use crate::gate::GateResult;
     use crate::process::{Exit, Run};
     use crate::step::StepId;

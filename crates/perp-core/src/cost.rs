@@ -271,9 +271,152 @@ pub fn prices(entries: &[(String, String)]) -> Result<Vec<(String, Price)>> {
     Ok(prices)
 }
 
+/// Whether a call did the work or ran the harness (`N-7`).
+///
+/// **Engine overhead is bounded and reported**, and it can only be reported if
+/// it is counted separately. Compaction, classification, routing probes and
+/// summarising are the machine talking to itself; a cost report that folds them
+/// into "work" makes the loop look more productive per dollar than it is, and
+/// hides the one number that says whether the harness is worth its own cost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// Planning, coding, gate-fixing, verifying — the batch's actual work.
+    Work,
+    /// Compaction, classification, summarising, embedding for retrieval.
+    Overhead,
+}
+
+impl Kind {
+    /// From the role that made the call. The role is already on every record
+    /// (`M-11`), so this needs no new field and cannot disagree with one.
+    pub fn of(role: &str) -> Kind {
+        match role {
+            "compactor" | "classifier" | "summarizer" | "embedder" => Kind::Overhead,
+            _ => Kind::Work,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Kind::Work => "work",
+            Kind::Overhead => "overhead",
+        }
+    }
+}
+
+/// Work and overhead, side by side (`N-7`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Split {
+    pub work: Total,
+    pub overhead: Total,
+}
+
+impl Split {
+    pub fn of(ledger: &Ledger) -> Split {
+        let mut split = Split::default();
+        for (role, total) in ledger.by_role() {
+            let target = match Kind::of(&role) {
+                Kind::Work => &mut split.work,
+                Kind::Overhead => &mut split.overhead,
+            };
+            target.calls += total.calls;
+            target.usage.cache_hit_tokens += total.usage.cache_hit_tokens;
+            target.usage.cache_miss_tokens += total.usage.cache_miss_tokens;
+            target.usage.output_tokens += total.usage.output_tokens;
+            target.latency_ms += total.latency_ms;
+            target.charge += total.charge;
+        }
+        split
+    }
+
+    /// Overhead as a share of everything, or `None` when nothing was spent —
+    /// a percentage of zero is a number that means nothing.
+    pub fn overhead_share(&self) -> Option<f64> {
+        let total = self.work.usage.total() + self.overhead.usage.total();
+        (total > 0).then(|| self.overhead.usage.total() as f64 / total as f64)
+    }
+
+    pub fn render(&self) -> String {
+        let share = match self.overhead_share() {
+            Some(share) => format!("{:.1}%", share * 100.0),
+            None => "—".into(),
+        };
+        format!(
+            "work      {:>5} calls  {:>9} tokens  {:>11.6}
+             overhead  {:>5} calls  {:>9} tokens  {:>11.6}   ({share} of tokens)
+",
+            self.work.calls,
+            self.work.usage.total(),
+            self.work.charge,
+            self.overhead.calls,
+            self.overhead.usage.total(),
+            self.overhead.charge,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_harness_talking_to_itself_is_counted_apart() {
+        // `N-7`. A report that folds compaction into "work" makes the loop look
+        // more productive per dollar than it is, and hides the number that says
+        // whether the harness is worth its own cost.
+        assert_eq!(Kind::of("coder"), Kind::Work);
+        assert_eq!(Kind::of("verifier"), Kind::Work);
+        assert_eq!(Kind::of("compactor"), Kind::Overhead);
+        assert_eq!(Kind::of("classifier"), Kind::Overhead);
+        assert_eq!(Kind::of("summarizer"), Kind::Overhead);
+        assert_eq!(Kind::of("embedder"), Kind::Overhead);
+    }
+
+    #[test]
+    fn the_split_adds_up_and_reports_a_share() {
+        let call = |role: &str, seq: u32, tokens: i64| {
+            let entry = Entry {
+                step: format!("c4/b19/s{seq:02}"),
+                role: role.to_string(),
+                link: "here".into(),
+                model: "m".into(),
+                usage: Usage::from_reply(tokens, tokens, 0, 0),
+                latency_ms: 10,
+                charge: 0.0,
+            };
+            annotate(
+                Record::outcome(
+                    crate::step::StepId::new(4, "b19", seq).expect("step"),
+                    100,
+                    true,
+                    "call",
+                ),
+                &entry,
+            )
+        };
+        let ledger = Ledger::replay(&[
+            call("coder", 1, 300),
+            call("compactor", 2, 100),
+            call("classifier", 3, 100),
+        ]);
+
+        let split = Split::of(&ledger);
+        assert_eq!(split.work.calls, 1);
+        assert_eq!(split.overhead.calls, 2);
+        assert_eq!(split.work.usage.total(), 600);
+        assert_eq!(split.overhead.usage.total(), 400);
+
+        let share = split.overhead_share().expect("something was spent");
+        assert!((share - 0.4).abs() < 1e-9, "{share}");
+        assert!(split.render().contains("40.0% of tokens"), "{}", split.render());
+    }
+
+    #[test]
+    fn a_share_of_nothing_is_not_a_percentage() {
+        // Zero out of zero is not "0% overhead" — it is no data.
+        assert_eq!(Split::default().overhead_share(), None);
+        assert!(Split::default().render().contains("(— of tokens)"));
+    }
     use crate::step::StepId;
 
     fn step(text: &str) -> StepId {

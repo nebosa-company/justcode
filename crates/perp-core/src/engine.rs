@@ -145,6 +145,10 @@ pub struct Engine {
     root: PathBuf,
     /// Where the operator asks for a pause, a single step, or a stop (`O-3`).
     channel: crate::control::Channel,
+    /// Where per-feature worktrees live, when parallelism is on (`G-11`).
+    /// `None` means serial only — and `L-17` then refuses a second feature by
+    /// name rather than running two in one tree.
+    worktrees: Option<PathBuf>,
     /// The clock. Injected so a budget test does not have to wait out a
     /// wall-clock limit in real seconds.
     now: fn() -> i64,
@@ -165,12 +169,25 @@ impl Engine {
             concurrency: Concurrency::default(),
             root: root.to_path_buf(),
             channel: crate::control::Channel::at(root),
+            worktrees: None,
             now: time::now,
         })
     }
 
     pub fn with_budgets(mut self, budgets: Budgets) -> Engine {
         self.budgets = budgets;
+        self
+    }
+
+    /// Turn on batch-level parallelism (`L-17`), which needs a worktree per
+    /// feature (`G-11`). Opt-in: the default is one feature in one tree.
+    pub fn with_worktrees(mut self, root: impl Into<PathBuf>) -> Engine {
+        self.worktrees = Some(root.into());
+        self
+    }
+
+    pub fn with_concurrency(mut self, concurrency: Concurrency) -> Engine {
+        self.concurrency = concurrency;
         self
     }
 
@@ -203,7 +220,9 @@ impl Engine {
         work: &mut dyn Work,
         in_flight: u32,
     ) -> Result<Report> {
-        self.concurrency.admit(in_flight, false)?;
+        // `L-17`: parallel batches need a worktree each, and the engine only
+        // claims they are available when it has somewhere to put them.
+        self.concurrency.admit(in_flight, self.worktrees.is_some())?;
 
         let started = (self.now)();
         let owner = Lock::this_process(started);
@@ -809,6 +828,32 @@ mod tests {
         assert_eq!(report.steps, 2, "an injection does not stop the loop");
         assert_eq!(report.controls.len(), 1, "and it applied once, not at every boundary");
         assert!(report.controls[0].contains("other helper"), "{:?}", report.controls);
+    }
+
+    #[test]
+    fn parallel_batches_are_reachable_only_with_somewhere_to_put_them() {
+        // `L-17` with `G-11`. Before this the engine passed `false`
+        // unconditionally, so opting in was unreachable rather than merely
+        // unused — and marking the requirement done would have been a claim
+        // about a code path nothing could take.
+        let root = workspace("engine-parallel");
+
+        let mut serial = Engine::open(&root)
+            .expect("open")
+            .with_concurrency(Concurrency::Parallel { max: 2 });
+        let err = serial
+            .run(4, "b19", &mut Fixed::new(tasks(1)), 0)
+            .expect_err("no worktree root, no parallelism");
+        assert!(format!("{err}").contains("G-11"), "{err}");
+
+        let mut parallel = Engine::open(&root)
+            .expect("open")
+            .with_concurrency(Concurrency::Parallel { max: 2 })
+            .with_worktrees(root.join("../worktrees"));
+        let report = parallel
+            .run(4, "b19", &mut Fixed::new(tasks(1)), 1)
+            .expect("one already in flight, under the maximum of two");
+        assert_eq!(report.steps, 1);
     }
 
     #[test]

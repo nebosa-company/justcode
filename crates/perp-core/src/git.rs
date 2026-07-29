@@ -222,6 +222,21 @@ impl Repo {
     }
 
     /// For read-only plumbing the classifier already treats as `Auto`.
+    /// Read-only plumbing whose output is wanted as text. Classified like
+    /// everything else — these are all `Auto`, and going through `run` keeps it
+    /// that way if one ever stops being.
+    pub fn plumbing(&self, args: &[&str]) -> Result<String> {
+        let run = self.run(args, &Approval::NotGranted)?;
+        Ok(run.stdout_tail.clone())
+    }
+
+    /// One config value, or empty when it is not set. Not an error: "unset" is
+    /// the ordinary answer for most keys.
+    pub fn config(&self, key: &str) -> Result<String> {
+        let run = self.run_unchecked(&["config", "--get", key])?;
+        Ok(run.stdout_tail.trim().to_string())
+    }
+
     /// Run without the classifier. `pub(crate)` so a test fixture elsewhere in
     /// the crate can build a repository; every caller outside `git` goes
     /// through [`Repo::run`], which classifies first.

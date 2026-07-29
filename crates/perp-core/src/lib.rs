@@ -26,6 +26,7 @@
 //! | [`job`] | `X-4` — the only module allowed `unsafe` |
 //! | [`control`] | `O-3`, `O-4`, `O-6` |
 //! | [`panel`] | `I-1`–`I-5` |
+//! | [`repo`] | `G-9`, `G-11`, `G-12`, `T-11` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -82,6 +83,7 @@ pub mod os;
 pub mod probe;
 pub mod process;
 pub mod prompt;
+pub mod repo;
 pub mod security;
 pub mod session;
 pub mod state;
@@ -111,6 +113,7 @@ pub use metrics::{Cycle, Snapshot};
 pub use job::{Containment, Job};
 pub use os::{Capability, Toolchain, WakeCheck};
 pub use panel::View;
+pub use repo::{Resolution, Survey, Worktrees};
 pub use lock::{Concurrency, Lock};
 pub use phase::{Machine, Measured, Park, Phase, Stop};
 pub use probe::{Capabilities, ModelFacts, ProbeCache};
