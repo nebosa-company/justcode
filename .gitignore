@@ -48,3 +48,11 @@ Thumbs.db
 # Local Claude Code state; .claude/launch.json is shared deliberately.
 .claude/settings.local.json
 .claude/state/
+
+# Perpetum harness runtime state. The control file and the locks are churn, not
+# documentation — `G-13` splits them: the journal, state, board and artifacts are
+# versioned deliberately, and these are not.
+/control
+/write.lock
+/gate.lock
+crates/target/
