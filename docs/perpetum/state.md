@@ -1,6 +1,6 @@
 # Perpetum state
 
-Cycle: 2 · **closed** · Phase: F complete → B (cycle 3) · Updated: 2026-07-29
+Cycle: 3 · Phase: D · Batch: 11 — 1 of this cycle's five · Updated: 2026-07-29
 
 Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
 `journal.jsonl` · Requirements: [`../perpetum.md`](../perpetum.md) ·
@@ -29,8 +29,13 @@ updated every batch, the file on disk was not. Regenerated, and it says so at
 the top. `A-2`/`A-3` would generate both from the journal; neither is built,
 which is now evidenced rather than merely argued.
 
-- Next: **Phase B — cycle 3**. The market pass is **due immediately**: it was
-  skipped in cycle 2 because it was the same day, and the day has changed.
+**Cycle 3** — phases B and C done. All four pending decisions answered, and the
+**conflicting count is zero** for the first time since cycle 1. Batch 11
+delivered: the tool host and the permission classifier.
+
+- Next: **batch 12 — the loop driver** (`L-1` `L-2` `L-9` `L-10` `L-14` `L-17`
+  `L-18` `L-20` `M-8`). At the end of it `perp run` executes a batch on its own,
+  and the harness stops needing a person to type every gate.
 
 Perpetum D also asks for end-to-end coverage to be extended over the five
 batches. It was: the CLI suite grew from 11 tests to 15, including a full
@@ -51,11 +56,11 @@ Carried, not done:
 
 ## Last green gates
 
-`perp gate all --root .. --step c2/E/s06`, exit 0, pinned to `a2319be`.
+`perp gate all --root .. --step c3/b11/s06`, exit 0, pinned to `9df729e`.
 
 - lint · exit 0 · clean
 - build · exit 0 · clean
-- tests · exit 0 · **237/237** — 217 unit, 5 spine integration, 15 end-to-end
+- tests · exit 0 · **262/262** — 242 unit, 5 spine integration, 15 end-to-end
 - ids · exit 0 · 152 defined across 29 documents, no strays
 - links · exit 0 · 2 links, 9 roles, every role has a local option
 

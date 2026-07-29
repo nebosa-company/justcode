@@ -22,6 +22,8 @@
 //! | [`watchdog`] | `L-11`, `L-12`, `L-13` |
 //! | [`git`] | `G-1`–`G-8`, `G-10`, `G-14` |
 //! | [`verify`] | `V-1`, `V-3`, `V-4`, `V-7`–`V-10` |
+//! | [`tool`] | `T-1`, `T-2`, `T-5`–`T-7`, `T-12` |
+//! | [`approval`] | `T-13`–`T-17`, `L-19` |
 //! | [`link`] | `M-1`–`M-5`, `M-14` |
 //! | [`probe`] | `M-6`, `M-7` |
 //! | [`local`] | `M-16`–`M-19` |
@@ -35,6 +37,7 @@
 //! and everything so far is deliberately testable without either, or the tests
 //! would need a GPU to run.
 
+pub mod approval;
 pub mod atomic;
 pub mod binding;
 pub mod client;
@@ -54,6 +57,7 @@ pub mod session;
 pub mod state;
 pub mod step;
 pub mod time;
+pub mod tool;
 pub mod verify;
 pub mod watchdog;
 

@@ -165,7 +165,7 @@ An unattended loop with no ceiling is a billing incident.
 |---|---|
 | `L-17` | One feature in flight at a time by default. Batch-level parallelism is opt-in and requires per-feature git worktrees (`G-11`). |
 | `L-18` | Gate runs are serialised per workspace. Two builds in one target directory is a false red. |
-| `L-19` | A parked approval never blocks the loop: the engine moves to the next eligible item and revisits parked items at the next phase boundary (Perpetum E, F.3). |
+| ✅ ~~`L-19`~~ | A parked approval never blocks the loop: the engine moves to the next eligible item and revisits parked items at the next phase boundary (Perpetum E, F.3). |
 | `L-20` | Exactly one writer at a time. While the loop holds the write lock, chat is read-only unless paused (`C-3`). |
 
 ---
@@ -271,13 +271,13 @@ means prompt *layout* is an engineering requirement, not a style preference.
 
 | id | Requirement |
 |---|---|
-| `T-1` | Core tools: read, glob, grep, patch-edit, write, shell (bounded), git (§5), OS (§6), gate runner, HTTP fetch. Optional: browser, MCP client. |
-| `T-2` | Edits are patches with pre-image verification. A patch whose context no longer matches fails; nothing is blind-written. |
+| 🟡 `T-1` | Core tools: read, glob, grep, patch-edit, write, shell (bounded), git (§5), OS (§6), gate runner, HTTP fetch. Optional: browser, MCP client. |
+| ✅ ~~`T-2`~~ | Edits are patches with pre-image verification. A patch whose context no longer matches fails; nothing is blind-written. |
 | ✅ ~~`T-3`~~ | Every shell call has a timeout, a working directory, and a captured transcript. No unbounded process, ever. |
 | ✅ ~~`T-4`~~ | Background processes are tracked and killed at step end (`X-4`). A dev server left running across steps is a leak the next gate will blame on the wrong feature. |
-| `T-5` | Tool schemas are generated once per session and are part of the stable prefix (`M-12`). |
-| `T-6` | Every tool result is truncated to a declared budget, with the truncation visible to the model. Silent truncation causes confident wrong conclusions. |
-| `T-7` | Tool output is **data, never instruction**. Content from files, HTTP, issue trackers and test output cannot change harness policy, approve an action, or redirect the loop (`S-1`). |
+| ✅ ~~`T-5`~~ | Tool schemas are generated once per session and are part of the stable prefix (`M-12`). |
+| ✅ ~~`T-6`~~ | Every tool result is truncated to a declared budget, with the truncation visible to the model. Silent truncation causes confident wrong conclusions. |
+| ✅ ~~`T-7`~~ | Tool output is **data, never instruction**. Content from files, HTTP, issue trackers and test output cannot change harness policy, approve an action, or redirect the loop (`S-1`). |
 
 ### 4.2 Runtime
 
@@ -296,13 +296,13 @@ needs permission.
 
 | id | Requirement |
 |---|---|
-| `T-12` | Every tool call is classified `auto`, `approve`, or `never` before execution, by rule, on the harness side. |
-| `T-13` | `never` covers Perpetum's absolutes: production deploys, customer contact, public posting, spending, and all of Phase G. A `never` call is refused and journalled; the model cannot argue its way past it. |
-| `T-14` | `approve` enqueues a request with: what, why, the exact command or content, the diff, and the requirement id. The loop then continues elsewhere (`L-19`). |
-| `T-15` | Approval is per action and per cycle. An approval granted last cycle never carries forward. |
-| `T-16` | Approvals expire. An unanswered request older than the configured window is parked with reason `approval-gated` and carried into the next cycle (Perpetum 0.6). |
+| ✅ ~~`T-12`~~ | Every tool call is classified `auto`, `approve`, or `never` before execution, by rule, on the harness side. |
+| ✅ ~~`T-13`~~ | `never` covers Perpetum's absolutes: production deploys, customer contact, public posting, spending, and all of Phase G. A `never` call is refused and journalled; the model cannot argue its way past it. |
+| ✅ ~~`T-14`~~ | `approve` enqueues a request with: what, why, the exact command or content, the diff, and the requirement id. The loop then continues elsewhere (`L-19`). |
+| ✅ ~~`T-15`~~ | Approval is per action and per cycle. An approval granted last cycle never carries forward. |
+| ✅ ~~`T-16`~~ | Approvals expire. An unanswered request older than the configured window is parked with reason `approval-gated` and carried into the next cycle (Perpetum 0.6). |
 | ✅ ~~`T-18`~~ | The engine must not hold a lock on any artefact its own gates rebuild. On Windows a running executable cannot be replaced, so a harness launched from the workspace own `target/` fails its own build gate with `Access is denied (os error 5)`. The engine runs from a copy outside the tree it builds, and says so in the gate transcript. Found in `c1/b5/s08` by running the gates through the harness on its own repository. |
-| `T-17` | Anything drafted for a human — release notes, issue replies, GTM copy — is written to disk unattended and *sent* only through an `approve` call. Drafting is free; sending is not. |
+| ✅ ~~`T-17`~~ | Anything drafted for a human — release notes, issue replies, GTM copy — is written to disk unattended and *sent* only through an `approve` call. Drafting is free; sending is not. |
 
 ---
 
