@@ -2061,3 +2061,169 @@ batches later. That is the point of the table.
   the panel is `I-*`, batch 18.
 
 **Batch 14 status:** 8 of 10 delivered, 2 carried, 0 blocked. 368 tests.
+
+
+---
+
+## Phase D — Batch 15, security enforcement
+
+Branch `perp/c3/b15`. Eight requirements. **The last batch of cycle 3.**
+
+Designed in cycle 1, built now, and the ordering was deliberate: a policy
+written against an imaginary tool host would have been a policy that was wrong.
+
+### c3/b15/s01 — Provenance is decidable, intent is not
+
+`S-1` is enforced by an `Origin` enum with three values, two of which may
+instruct. `security::instruction` takes the origin and **never inspects the
+text**.
+
+That is the load-bearing choice. There is no pattern that separates *"the README
+explains the deploy process"* from *"the README instructs a deploy"*, and a
+harness that tries will be wrong in both directions — refusing documentation and
+accepting attacks. Provenance is decidable. The test proves it by putting the
+same four words through both doors and getting opposite answers.
+
+It matters most for the models this harness targets. A 7B model on an LM Link rig
+*will* follow an instruction it finds in a file. The design answer is not to make
+it more obedient; it is that following the instruction changes nothing, because
+nothing downstream reads content as policy.
+
+### c3/b15/s02 — Redaction is on the wire, not in a helper
+
+`S-3` lives inside `Client::chat`, not at the call sites. A call site that has to
+remember to redact is a call site that will forget — and the one that forgets is
+the one added at 2am to fix something else.
+
+The test asserts the **bytes the transport received**, which meant teaching the
+test transport to record bodies. A test that only checks a return value proves
+nothing about what left the machine.
+
+Two decisions inside it:
+
+- **The built-in set is not configurable away.** A configurable set that starts
+  empty is a set nobody configures. `sk-`, `ghp_`, `AKIA`, `-----BEGIN` and
+  friends always fire; operator patterns are added, never substituted.
+- **A local link is not redacted.** Stripping a prompt on its way to the
+  operator's own GPU buys nothing and makes the local path worse at its job
+  (`M-4`).
+- A bare prefix in prose — *"keys start with `sk-`"* — is left alone. The token
+  has to actually be there.
+
+The hit list records **pattern names, never values**, because that list goes in
+the journal.
+
+### c3/b15/s03 — The allowlist has no suffix match and no userinfo hole
+
+`S-4`. Two tests are the whole design:
+
+- `evil.example.com` is **not** covered by `example.com`. An allowlist that
+  matches by suffix has a hole in it the width of a DNS record — anyone who can
+  create a subdomain is on the list.
+- `https://api.example.com@evil.test/` reaches **evil.test**. `host_of` takes
+  the part after the last `@`, because the userinfo section is the classic way
+  to make a URL look like it points somewhere it does not.
+
+Checked **before the transport is touched**, and the test asserts the transport
+saw nothing. An allowlist enforced once the connection is open has already
+leaked the DNS query and the TLS SNI.
+
+A refusal is journalled as a failed outcome, not returned quietly: a loop that
+silently declines to reach a host looks identical to one that reached it and got
+nothing, and those need different fixes.
+
+### c3/b15/s04 — A 401 is not a transient failure
+
+`S-5`. Retrying is the dangerous default. A loop that treats an authentication
+failure as flaky will retry it, and the obvious next thing a model reaches for is
+a credential — from the environment, from a config file, from a guess. Naming
+`credential-gated` as its own outcome is what stops that path existing at all.
+
+The message says it out loud: *"the harness does not invent, request or type
+credentials"*, and carries the real error rather than a summary of it.
+
+### c3/b15/s05 — `S-8`, the finding from cycle 2's release review, fixed
+
+`std::env::temp_dir()` reads `TMP`. On this machine `TMP` is `D:\Temp` — a
+**shared root-level directory**, not the per-user one. A request body is a
+prompt, and a prompt carries repository content, so every call was briefly
+world-readable while in flight. The key was never affected: it goes to curl on
+stdin and never touches disk (`S-2`).
+
+Bodies now go under `%LOCALAPPDATA%\perp\bodies` (or `XDG_RUNTIME_DIR`, or
+`~/.cache`), mode `0700` on POSIX. On Windows the ACL comes from the profile
+directory, which *is* the per-user boundary — there is no mode bit, and calling
+`set_permissions` to look thorough would be theatre. The comment says so.
+
+### c3/b15/s06 — Local-only is assertable afterwards
+
+`S-6`. `LocalOnlyAudit::of` answers from the journal: how many calls, and which
+of them went to a link that was not local. A claim that a run stayed on the
+operator's hardware is worth nothing unless someone who was not there can check
+it from the record.
+
+One cloud call breaks the claim and the audit **names the link**.
+
+### c3/b15/s07 — Offline gates, without pretending to be a firewall
+
+`N-6`. `gate_environment(true)` returns `CARGO_NET_OFFLINE`,
+`npm_config_offline`, `PIP_NO_INDEX` and `GIT_TERMINAL_PROMPT=0` — the switches
+the common toolchains already honour.
+
+Not a firewall. A firewall needs privileges the harness must not ask for, and
+claiming to be one while setting four environment variables would be a bigger
+lie than not doing it. A project that genuinely needs the network for a gate says
+so in the binding.
+
+### c3/b15/s08 — Gates and red run
+
+- **gates:** green, run through the engine — `perp run --cycle 3 --stage b15`,
+  three steps, three transcripts, backlog exhausted. 367 unit + 5 spine + 15
+  end-to-end = **387 tests**.
+- **red run: 13 mutations, 13 red**, first time:
+
+  ```
+  security.rs  content is allowed to instruct            only_the_operator_and_the_binding  101 red
+  security.rs  the built-in redaction set is empty       keys_are_redacted_before_cloud     101 red
+  security.rs  operator patterns are ignored             operator_patterns_and_defaults     101 red
+  security.rs  a bare prefix is treated as a key         prose_mentioning_a_prefix          101 red
+  security.rs  the allowlist matches by suffix           a_subdomain_is_not_covered         101 red
+  security.rs  userinfo launders the host                a_url_that_disguises_its_host      101 red
+  security.rs  an egress refusal is not journalled       a_refused_connection_is_journalled 101 red
+  security.rs  a cloud call keeps the local-only claim   local_only_is_assertable           101 red
+  security.rs  a credential wall is not recognised       a_credential_wall_is_parked        101 red
+  security.rs  an offline gate keeps its network         an_offline_gate_gets_the_switches  101 red
+  client.rs    the outbound body is not redacted         a_key_shaped_string_is_stripped    101 red
+  client.rs    egress is checked after the send          a_host_outside_the_allowlist       101 red
+  net.rs       bodies go back to the shared temp dir     a_request_body_does_not_land       101 red
+  ```
+
+### c3/b15/s09 — What is carried
+
+**`S-7`** restates `G-5`: push, PR creation, tagging and publishing are
+approval-gated. The refusals exist in `git.rs` and are tested; what is missing is
+PR creation and tagging, which have no implementation to gate. Batch 22.
+
+**Batch 15 status:** 7 of 8 delivered, 1 carried, 0 blocked. 387 tests.
+
+---
+
+## Cycle 3 — Phase D complete
+
+**Five batches delivered.** `L-2`'s exit predicate for D is met: five batches,
+gates green at a sha.
+
+| Batch | Theme | Delivered | Carried |
+|---|---|---|---|
+| 11 | tool host and permission classifier | 11 | 1 |
+| 12 | the loop driver | 6 | 3 |
+| 13 | chat, slash commands and `/btw` | 7 | 5 |
+| 14 | artifacts and the board | 8 | 2 |
+| 15 | security enforcement | 7 | 1 |
+
+**103 requirements done, 15 in progress, 0 conflicting, 1 external-gated.**
+387 tests. Sixty-seven red-run mutations across the cycle, sixty-seven red — three
+of them only after a false green was chased down, which is the number that
+matters most.
+
+**The harness runs a batch on its own.** That was the cycle's one stated goal.

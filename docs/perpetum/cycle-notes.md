@@ -9,7 +9,7 @@ That was the binding working as designed, and the narrative needed its own path.
 Position, counts and blocked steps: read [`state.md`](state.md), which is
 generated. Reasoning, decisions and what comes next: here.
 
-Cycle: 3 · Phase: D · Batch: 13 — 3 of this cycle's five · Updated: 2026-07-29
+Cycle: 3 · Phase: D **complete** — five batches · Updated: 2026-07-29
 
 Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
 `journal.jsonl` · Requirements: [`../perpetum.md`](../perpetum.md) ·
@@ -55,9 +55,13 @@ Running it found two defects no unit test would have: the outcome record was
 dropping the requirement ids it was evidence for, and `perp run` was not pinning
 its transcripts to a commit while `perp gate` was. Both fixed, both now tested.
 
-- Next: **batch 14 — artifacts and the board** (`A-1`–`A-7`, `O-2`, `O-5`,
-  `O-7`), then **batch 15 — security enforcement** (`S-1`, `S-3`–`S-8`, `N-6`),
-  which closes cycle 3.
+**Cycle 3's Phase D is complete.** Five batches: the tool host, the loop driver,
+chat and `/btw`, artifacts and the board, security enforcement. 103 requirements
+done, 15 in progress, 387 tests, 67 red-run mutations all red.
+
+- Next: **Phase E** (release) and **Phase F** (clean-up) to close cycle 3, then
+  cycle 4's batches 16–20: OS integration, live control and rewind, the
+  JustCode panel, runtime plugins, and the remaining model layer.
 
 Perpetum D also asks for end-to-end coverage to be extended over the five
 batches. It was: the CLI suite grew from 11 tests to 15, including a full
@@ -82,7 +86,7 @@ Carried, not done:
 
 - lint · exit 0 · clean
 - build · exit 0 · clean
-- tests · exit 0 · **350/350** — 330 unit, 5 spine integration, 15 end-to-end
+- tests · exit 0 · **387/387** — 367 unit, 5 spine integration, 15 end-to-end
 - ids · exit 0 · 152 defined across 29 documents, no strays
 - links · exit 0 · 2 links, 9 roles, every role has a local option
 

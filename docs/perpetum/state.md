@@ -1,14 +1,14 @@
 # Perpetum state
 
-Cycle: 3 · Stage: b13 · Updated: 2026-07-29
+Cycle: 3 · Stage: b15 · Updated: 2026-07-29
 
 Generated from the journal by `perp state`. The journal is the truth; if this file disagrees with it, this file is wrong.
 
 ## Position
 
-- Last step: `c3/b13/s33` — closed
+- Last step: `c3/b15/s38` — closed
 - Nothing in flight.
-- Steps: 58 done, 1 blocked
+- Steps: 65 done, 1 blocked
 
 ## Blocked
 
@@ -29,6 +29,12 @@ Generated from the journal by `perp state`. The journal is the truth; if this fi
     Access is denied. (os error 5)
   ```
 
+
+## Waiting from `/btw`
+
+- #2 · **requirement** · 2026-07-29 · from cli — we should show the gate transcript inline in the panel
+
+These survive a restart. A steer lands at the next step boundary; a requirement is filed at Phase B (`C-11`).
 
 ## Requirements touched
 
@@ -97,3 +103,20 @@ Generated from the journal by `perp state`. The journal is the truth; if this fi
 | `c3/b13/s31` | done | gate build is green |
 | `c3/b13/s32` | done | gate test is green |
 | `c3/b13/s33` | done | stopped: the backlog is exhausted |
+| `c3/b13/s34` | done | gate lint — green |
+| `c3/b13/s34` | done | gate build — green |
+| `c3/b13/s34` | done | gate test — green |
+| `c3/b15/s35` | done | gate lint is green |
+| `c3/b15/s36` | done | gate build is green |
+| `c3/b15/s37` | done | gate test is green |
+| `c3/b15/s38` | done | stopped: the backlog is exhausted |
+
+## History
+
+| Cycle | Steps | Red | Gates green | Requirements | Tokens | Money | Elapsed |
+|---|---|---|---|---|---|---|---|
+| 1 | 17 | 1 | 13 | 11 | 0 | $0.0000 | 35m |
+| 2 | 18 | 0 | 18 | 0 | 0 | $0.0000 | 1h02m |
+| 3 | 31 | 0 | 24 | 1 | 0 | $0.0000 | 58m |
+
+Every figure counted from `journal.jsonl`. Elapsed is wall-clock between the first and last record of the cycle, which for an unattended run is mostly the machine waiting — not effort.

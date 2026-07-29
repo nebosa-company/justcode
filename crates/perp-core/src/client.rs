@@ -263,6 +263,11 @@ pub struct Client<'a> {
     facts: Vec<(String, ModelFacts, i64)>,
     ttl_secs: i64,
     permits: std::sync::Arc<crate::link::Permits>,
+    /// Applied to every outbound body on its way to a `cloud` link (`S-3`).
+    redact: Vec<crate::security::Pattern>,
+    /// Which hosts may be reached at all (`S-4`). Empty means "the links the
+    /// operator configured, and nothing else" — set by [`Client::with_egress`].
+    egress: Option<crate::security::Egress>,
 }
 
 impl<'a> Client<'a> {
@@ -273,7 +278,31 @@ impl<'a> Client<'a> {
             facts: Vec::new(),
             ttl_secs: 3600,
             permits: std::sync::Arc::new(crate::link::Permits::new()),
+            redact: Vec::new(),
+            egress: None,
         }
+    }
+
+    /// Patterns to strip from anything bound for a cloud link (`S-3`).
+    pub fn with_redaction(mut self, patterns: Vec<crate::security::Pattern>) -> Client<'a> {
+        self.redact = patterns;
+        self
+    }
+
+    /// Refuse any host not on the list (`S-4`).
+    pub fn with_egress(mut self, egress: crate::security::Egress) -> Client<'a> {
+        self.egress = Some(egress);
+        self
+    }
+
+    /// Every refusal this client made, for the journal. Egress refusals are
+    /// recorded rather than returned quietly: a loop that silently declines to
+    /// reach a host looks exactly like one that reached it and got nothing.
+    pub fn check_egress(&self, url: &str) -> Result<()> {
+        let Some(egress) = &self.egress else { return Ok(()) };
+        egress.check(url).map_err(|refusal| {
+            Error::refused(refusal.host, format!("{} (`S-4`)", refusal.why))
+        })
     }
 
     fn base(link: &Link) -> Result<&str> {
@@ -364,11 +393,24 @@ impl<'a> Client<'a> {
             )),
             Protocol::ChatCompletions => {
                 let base = Self::base(link)?.trim_end_matches('/');
-                let body = request.to_json(&link.model);
-                let http = Self::authorise(
+                let url = format!("{base}/v1/chat/completions");
+                // `S-4` before the socket, not after: an allowlist checked once
+                // the connection is open is an allowlist that has already
+                // leaked the DNS query and the TLS SNI.
+                self.check_egress(&url)?;
+
+                // `S-3`: redaction happens here rather than at the call site,
+                // because a call site that has to remember is a call site that
+                // will forget. A local link is left alone — redacting a prompt
+                // on the way to the operator's own GPU buys nothing.
+                let body = crate::security::outbound(
+                    &request.to_json(&link.model),
                     link,
-                    Request::post_json(format!("{base}/v1/chat/completions"), body),
-                );
+                    &self.redact,
+                )
+                .text;
+
+                let http = Self::authorise(link, Request::post_json(url, body));
                 let response = self.transport.send(&http)?;
                 Self::interpret(link, &response)
             }
@@ -496,11 +538,18 @@ mod tests {
     struct Canned {
         answers: RefCell<Vec<Result<Response>>>,
         seen: RefCell<Vec<String>>,
+        /// What was actually sent. `S-3` is a claim about the bytes on the
+        /// wire, so a test that only checks the return value proves nothing.
+        bodies: RefCell<Vec<String>>,
     }
 
     impl Canned {
         fn new(answers: Vec<Result<Response>>) -> Canned {
-            Canned { answers: RefCell::new(answers), seen: RefCell::new(Vec::new()) }
+            Canned {
+                answers: RefCell::new(answers),
+                seen: RefCell::new(Vec::new()),
+                bodies: RefCell::new(Vec::new()),
+            }
         }
 
         fn ok(body: &str) -> Result<Response> {
@@ -519,6 +568,9 @@ mod tests {
     impl Transport for Canned {
         fn send(&self, request: &Request) -> Result<Response> {
             self.seen.borrow_mut().push(request.url.clone());
+            if let Some(body) = &request.body {
+                self.bodies.borrow_mut().push(body.clone());
+            }
             let mut answers = self.answers.borrow_mut();
             if answers.is_empty() {
                 return Err(Error::unbound("test", "no answer left"));
@@ -563,6 +615,65 @@ mod tests {
              role.compactor = here\n```\n",
         )
         .expect("parse")
+    }
+
+    #[test]
+    fn a_key_shaped_string_is_stripped_before_it_reaches_a_cloud_link() {
+        // `S-3`, on the wire rather than in a helper. The redaction lives in
+        // `Client::chat` precisely because a call site that has to remember to
+        // redact is a call site that will forget.
+        let transport = Canned::new(vec![Canned::ok(CHAT)]);
+        let client = Client::new(&transport);
+        let links = links();
+        let cloud = links.get("cloud").expect("the cloud link");
+
+        let leaky = ChatRequest::new(vec![Message::user(
+            "the config says DEEPSEEK_API_KEY=sk-abcdef0123456789, is that right?",
+        )]);
+        client.chat(cloud, &leaky).expect("the call happened");
+
+        let sent = transport.bodies.borrow();
+        let body = sent.first().expect("a body went out");
+        assert!(!body.contains("sk-abcdef0123456789"), "the key reached the wire: {body}");
+        assert!(body.contains("[redacted]"), "{body}");
+    }
+
+    #[test]
+    fn a_local_link_gets_the_prompt_unredacted() {
+        // Redacting on the way to the operator's own GPU buys nothing and makes
+        // the local path worse at its job (`M-4`).
+        let transport = Canned::new(vec![Canned::ok(CHAT)]);
+        let client = Client::new(&transport);
+        let links = links();
+        let here = links.get("here").expect("the local link");
+
+        let request =
+            ChatRequest::new(vec![Message::user("token sk-abcdef0123456789 in a local prompt")]);
+        client.chat(here, &request).expect("the call happened");
+
+        let sent = transport.bodies.borrow();
+        assert!(
+            sent.first().expect("a body").contains("sk-abcdef0123456789"),
+            "a local link is not redacted"
+        );
+    }
+
+    #[test]
+    fn a_host_outside_the_allowlist_is_refused_before_the_socket_opens() {
+        // `S-4`. Checked before the transport is touched: an allowlist enforced
+        // after the connection is open has already leaked the DNS query and the
+        // TLS SNI.
+        let transport = Canned::new(vec![Canned::ok(CHAT)]);
+        let client = Client::new(&transport)
+            .with_egress(crate::security::Egress::new(vec!["localhost".into()]));
+        let links = links();
+        let cloud = links.get("cloud").expect("the cloud link");
+
+        let err = client
+            .chat(cloud, &ChatRequest::new(vec![Message::user("hello")]))
+            .expect_err("api.deepseek.com is not on the list");
+        assert!(format!("{err}").contains("S-4"), "{err}");
+        assert!(transport.seen.borrow().is_empty(), "and nothing was sent at all");
     }
 
     #[test]

@@ -21,6 +21,7 @@
 //! | [`btw`] | `C-8`–`C-12` |
 //! | [`artifact`] | `A-1`–`A-7`, `O-2` |
 //! | [`metrics`] | `O-5`, `O-7` |
+//! | [`security`] | `S-1`, `S-3`–`S-6`, `N-6` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -73,6 +74,7 @@ pub mod phase;
 pub mod probe;
 pub mod process;
 pub mod prompt;
+pub mod security;
 pub mod session;
 pub mod state;
 pub mod step;
@@ -102,6 +104,7 @@ pub use phase::{Machine, Measured, Park, Phase, Stop};
 pub use probe::{Capabilities, ModelFacts, ProbeCache};
 pub use process::{Env, Exit, Nursery, Run, Spec};
 pub use session::{Decision, Finding, Probe, Session, StepGuard};
+pub use security::{Egress, Origin, Redacted};
 pub use state::{replay, Projection};
 pub use step::StepId;
 pub use watchdog::{Watch, Watchdogs};

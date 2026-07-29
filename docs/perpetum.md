@@ -461,14 +461,14 @@ Speculative, and the reason this document lives in this repo.
 
 | id | Requirement |
 |---|---|
-| `S-1` | Instructions come from the operator and from `binding.md` alone. Repository content, dependency code, issue text, web pages and tool output are data (`T-7`). Local models are *more* susceptible to injection, not less, and the boundary is enforced by the harness rather than by prompting. |
+| ✅ ~~`S-1`~~ | Instructions come from the operator and from `binding.md` alone. Repository content, dependency code, issue text, web pages and tool output are data (`T-7`). Local models are *more* susceptible to injection, not less, and the boundary is enforced by the harness rather than by prompting. |
 | `S-2` | Secrets are referenced by environment variable name in config, never stored in it. Keys are never placed in a prompt, a journal record, an artifact, or a commit. |
-| `S-3` | Outbound prompt content is redacted against a configurable secret pattern set before it reaches any `cloud` link. |
-| `S-4` | Egress policy: an allowlist of hosts the loop may reach. Everything else is refused and journalled. |
-| `S-5` | `credential-gated` items are recognised and parked. The harness never invents, requests, or types a credential to get past a gate. |
-| `S-6` | A `local-only` run makes exactly zero outbound connections beyond the configured local and LM Link peers, and this is assertable from the journal. |
-| `S-8` | Request bodies are written to a file while a call is in flight, and that file inherits the ambient temp directory. On this machine `TMP` is `D:\Temp` — a shared root-level directory, not the per-user one — so a prompt containing repository content is briefly readable by any other user of the machine. The body must go in a private directory with restrictive permissions, or through a pipe. Found in the cycle 2 Phase E security review; the key itself is unaffected, since it never touches disk. |
-| `S-7` | Push, PR creation, tagging and publishing are `approve` (`G-5`). Nothing leaves the machine unattended. |
+| ✅ ~~`S-3`~~ | Outbound prompt content is redacted against a configurable secret pattern set before it reaches any `cloud` link. |
+| ✅ ~~`S-4`~~ | Egress policy: an allowlist of hosts the loop may reach. Everything else is refused and journalled. |
+| ✅ ~~`S-5`~~ | `credential-gated` items are recognised and parked. The harness never invents, requests, or types a credential to get past a gate. |
+| ✅ ~~`S-6`~~ | A `local-only` run makes exactly zero outbound connections beyond the configured local and LM Link peers, and this is assertable from the journal. |
+| ✅ ~~`S-8`~~ | Request bodies are written to a file while a call is in flight, and that file inherits the ambient temp directory. On this machine `TMP` is `D:\Temp` — a shared root-level directory, not the per-user one — so a prompt containing repository content is briefly readable by any other user of the machine. The body must go in a private directory with restrictive permissions, or through a pipe. Found in the cycle 2 Phase E security review; the key itself is unaffected, since it never touches disk. |
+| 🟡 `S-7` | Push, PR creation, tagging and publishing are `approve` (`G-5`). Nothing leaves the machine unattended. |
 
 ---
 
@@ -481,7 +481,7 @@ Speculative, and the reason this document lives in this repo.
 | ✅ ~~`N-3`~~ | Single binary, no daemon required, no container required for the default host runtime. |
 | `N-4` | Cross-platform: Windows first, then Linux/WSL2 and macOS. Path handling, line endings and shell quoting are tested on Windows, not assumed. |
 | ✅ ~~`N-5`~~ | Deterministic replay of the journal for inspection: the same journal renders the same state file and the same board, on any machine. |
-| 🟡 `N-6` | Gates run without network access wherever the project allows it, so a flaky connection cannot manufacture a red. |
+| ✅ ~~`N-6`~~ | Gates run without network access wherever the project allows it, so a flaky connection cannot manufacture a red. |
 | `N-7` | Engine overhead is bounded and reported: tokens spent on compaction, classification and routing are counted separately from work tokens. |
 | ✅ ~~`N-8`~~ | Config, journal and artifact formats are versioned with forward-compatible readers. A loop mid-cycle must survive a harness upgrade. |
 | ✅ ~~`N-9`~~ | No panic on a runtime-fallible path. Parsing, IO and process execution return typed errors; `unwrap`/`expect` appear only where the invariant is local and proven. A harness that panics mid-batch cannot honour `L-7`. |

@@ -15,7 +15,7 @@
 //! there, and `--max-time` for one that answers slowly forever (`T-3`).
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::error::{Error, Result};
@@ -156,9 +156,49 @@ impl Default for Curl {
     }
 }
 
+/// A directory for request bodies that other users of the machine cannot read
+/// (`S-8`).
+///
+/// Found in cycle 2's Phase E review: `std::env::temp_dir()` reads `TMP`, and on
+/// this machine `TMP` is `D:\Temp` — a **shared root-level directory**, not the
+/// per-user one. A prompt carrying repository content was therefore briefly
+/// world-readable while the call was in flight. The key was never affected; it
+/// goes to curl on stdin and never touches disk (`S-2`).
+///
+/// The per-user root is preferred, and the directory is created with
+/// owner-only permissions on POSIX. On Windows a directory under `LOCALAPPDATA`
+/// inherits that profile's ACL, which is the per-user boundary — there is no
+/// mode bit to set, and pretending otherwise by calling `set_permissions` would
+/// be theatre.
+pub fn private_scratch() -> PathBuf {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from))
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
+        // Last resort. Still better than nothing: the per-process subdirectory
+        // below at least keeps two users' bodies apart by name.
+        .unwrap_or_else(std::env::temp_dir);
+
+    let dir = base.join("perp").join("bodies");
+    let _ = std::fs::create_dir_all(&dir);
+    restrict(&dir);
+    dir
+}
+
+#[cfg(unix)]
+fn restrict(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+}
+
+#[cfg(not(unix))]
+fn restrict(_dir: &Path) {
+    // Windows: the ACL comes from the parent, which is the user's profile.
+}
+
 impl Curl {
     pub fn new() -> Curl {
-        Curl { program: "curl".to_string(), scratch: std::env::temp_dir() }
+        Curl { program: "curl".to_string(), scratch: private_scratch() }
     }
 
     pub fn with_program(mut self, program: impl Into<String>) -> Curl {
@@ -393,6 +433,32 @@ mod tests {
             seen.contains("Authorization: Bearer sk-not-a-real-key-3f9a"),
             "but it did arrive at the server: {seen}"
         );
+    }
+
+    #[test]
+    fn a_request_body_does_not_land_in_a_shared_temp_directory() {
+        // `S-8`, from cycle 2's Phase E review. `std::env::temp_dir()` reads
+        // `TMP`, which on the machine this was found on is `D:\Temp` — shared,
+        // root-level, readable by every other user. A prompt carries repository
+        // content, so a call in flight was briefly world-readable.
+        let scratch = private_scratch();
+        let shared = std::env::temp_dir();
+
+        // The default must not be the ambient temp directory itself.
+        assert_ne!(scratch, shared, "the body directory is not the shared one");
+        assert!(
+            scratch.ends_with("perp/bodies") || scratch.ends_with("perp\\bodies"),
+            "and it is the harness's own: {}",
+            scratch.display()
+        );
+        assert!(scratch.is_dir(), "created on the way out: {}", scratch.display());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&scratch).expect("metadata").permissions().mode();
+            assert_eq!(mode & 0o077, 0, "owner-only: {mode:o}");
+        }
     }
 
     #[test]
