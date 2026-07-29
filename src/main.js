@@ -128,6 +128,7 @@ const dom = {
   statusLang: document.getElementById("status-lang"),
   statusCursor: document.getElementById("status-cursor"),
   statusProblems: document.getElementById("status-problems"),
+  statusPerp: document.getElementById("status-perp"),
 };
 
 /** @type {Array<{id:number,path:string|null,name:string,state:import("@codemirror/state").EditorState|null,savedText:string,dirty:boolean}>} */
@@ -2687,6 +2688,11 @@ decorate("btn-zoom-in", "zoomIn").addEventListener("click", () => setFontSize(fo
 decorate("btn-zoom-out", "zoomOut").addEventListener("click", () => setFontSize(fontSize - 1));
 dom.themeButton.addEventListener("click", cycleTheme);
 dom.statusProblems.addEventListener("click", showProblems);
+// The thinking indicator is also the way in: seeing that a step is open and
+// wanting to look at it is one gesture, not two.
+dom.statusPerp?.addEventListener("click", () => {
+  if (perpHost?.hidden) togglePerpPanel();
+});
 dom.statusLang.addEventListener("click", showLanguagePicker);
 dom.statusPath.addEventListener("click", copyPathToClipboard);
 
@@ -3108,7 +3114,7 @@ perp.configure({
     message(shown, { title: `perp ${step}` });
   },
   openArtifact: async (relative) => {
-    const root = perpRoot();
+    const root = await perpRoot();
     if (!root) return;
     try {
       await invoke("open_in_browser", { path: `${root}/${relative}` });
@@ -3119,22 +3125,33 @@ perp.configure({
 });
 
 /** The workspace the panel reads. The folder of whatever file is open. */
-function perpRoot() {
+/** The workspace the panel reads: the nearest ancestor holding a binding.
+ *
+ * The walk is in Rust, because it is a filesystem question. This used to strip
+ * the filename and call the result the root, under a comment claiming it walked
+ * up — so the panel only worked for a file at the top of the project.
+ */
+async function perpRoot() {
   const path = activeTab()?.path;
   if (!path) return null;
-  // Walk up to the nearest directory holding a binding, so the panel follows
-  // the project rather than the file.
-  return path.replace(/[\/][^\/]*$/, "");
+  const from = path.replace(/[\/][^\/]*$/, "");
+  try {
+    return await invoke("perp_root", { from });
+  } catch {
+    return null;
+  }
 }
 
 async function togglePerpPanel() {
   if (!perpHost) return;
   if (!perpHost.hidden) {
     perpHost.hidden = true;
+    // Hidden, not detached: the status-bar signal keeps working, so closing the
+    // panel does not blind you to a run that is still going.
     perp.detach();
     return;
   }
-  const root = perpRoot();
+  const root = await perpRoot();
   if (!root) {
     await message("Open a file in the project first — the panel reads its journal.", {
       title: "Perpetum",

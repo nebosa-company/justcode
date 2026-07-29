@@ -9,8 +9,12 @@
 // error: the panel says the harness is not installed and gets out of the way.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
-const REFRESH_MS = 4000;
+// The safety net, not the mechanism. `perp:changed` from the watcher is what
+// normally triggers a re-read; this catches a workspace whose binding moves the
+// journal somewhere the watcher does not look.
+const REFRESH_MS = 15000;
 
 let state = {
   root: null,
@@ -19,7 +23,25 @@ let state = {
   installed: true,
   tab: "timeline",
   timer: null,
+  // What the last `/btw` was answered with, so sending gives a visible result.
+  sent: null,
+  sending: false,
 };
+
+let unlisten = null;
+
+/** The watcher tells us when to re-read, rather than a timer guessing (`I-2`). */
+async function startListening() {
+  if (unlisten) return;
+  try {
+    unlisten = await listen("perp:changed", () => {
+      if (state.root) refresh();
+    });
+  } catch {
+    // No event bridge is survivable — the interval below still runs.
+    unlisten = null;
+  }
+}
 
 let host = null;
 let onOpenArtifact = null;
@@ -47,26 +69,46 @@ export async function attach(root) {
   state.root = root;
   if (!root) {
     stopPolling();
+    await invoke("perp_unwatch").catch(() => {});
     return;
   }
+  await startListening();
+  // Watching continues while the panel is closed, so reopening it is current
+  // and the toggle can show that a step is open.
+  await invoke("perp_watch", { root }).catch(() => {});
   await refresh();
   startPolling();
 }
 
+/** Hide the panel and keep observing.
+ *
+ * Deliberately not a stop. The thinking indicator lives in the status bar, so a
+ * closed panel is not a reason to stop knowing — and reopening is then instant
+ * rather than showing "Reading the journal…" against a run already in progress.
+ * [`release`] is the actual stop, for when the workspace goes away.
+ */
 export function detach() {
+  render();
+}
+
+/** The workspace is gone: stop watching and forget it. */
+export async function release() {
   stopPolling();
+  if (unlisten) {
+    unlisten();
+    unlisten = null;
+  }
+  await invoke("perp_unwatch").catch(() => {});
   state = { ...state, view: null, error: null, root: null };
   render();
 }
 
 function startPolling() {
   stopPolling();
-  // Polling rather than watching: the journal is append-only and a few seconds
-  // of staleness costs nothing, while a file watcher on a directory the loop is
-  // writing is a source of its own bugs.
-  state.timer = setInterval(() => {
-    if (isOpen()) refresh();
-  }, REFRESH_MS);
+  // A backstop behind the watcher rather than the way the panel learns
+  // anything. It runs whether or not the panel is showing, so the in-flight
+  // signal on the toggle stays honest.
+  state.timer = setInterval(() => refresh(), REFRESH_MS);
 }
 
 function stopPolling() {
@@ -118,7 +160,22 @@ function el(tag, className, text) {
   return node;
 }
 
+/** Whether a step is open right now, for callers that are not the panel. */
+export function inFlight() {
+  return Boolean(state.view && state.view.position && state.view.position.in_flight);
+}
+
 function render() {
+  // The status bar carries the signal too, so a run is visible with the panel
+  // shut. `refresh` runs on the watcher's events whether or not anything is
+  // showing, which is what makes this true rather than decorative.
+  const badge = document.getElementById("status-perp");
+  if (badge) {
+    const step = state.view?.position?.in_flight;
+    badge.hidden = !step;
+    if (step) badge.textContent = `thinking · ${step}`;
+  }
+
   if (!host) return;
   host.replaceChildren();
 
@@ -180,7 +237,12 @@ function renderHeader(view) {
   header.append(counts);
 
   if (position.in_flight) {
-    header.append(el("span", "perp-flight", `in flight: ${position.in_flight}`));
+    // A step being open is the one thing worth animating. The old signal was
+    // italic text at 75% opacity, which looked the same as idle.
+    const flight = el("span", "perp-flight");
+    flight.append(el("span", "perp-pulse"));
+    flight.append(el("span", null, `thinking · ${position.in_flight}`));
+    header.append(flight);
   }
   return header;
 }
@@ -237,11 +299,69 @@ function renderTimeline(body, view) {
   body.append(list);
 }
 
+/** Leave a `/btw` on the loop's inbound channel (`O-6`, `C-10`). */
+async function send(text) {
+  const note = text.trim();
+  if (!note || state.sending) return;
+  state.sending = true;
+  state.sent = null;
+  render();
+  try {
+    state.sent = (
+      await invoke("perp_run", {
+        subcommand: "btw",
+        args: [note, "--source", "panel"],
+        root: state.root,
+      })
+    ).trim();
+  } catch (error) {
+    state.sent = `${error}`;
+  } finally {
+    state.sending = false;
+  }
+  await refresh();
+}
+
+function renderComposer(body) {
+  const form = el("form", "perp-composer");
+  const input = el("input", "perp-input");
+  input.type = "text";
+  input.placeholder = "Leave a note for the loop…";
+  input.disabled = state.sending;
+  const button = el("button", "perp-send", state.sending ? "Sending…" : "Send");
+  button.type = "submit";
+  button.disabled = state.sending;
+  form.append(input, button);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = input.value;
+    input.value = "";
+    await send(text);
+  });
+  body.append(form);
+
+  // What the harness said back, verbatim. A note that was reclassified or
+  // refused says so here rather than looking like it was accepted.
+  if (state.sent) body.append(el("p", "perp-sent", state.sent));
+
+  // The boundary, stated where someone might expect more of it. This is not a
+  // way to steer a run: `/btw` is the only thing that can arrive from outside,
+  // and it cannot approve, pause or redirect.
+  body.append(
+    el(
+      "p",
+      "perp-note",
+      "Notes become `/btw` items. They cannot approve, pause or redirect a run.",
+    ),
+  );
+}
+
 function renderChat(body, view) {
   if (!view.chat.length) {
     body.append(
       el("p", "perp-empty", "No conversation yet. `perp chat` writes into this journal."),
     );
+    renderComposer(body);
     return;
   }
   const list = el("div", "perp-chat");
@@ -258,6 +378,7 @@ function renderChat(body, view) {
     list.append(turn);
   }
   body.append(list);
+  renderComposer(body);
 }
 
 // `I-3`: approving from the panel opens the diff first. The button only exists

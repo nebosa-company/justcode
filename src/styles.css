@@ -1799,7 +1799,92 @@ button.primary:hover {
 
 .perp-ok { color: var(--ok, #2e8b57); }
 .perp-bad { color: var(--error, #c0392b); }
-.perp-flight { opacity: 0.75; font-style: italic; }
+/* A step being open should not look like an idle panel. The old rule was
+   italic text at 75% opacity, which is exactly what idle looked like. */
+.perp-flight {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-style: italic;
+}
+
+.perp-pulse {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent, #4ec27f);
+  animation: perp-breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes perp-breathe {
+  0%, 100% { opacity: 0.25; transform: scale(0.75); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* The same signal in the status bar, so a run is visible with the panel closed
+   — the watcher keeps reading whether or not anything is showing. Only shown
+   while a step is open, so an idle editor gains no furniture. */
+/* `button { display: inline-flex }` beats the browser's built-in [hidden] rule,
+   the same trap `.jc-search-row`, `.terminal-panel`, `.terminal-view` and
+   `#perp-panel` each already carry an override for. Without this the badge
+   stayed on screen after a run ended, saying "thinking" at an idle harness —
+   caught by watching a real run finish, not by reading the code. */
+#status-perp[hidden] {
+  display: none;
+}
+
+#status-perp::before {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-left: 0.3rem;
+  border-radius: 50%;
+  background: var(--accent, #4ec27f);
+  animation: perp-breathe 1.4s ease-in-out infinite;
+}
+
+/* Motion is the signal, so removing it needs a replacement rather than
+   nothing: the dot stays, at full opacity, and simply does not move. */
+@media (prefers-reduced-motion: reduce) {
+  .perp-pulse,
+  #status-perp::before {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.perp-composer {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem 0;
+}
+
+.perp-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.perp-send { padding: 0.35rem 0.75rem; }
+
+.perp-sent {
+  margin: 0.25rem 0 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+}
+
+.perp-note {
+  margin: 0.5rem 0 0;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
 
 .perp-tabs {
   display: flex;

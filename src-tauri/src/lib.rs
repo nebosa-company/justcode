@@ -638,13 +638,23 @@ fn files_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<FileTarget> {
 ///   rather than an error the panel has to special-case.
 #[tauri::command]
 fn perp_run(subcommand: String, args: Vec<String>, root: String) -> Result<String, String> {
-    // Read-only subcommands only. `run`, `rewind`, `control` and `approve`
-    // change what the loop does and are deliberately absent: the panel shows
-    // the journal, and acting on it is done where the confirmation is.
-    const ALLOWED: &[&str] = &["panel", "state", "cost", "explain", "check", "links", "version"];
+    // Reads, plus the one write the harness designed for outside messages.
+    //
+    // `run`, `rewind`, `control` and `approve` change what the loop does and are
+    // deliberately absent: the panel shows the journal, and acting on it is done
+    // where the confirmation is.
+    //
+    // `btw` is here because it is the harness's own door for a message from
+    // outside, and the least powerful object in the system: `control` has
+    // exactly one inbound function, everything arriving on it becomes a `/btw`,
+    // and `btw::classify` then applies `C-10` so even that cannot reach the
+    // approval boundary. Sending a note is not acting on the loop — the loop
+    // decides whether to pick it up.
+    const ALLOWED: &[&str] =
+        &["panel", "state", "cost", "explain", "check", "links", "version", "btw"];
     if !ALLOWED.contains(&subcommand.as_str()) {
         return Err(format!(
-            "`{subcommand}` is not a panel subcommand. The panel reads; it does not act."
+            "`{subcommand}` is not a panel subcommand. The panel reads, and may leave a `/btw`."
         ));
     }
 
@@ -673,6 +683,90 @@ fn perp_run(subcommand: String, args: Vec<String>, root: String) -> Result<Strin
         )),
         Err(e) => Err(format!("could not run {program}: {e}")),
     }
+}
+
+/// The workspace a file belongs to: the nearest ancestor holding a binding.
+///
+/// The panel used to take the folder of the open file and call it the root,
+/// under a comment that said it walked up to find the binding. It did not, so
+/// the panel worked only when the open file happened to sit at the top of the
+/// project and reported `cannot read .../src/docs/perpetum/binding.md` for
+/// every file in a subdirectory.
+///
+/// `None` when no ancestor has one, which is an ordinary answer: most files are
+/// not in a Perpetum workspace and the panel says so rather than guessing.
+#[tauri::command]
+fn perp_root(from: String) -> Option<String> {
+    let mut dir = std::path::Path::new(&from);
+    // Bounded by the filesystem: `parent()` yields `None` at the root.
+    loop {
+        if dir.join("docs/perpetum/binding.md").is_file() {
+            return Some(dir.to_string_lossy().replace('\\', "/"));
+        }
+        dir = dir.parent()?;
+    }
+}
+
+/// Bumped whenever the panel points at a workspace. A watcher thread whose
+/// generation is no longer current exits on its next tick, so re-attaching does
+/// not leave two threads emitting into the same window.
+static PERP_WATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How often the watcher looks. Fast enough that a step closing feels immediate,
+/// slow enough to be two `stat` calls a second on one file.
+const PERP_WATCH_MS: u64 = 400;
+
+/// Watch a workspace's journal and emit `perp:changed` when it grows (`I-2`).
+///
+/// The panel used to poll `perp panel` every four seconds, which meant a step
+/// could close four seconds before anyone saw it and that nothing moved at all
+/// while the panel was shut. This watches the file instead and tells the window,
+/// so the panel re-reads because something happened rather than because a timer
+/// went off.
+///
+/// It keeps running when the panel closes. Watching costs a `stat`; stopping
+/// means reopening the panel shows a stale view until the next tick, and the
+/// toggle cannot show that a run is under way.
+///
+/// The journal's conventional path is used rather than `out.journal` from the
+/// binding, because resolving that needs a subprocess and this runs twice a
+/// second. A binding that moves the journal loses the events, not the panel: the
+/// slow refresh and the Refresh button both still work.
+#[tauri::command]
+fn perp_watch(app: tauri::AppHandle, root: String) {
+    use std::sync::atomic::Ordering;
+
+    let generation = PERP_WATCH.fetch_add(1, Ordering::SeqCst) + 1;
+    std::thread::spawn(move || {
+        let journal = std::path::Path::new(&root).join("docs/perpetum/journal.jsonl");
+        // `None` until the file exists, so a workspace that gains a journal
+        // mid-run reports its first record as a change rather than as the
+        // baseline.
+        let mut seen: Option<(u64, std::time::SystemTime)> = None;
+        loop {
+            if PERP_WATCH.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            let now = std::fs::metadata(&journal)
+                .ok()
+                .and_then(|meta| meta.modified().ok().map(|when| (meta.len(), when)));
+            if let Some(now) = now {
+                if seen != Some(now) {
+                    seen = Some(now);
+                    if app.emit("perp:changed", ()).is_err() {
+                        return;
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(PERP_WATCH_MS));
+        }
+    });
+}
+
+/// Stop watching. Called when the panel is pointed at nothing.
+#[tauri::command]
+fn perp_unwatch() {
+    PERP_WATCH.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -1575,6 +1669,9 @@ pub fn run() {
             run_script,
             reveal_in_file_manager,
             perp_run,
+            perp_root,
+            perp_watch,
+            perp_unwatch,
             startup_files,
             report_ready,
             associated_extensions,
