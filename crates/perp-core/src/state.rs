@@ -43,6 +43,10 @@ pub struct Projection {
     /// than in a file of their own, because a queue that lives outside the
     /// journal is a queue that can disagree with it.
     pub pending_btw: Vec<crate::btw::Btw>,
+    /// One row per cycle, counted from the records (`O-7`). In the projection
+    /// for the same reason as everything else here: a metrics table maintained
+    /// alongside the journal is a table that can flatter it.
+    pub history: Vec<crate::metrics::Cycle>,
 }
 
 impl Projection {
@@ -55,6 +59,7 @@ impl Projection {
 pub fn replay(records: &[Record]) -> Projection {
     let mut projection = Projection {
         pending_btw: crate::btw::Queue::replay(records).pending().into_iter().cloned().collect(),
+        history: crate::metrics::history(records),
         ..Projection::default()
     };
     let mut open: Vec<(StepId, String)> = Vec::new();
@@ -219,6 +224,24 @@ pub fn render(projection: &Projection, at: i64) -> String {
         }
     }
 
+    // `O-7`: Perpetum F.5's cycle metrics, counted rather than summarised. The
+    // table is appended by the engine on every projection, so a cycle that went
+    // badly appears here without anyone choosing to add it.
+    if !projection.history.is_empty() {
+        out.push_str("\n## History\n\n");
+        out.push_str(crate::metrics::Cycle::HISTORY_HEADER);
+        out.push('\n');
+        for cycle in &projection.history {
+            out.push_str(&cycle.history_row());
+            out.push('\n');
+        }
+        out.push_str(
+            "\nEvery figure counted from `journal.jsonl`. Elapsed is wall-clock between the \
+             first and last record of the cycle, which for an unattended run is mostly the \
+             machine waiting — not effort.\n",
+        );
+    }
+
     out
 }
 
@@ -258,6 +281,24 @@ mod tests {
         // The note is elsewhere in the file — every `/btw` is a journal record
         // and shows in the step table — but it is not *waiting* for anything.
         assert!(!section.contains("slow one"), "and nothing that is not waiting:{section}");
+    }
+
+    #[test]
+    fn the_history_table_is_appended_by_the_engine_from_counted_facts() {
+        // `O-7`. The table is part of the projection, so a cycle that went
+        // badly appears in it without anyone choosing to add the row.
+        let mut records = closed_pair("c1/b1/s01", true, "did a thing");
+        records.extend(closed_pair("c2/b1/s02", false, "gate build is red"));
+
+        let rendered = render(&replay(&records), 100);
+        assert!(rendered.contains("## History"), "{rendered}");
+        assert!(rendered.contains("| Cycle | Steps |"), "the header is one definition");
+        assert!(rendered.contains("| 1 | 1 | 0 |"), "cycle 1: one step, none red:\n{rendered}");
+        assert!(rendered.contains("| 2 | 1 | 1 |"), "cycle 2: one step, one red:\n{rendered}");
+        assert!(
+            rendered.contains("not effort"),
+            "and it says what elapsed means, because it is the number most likely to be misread"
+        );
     }
 
     #[test]

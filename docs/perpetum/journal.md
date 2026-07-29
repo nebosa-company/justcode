@@ -1915,3 +1915,149 @@ Five of twelve are 🟡, and the reasons are all "the other end does not exist y
 
 **Cycle 3 so far:** 88 requirements done, 13 in progress, 0 conflicting, 1
 external-gated. Three batches delivered of five.
+
+
+---
+
+## Phase D — Batch 14, artifacts and the board
+
+Branch `perp/c3/b14`. Ten requirements. Everything a person looks at instead of
+reading the journal.
+
+### c3/b14/s01 — Counted, not summarised
+
+`O-7` says cycle metrics are appended *from counted facts, not from a summary*.
+That word is the whole module. The failure it prevents is the plausible
+paragraph — *"a productive cycle, twelve requirements delivered"* — written by
+the thing whose performance it describes.
+
+So [`metrics.rs`](../../crates/perp-core/src/metrics.rs) derives every number
+from records and has no field that cannot be derived. `Cycle::rows()` is the
+single definition of what a metric is called and how it reads, so no surface can
+show a number another surface does not have.
+
+Two honest details:
+
+- **Elapsed is wall-clock and says so** — first record to last. For an
+  unattended run that is mostly the machine sitting idle, and calling it "time
+  spent" would flatter every rate derived from it. The state file carries that
+  sentence next to the table.
+- A cycle that spent nothing reports `$0.000000` rather than omitting the row.
+  A missing number reads as unknown; a zero reads as free.
+
+### c3/b14/s02 — The live view is derived, never tallied
+
+`O-5`. `Snapshot::of` rebuilds from the projection every time. A running tally
+in memory survives neither a restart nor a second watcher, and disagrees with
+the journal the moment either happens — and the first thing anyone does with a
+watch window is open a second one.
+
+The test says it plainly: two snapshots of the same journal are equal, which is
+only true because neither keeps state.
+
+### c3/b14/s03 — Self-contained, and checked rather than assumed
+
+`A-2`/`A-5`. One file, inline style, no CDN, no build step, opens from a USB
+stick. A dashboard that needs a server stops working exactly when someone is
+trying to find out what went wrong.
+
+`is_self_contained()` **checks** rather than asserting: a page is scanned for
+`http://`, `<script src`, `@import`, `url(http` and friends, and a render that
+reaches out becomes a warning instead of a file. This is the property that
+quietly stops being true the first time someone adds a font.
+
+The diagram is inline SVG for the same reason. A chart that needs a rendering
+library is a chart that does not open.
+
+Journal text is **escaped**, not pasted. A gate transcript routinely contains
+`<` and `&`, and a `/btw` contains whatever the operator typed.
+
+### c3/b14/s04 — One name per kind
+
+`A-2`: a re-render **replaces**. Two hundred timestamped boards is not a
+history — the journal is the history — it is two hundred files nobody deletes
+and one of which is the newest.
+
+### c3/b14/s05 — Publishing is posting publicly
+
+`A-4`. Rendering locally is `auto`. Publishing anywhere outside the workspace is
+`approve`, **regardless of how private the destination claims to be**. A private
+gist is a URL, and a URL is a thing that gets forwarded. The test walks three
+destinations that describe themselves as private and requires an approval for
+each.
+
+### c3/b14/s06 — Never on the critical path
+
+`A-7` as a type rather than a discipline: `try_render` returns
+`Result<Artifact, Warning>` where `Warning` is **not** a crate `Error`. No caller
+can `?` an artifact failure into a step failure. Losing a batch because a diagram
+would not draw is absurd, and a harness that *can* do it will do it at 3am.
+
+### c3/b14/s07 — Gates and red run
+
+- **gates:** green. 348 unit + 5 spine + 15 end-to-end = **368 tests**.
+- **red run: 12 mutations, 12 red** — one after a correction:
+
+  ```
+  artifact.rs  a re-render accumulates                   a_kind_has_one_stable_name        101 red
+  artifact.rs  journal text is pasted in unescaped       journal_text_is_escaped           101 red
+  artifact.rs  publishing outside is free                publishing_outside_needs_approval 101 red
+  artifact.rs  a page that reaches out is not detected   a_page_that_reaches_out_is_caught 101 red
+  artifact.rs  an artifact ships without provenance      every_kind_renders_self_contained 101 red
+  artifact.rs  an empty evidence bundle looks full       an_empty_evidence_bundle_says_so  101 red
+  metrics.rs   a step left open is not counted           metrics_are_counted_from_records  101 red
+  metrics.rs   a cycle counts every cycle's records      a_cycle_counts_only_its_own       101 red
+  metrics.rs   the history table is unordered            one_row_per_cycle_oldest_first    101 red
+  metrics.rs   elapsed is derived from the step count    elapsed_is_wall_clock_and_says_so 101 red
+  metrics.rs   the snapshot forgets the gate state       the_watch_snapshot_shows_flight   101 red
+  state.rs     the history table is dropped              the_history_table_is_appended     101 red
+  ```
+
+**The correction is the interesting one, and it is the same trap as batch 12.**
+The provenance mutation wrapped the block in an HTML comment — and the test
+stayed green, because a comment leaves the text in the string and the assertion
+was `html.contains("Provenance")`. Two faults at once: an inert mutation *and* a
+test asserting a heading rather than a value.
+
+Both fixed. The test now checks the sha, the batch and the generation time
+appear inside the rendered footer, and the mutation drops the block from the
+format string. Red.
+
+### c3/b14/s08 — Run on itself
+
+```
+$ perp artifact all --root .
+7 written to docs/perpetum/artifacts
+
+$ perp watch --root .
+cycle 3 · stage b13
+in flight   nothing
+link        none yet
+spent       0 tokens · $0.000000
+gates       52/53 green
+blocked 1 · gated 0 · approvals 0 · /btw queued 1
+```
+
+And the state file grew its history table, unprompted:
+
+```
+| Cycle | Steps | Red | Gates green | Requirements | Tokens | Money | Elapsed |
+|---|---|---|---|---|---|---|---|
+| 1 | 17 | 1 | 13 | 11 | 0 | $0.0000 | 35m |
+| 2 | 18 | 0 | 18 | 0 | 0 | $0.0000 | 1h02m |
+| 3 | 27 | 0 | 21 | 1 | 0 | $0.0000 | 39m |
+```
+
+Cycle 1's single red is the `c1/b5/s07` build failure, still on the record ten
+batches later. That is the point of the table.
+
+### c3/b14/s09 — What is carried
+
+- **`A-3`** — the board renders on demand and is not yet regenerated
+  automatically at step 7 of every feature. The hook belongs in the engine's
+  step loop, and the engine's only `Work` is `Gates`; wiring it to a feature
+  loop that does not exist would be wiring it to nothing.
+- **`A-5`** — standalone in a browser: yes, verified. In the JustCode panel:
+  the panel is `I-*`, batch 18.
+
+**Batch 14 status:** 8 of 10 delivered, 2 carried, 0 blocked. 368 tests.

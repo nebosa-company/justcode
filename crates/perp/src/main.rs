@@ -12,10 +12,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use perp_core::binding::Binding;
+use perp_core::artifact;
 use perp_core::btw;
 use perp_core::chat;
 use perp_core::command::{self, Chain, Command, Input, Subject};
 use perp_core::engine::{Engine, Gates};
+use perp_core::metrics::Snapshot;
 use perp_core::phase::{Machine, Measured, Phase};
 use perp_core::gate::{self, Gate};
 use perp_core::git::Repo;
@@ -95,6 +97,16 @@ usage:
       Render the evidence chain: the steps that cited it, the gate transcripts,
       the commit it was pinned to, and which link wrote it.
 
+  perp artifact [<kind>|all] [--root <dir>]
+      Render artifacts from the journal into docs/perpetum/artifacts/. One
+      stable file per kind, self-contained, no server and no build step. A
+      render that fails is a warning: artifacts are never on the critical path.
+
+  perp watch [--every <seconds>] [--root <dir>]
+      Phase, batch, link, tokens, money, gate state, blocked and gated counts
+      and queued /btw. Derived from the journal every time rather than tallied,
+      so two watchers agree.
+
   perp cost [--root <dir>]
       Replay the journal and report what the loop spent, by link and by role.
       Local links show tokens and time and no money.
@@ -139,6 +151,8 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("chat") => cmd_chat(&args[1..]),
         Some("btw") => cmd_btw(&args[1..]),
         Some("explain") => cmd_explain(&args[1..]),
+        Some("artifact") => cmd_artifact(&args[1..]),
+        Some("watch") => cmd_watch(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -861,4 +875,69 @@ fn next_step_for(records: &[Record], stage: &str) -> StepId {
     let cycle = records.last().map(|r| r.step.cycle).unwrap_or(1);
     let seq = records.iter().map(|r| r.step.seq).max().unwrap_or(0) + 1;
     StepId::new(cycle, stage, seq).unwrap_or(StepId { cycle, stage: stage.into(), seq })
+}
+
+/// Render artifacts from the journal (`A-1`–`A-7`, `O-2`).
+///
+/// A render that fails is reported and does not change the exit code: `A-7`
+/// says artifact generation is never on the critical path, and an exit code is
+/// how a caller decides whether the critical path held.
+fn cmd_artifact(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+    let projection = replay(&records);
+
+    let wanted = positionals(args).first().copied().unwrap_or("all");
+    let kinds = match wanted {
+        "all" => artifact::Kind::ALL.to_vec(),
+        name => vec![artifact::Kind::parse(name).map_err(|e| e.to_string())?],
+    };
+
+    let dir = binding.root().join("docs/perpetum/artifacts");
+    let provenance = artifact::Provenance::from_journal(
+        projection.cycle.unwrap_or(1),
+        time::now(),
+        &records,
+    )
+    .sha(Repo::at(binding.root()).head_sha().ok())
+    .batch(projection.stage.clone().unwrap_or_else(|| "—".into()));
+
+    let mut written = 0;
+    for kind in kinds {
+        match artifact::try_render(kind, &projection, &records, &provenance) {
+            Ok(rendered) => match rendered.write(&dir) {
+                Ok(path) => {
+                    println!("{}", path.display());
+                    written += 1;
+                }
+                Err(e) => println!("warning: {kind} could not be written: {e} (`A-7`)"),
+            },
+            Err(warning) => println!("warning: {warning}"),
+        }
+    }
+    println!("{written} written to {}", dir.display());
+    Ok(())
+}
+
+/// The live view (`O-5`). One snapshot, or repeated with `--every`.
+fn cmd_watch(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let every: Option<u64> = flag(args, "--every")
+        .map(|text| text.parse().map_err(|_| format!("--every takes seconds, not `{text}`")))
+        .transpose()?;
+
+    loop {
+        let records = journal.read_all().map_err(|e| e.to_string())?;
+        let projection = replay(&records);
+        // Approvals live in the engine's queue, which only exists inside a run.
+        // Reported as zero-known rather than guessed at from the journal.
+        let snapshot = Snapshot::of(&projection, &records, 0);
+        println!("{snapshot}");
+
+        let Some(seconds) = every else { return Ok(()) };
+        println!("---");
+        std::thread::sleep(std::time::Duration::from_secs(seconds));
+    }
 }

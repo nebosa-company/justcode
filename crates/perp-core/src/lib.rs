@@ -19,6 +19,8 @@
 //! | [`chat`] | `C-1`–`C-5` |
 //! | [`command`] | `C-6`, `C-7` |
 //! | [`btw`] | `C-8`–`C-12` |
+//! | [`artifact`] | `A-1`–`A-7`, `O-2` |
+//! | [`metrics`] | `O-5`, `O-7` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -46,6 +48,7 @@
 //! would need a GPU to run.
 
 pub mod approval;
+pub mod artifact;
 pub mod atomic;
 pub mod binding;
 pub mod btw;
@@ -63,6 +66,7 @@ pub mod ladder;
 pub mod json;
 pub mod link;
 pub mod local;
+pub mod metrics;
 pub mod lock;
 pub mod net;
 pub mod phase;
@@ -81,6 +85,7 @@ pub mod watchdog;
 mod testutil;
 
 pub use binding::Binding;
+pub use artifact::{Artifact, Provenance};
 pub use btw::Btw;
 pub use budget::{Budget, Budgets, Spend};
 pub use engine::{Done, Engine, Gates, Task, Work};
@@ -91,6 +96,7 @@ pub use gate::{Attempts, Gate, GateResult, Verdict};
 pub use journal::{Journal, Kind, Record};
 pub use ladder::{Ladder, Next, Rung};
 pub use link::{Link, Links, Mode, Role};
+pub use metrics::{Cycle, Snapshot};
 pub use lock::{Concurrency, Lock};
 pub use phase::{Machine, Measured, Park, Phase, Stop};
 pub use probe::{Capabilities, ModelFacts, ProbeCache};

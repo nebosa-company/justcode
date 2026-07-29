@@ -421,13 +421,13 @@ other durable output of a cycle deserves the same treatment.
 
 | id | Requirement |
 |---|---|
-| `A-1` | Artifact kinds: progress board, cycle report, batch plan, release notes draft, gate evidence bundle, architecture or dependency diagram, conflict register. |
-| `A-2` | Artifacts are generated from the journal, are self-contained (no external fetches, no CDN, assets inlined), and are written under `docs/perpetum/artifacts/` with a stable name per kind, so a re-render replaces rather than accumulates. |
-| `A-3` | The progress board is regenerated at step 7 of every feature (Perpetum Appendix 2) — file and rendered view both. |
-| `A-4` | Rendering locally is `auto`. Publishing an artifact anywhere outside the workspace is `approve` — that is Perpetum 0.4's "posting publicly", regardless of how private the destination claims to be. |
-| `A-5` | Artifacts render in the JustCode panel and standalone in a browser, with no server and no build step. |
-| `A-6` | Every artifact carries provenance: cycle, batch, commit sha, generation time, and the links used. An artifact without provenance is decoration. |
-| `A-7` | Artifact generation is never on the critical path. A failed render is a warning; it never blocks a feature or fails a gate. |
+| ✅ ~~`A-1`~~ | Artifact kinds: progress board, cycle report, batch plan, release notes draft, gate evidence bundle, architecture or dependency diagram, conflict register. |
+| ✅ ~~`A-2`~~ | Artifacts are generated from the journal, are self-contained (no external fetches, no CDN, assets inlined), and are written under `docs/perpetum/artifacts/` with a stable name per kind, so a re-render replaces rather than accumulates. |
+| 🟡 `A-3` | The progress board is regenerated at step 7 of every feature (Perpetum Appendix 2) — file and rendered view both. |
+| ✅ ~~`A-4`~~ | Rendering locally is `auto`. Publishing an artifact anywhere outside the workspace is `approve` — that is Perpetum 0.4's "posting publicly", regardless of how private the destination claims to be. |
+| 🟡 `A-5` | Artifacts render in the JustCode panel and standalone in a browser, with no server and no build step. |
+| ✅ ~~`A-6`~~ | Every artifact carries provenance: cycle, batch, commit sha, generation time, and the links used. An artifact without provenance is decoration. |
+| ✅ ~~`A-7`~~ | Artifact generation is never on the critical path. A failed render is a warning; it never blocks a feature or fails a gate. |
 
 ---
 
@@ -436,12 +436,12 @@ other durable output of a cycle deserves the same treatment.
 | id | Requirement |
 |---|---|
 | ✅ ~~`O-1`~~ | `journal.jsonl` is the source of truth and is replayable: given the journal and the repo at a commit, the engine can reconstruct what the loop believed at any step. |
-| `O-2` | The progress board (`A-3`) is the status-at-a-glance surface and is written to disk as well as rendered. |
+| ✅ ~~`O-2`~~ | The progress board (`A-3`) is the status-at-a-glance surface and is written to disk as well as rendered. |
 | `O-3` | Live controls: pause at next step boundary, resume, single-step, inject a message, redirect to another requirement, abort the cycle cleanly. |
 | `O-4` | **Rewind:** resume from any journal step, discarding later work, with the workspace reset to that step's commit (`G-8`). This is how a bad batch is recovered without re-running the cycle. |
-| `O-5` | A watch mode streams: phase, batch, feature, link in use, tokens and money this cycle, gate state, blocked and gated counts, pending approvals, queued `/btw`. |
+| ✅ ~~`O-5`~~ | A watch mode streams: phase, batch, feature, link in use, tokens and money this cycle, gate state, blocked and gated counts, pending approvals, queued `/btw`. |
 | `O-6` | Notification sink is pluggable (OS notifier, webhook, mail) and is **outbound only**, with exactly one exception: a reply may carry a `/btw` note and nothing else. **Approvals never arrive over the network.** The phone tells you something needs you; you still walk to the machine. Resolved 2026-07-29 — the authentication problem is removed rather than solved, because one bug in a signature check reopens the approval boundary. |
-| `O-7` | Cycle metrics (Perpetum F.5) are appended to the state file's history table by the engine, from counted facts, not from a summary. |
+| ✅ ~~`O-7`~~ | Cycle metrics (Perpetum F.5) are appended to the state file's history table by the engine, from counted facts, not from a summary. |
 
 ### 9.1 JustCode integration
 
