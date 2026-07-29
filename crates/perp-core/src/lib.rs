@@ -28,6 +28,7 @@
 //! | [`panel`] | `I-1`–`I-5` |
 //! | [`repo`] | `G-9`, `G-11`, `G-12`, `T-11` |
 //! | [`runtime`] | `T-9`, `N-4` |
+//! | [`stream`] | `M-23`, `C-4` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -90,6 +91,7 @@ pub mod security;
 pub mod session;
 pub mod state;
 pub mod step;
+pub mod stream;
 pub mod time;
 pub mod tool;
 pub mod verify;
@@ -125,6 +127,7 @@ pub use session::{Decision, Finding, Probe, Session, StepGuard};
 pub use security::{Egress, Origin, Redacted};
 pub use state::{replay, Projection};
 pub use step::StepId;
+pub use stream::Streamed;
 pub use watchdog::{Watch, Watchdogs};
 
 /// The crate version, for the state file and the board to report.

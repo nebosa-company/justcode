@@ -257,6 +257,32 @@ impl Curl {
     }
 }
 
+impl Curl {
+    /// The argv and stdin for a request, without running it — so a streaming
+    /// reader can own the child process (`M-23`).
+    ///
+    /// The body goes in a file as usual (a prompt is longer than any command
+    /// line allows) and the credential goes on stdin as usual (`S-2`): argv is
+    /// world-readable, and streaming does not change that.
+    pub fn streaming_invocation(&self, request: &Request) -> Result<(Vec<String>, Option<String>)> {
+        let body_path = match &request.body {
+            Some(body) => {
+                let path = self.scratch.join(format!(
+                    "perp-stream-{}-{}.json",
+                    std::process::id(),
+                    crate::watchdog::content_hash(body.as_bytes())
+                ));
+                std::fs::write(&path, body).map_err(|e| Error::io(&path, e))?;
+                Some(path)
+            }
+            None => None,
+        };
+        let args = self.args(request, body_path.as_ref().and_then(|p| p.to_str()));
+        let stdin = self.config(request)?;
+        Ok((args, stdin))
+    }
+}
+
 impl Transport for Curl {
     fn send(&self, request: &Request) -> Result<Response> {
         let body_path = match &request.body {

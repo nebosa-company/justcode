@@ -368,6 +368,7 @@ mod tests {
             context_length: Some(8192),
             reasoning_channel: false,
             prefix_cache: false,
+            responses: false,
             source: Source::Observed,
         }
     }

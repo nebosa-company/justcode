@@ -105,6 +105,10 @@ pub struct Capabilities {
     pub reasoning_channel: bool,
     /// A prefix cache worth shaping prompts for (`M-12`).
     pub prefix_cache: bool,
+    /// The `/v1/responses` protocol (`M-21`). Observed, never configured — a
+    /// binding that declares it is wrong the day the server is upgraded, and
+    /// wrong in a way that produces a 404 rather than a message about config.
+    pub responses: bool,
     /// How this was decided, so a wrong answer is traceable to its source
     /// rather than to a vibe.
     pub source: Source,
@@ -135,6 +139,10 @@ impl Capabilities {
             context_length: None,
             reasoning_channel: cloud,
             prefix_cache: cloud,
+            // Not assumed for anyone. LM Studio serves `/v1/responses` and
+            // DeepSeek does not, and both change — so it is observed, and the
+            // baseline is the protocol every link speaks.
+            responses: false,
             source: Source::KindDefault,
         }
     }
@@ -147,6 +155,18 @@ impl Capabilities {
         caps.embeddings = facts.is_embedding_model() || caps.embeddings;
         caps.source = Source::Observed;
         caps
+    }
+
+    /// Record whether the link serves `/v1/responses` (`M-21`).
+    ///
+    /// Separate from [`Capabilities::observed`] because it is a fact about the
+    /// **endpoint**, not the model: `ModelFacts` comes from a model listing,
+    /// which says nothing about which routes exist. Asking the server is the
+    /// only honest answer, and it is cached with the rest of the probe (`M-6`)
+    /// so it costs one round trip per TTL.
+    pub fn with_responses(mut self, serves: bool) -> Capabilities {
+        self.responses = serves;
+        self
     }
 
     /// Would a prompt of this size fit?

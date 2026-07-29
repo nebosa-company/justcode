@@ -868,19 +868,124 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
                     .map_err(|e| e.to_string())?;
 
                 let request = ChatRequest::new(vec![Message::user(text)]);
-                match client.call(&links, Role::Chat, &request, &AssumeHealthy, mode, time::now()) {
-                    Ok(served) => {
-                        println!("{}", served.reply.content);
-                        println!("[via {}]", served.provenance());
-                        let next = step.next();
-                        let turn =
-                            chat::Turn::assistant(&served.reply.content, time::now(), &served.link);
-                        journal.append(&turn.record(next.clone())).map_err(|e| e.to_string())?;
-                        journal
-                            .append(&served.to_record(next, time::now(), links.price(&served.link)))
-                            .map_err(|e| e.to_string())?;
+                let link = match links.resolve(Role::Chat, &AssumeHealthy, mode) {
+                    Ok(link) => link.clone(),
+                    Err(e) => {
+                        println!("no link for chat: {e}");
+                        continue;
                     }
-                    Err(e) => println!("no link answered: {e}"),
+                };
+
+                // `C-4`: streamed and interruptible. The partial is journalled,
+                // never discarded — the half a model produced before someone
+                // stopped it is the interesting half when an answer was going
+                // wrong.
+                let mut printed = false;
+                let streamed = client.stream(
+                    &link,
+                    &request,
+                    || false,
+                    |event| {
+                        if let perp_core::stream::Event::Delta(delta) = event {
+                            print!("{delta}");
+                            let _ = std::io::Write::flush(&mut std::io::stdout());
+                            printed = true;
+                        }
+                    },
+                );
+
+                match streamed {
+                    Ok(streamed) => {
+                        if printed {
+                            println!();
+                        }
+                        println!("[via {} — {}]", link.name, streamed.stop.describe());
+                        if streamed.has_content() {
+                            let next = step.next();
+                            let mut turn = chat::Turn::assistant(
+                                &streamed.content,
+                                time::now(),
+                                &link.name,
+                            );
+                            if streamed.stop == perp_core::stream::Stop::Interrupted {
+                                turn = turn.interrupted();
+                            }
+                            journal
+                                .append(&turn.record(next.clone()))
+                                .map_err(|e| e.to_string())?;
+
+                            // `M-11`: a streamed call costs the same as a
+                            // buffered one. Losing the accounting because the
+                            // tokens arrived a few at a time would make every
+                            // cost report quietly wrong in the direction that
+                            // flatters it.
+                            let usage = perp_core::cost::Usage::from_reply(
+                                streamed.prompt_tokens,
+                                streamed.completion_tokens,
+                                0,
+                                0,
+                            );
+                            let price = links.price(&link.name);
+                            let entry = perp_core::cost::Entry {
+                                step: next.to_string(),
+                                role: "chat".into(),
+                                link: link.name.clone(),
+                                model: link.model.clone(),
+                                usage,
+                                latency_ms: streamed
+                                    .first_token
+                                    .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+                                    .unwrap_or_default(),
+                                charge: price.charge(&usage),
+                            };
+                            journal
+                                .append(&perp_core::cost::annotate(
+                                    Record::outcome(
+                                        next,
+                                        time::now(),
+                                        true,
+                                        format!("chat call to {}", link.name),
+                                    ),
+                                    &entry,
+                                ))
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                    // A silent or broken link falls back to the non-streaming
+                    // path, which walks the whole role chain (`M-9`).
+                    Err(e) => {
+                        println!("[streaming failed: {e} — falling back]");
+                        match client.call(
+                            &links,
+                            Role::Chat,
+                            &request,
+                            &AssumeHealthy,
+                            mode,
+                            time::now(),
+                        ) {
+                            Ok(served) => {
+                                println!("{}", served.reply.content);
+                                println!("[via {}]", served.provenance());
+                                let next = step.next();
+                                let turn = chat::Turn::assistant(
+                                    &served.reply.content,
+                                    time::now(),
+                                    &served.link,
+                                );
+                                journal
+                                    .append(&turn.record(next.clone()))
+                                    .map_err(|e| e.to_string())?;
+                                journal
+                                    .append(&served.to_record(
+                                        next,
+                                        time::now(),
+                                        links.price(&served.link),
+                                    ))
+                                    .map_err(|e| e.to_string())?;
+                            }
+                            Err(e) => println!("no link answered: {e}"),
+                        }
+                    }
                 }
             }
         }

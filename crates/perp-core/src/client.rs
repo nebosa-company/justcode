@@ -85,6 +85,103 @@ impl ChatRequest {
         }
         json::to_string(&Value::Obj(fields))
     }
+
+    /// The `/v1/responses` shape (`M-21`).
+    ///
+    /// Converted **at the link edge**: the engine's own message model is the
+    /// same either way, and only this function knows the difference. A
+    /// protocol that leaked into the engine would mean every caller had to
+    /// know which link it was talking to.
+    ///
+    /// The differences that matter: `input` rather than `messages`, `content`
+    /// as a typed array rather than a bare string, and
+    /// `max_output_tokens` rather than `max_tokens`.
+    pub fn to_responses_json(&self, model: &str) -> String {
+        let input: Vec<Value> = self
+            .messages
+            .iter()
+            .map(|message| {
+                let part = Value::Obj(vec![
+                    // `input_text` for what we send, `output_text` for what
+                    // comes back. Sending the wrong one is a 400 that says
+                    // very little.
+                    ("type".into(), Value::str("input_text")),
+                    ("text".into(), Value::str(message.content.clone())),
+                ]);
+                Value::Obj(vec![
+                    ("role".into(), Value::str(message.role.clone())),
+                    ("content".into(), Value::Arr(vec![part])),
+                ])
+            })
+            .collect();
+
+        let mut fields = vec![
+            ("model".to_string(), Value::str(model)),
+            ("input".to_string(), Value::Arr(input)),
+            ("stream".to_string(), Value::Bool(self.stream)),
+        ];
+        if let Some(max) = self.max_tokens {
+            fields.push(("max_output_tokens".to_string(), Value::int(max)));
+        }
+        json::to_string(&Value::Obj(fields))
+    }
+}
+
+/// Parse a `/v1/responses` reply (`M-21`).
+///
+/// The content is nested two levels deeper than chat-completions, and the token
+/// counts are named differently. Both are handled here and nowhere else.
+pub fn parse_responses(body: &str) -> Result<Reply> {
+    let parsed = json::parse(body)?;
+    if let Some(error) = parsed.get("error") {
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("the provider returned an error with no message");
+        return Err(Error::unbound("responses", message.to_string()));
+    }
+
+    let mut content = String::new();
+    let mut reasoning = String::new();
+    if let Some(output) = parsed.get("output").and_then(Value::as_arr) {
+        for item in output {
+            let kind = item.get("type").and_then(Value::as_str).unwrap_or("message");
+            let Some(parts) = item.get("content").and_then(Value::as_arr) else { continue };
+            for part in parts {
+                let Some(text) = part.get("text").and_then(Value::as_str) else { continue };
+                // `M-22`: reasoning stays out of the message.
+                if kind == "reasoning" {
+                    reasoning.push_str(text);
+                } else {
+                    content.push_str(text);
+                }
+            }
+        }
+    }
+
+    let usage = parsed.get("usage");
+    let count = |name: &str| {
+        usage.and_then(|u| u.get(name)).and_then(Value::as_i64).unwrap_or_default()
+    };
+    let prompt = count("input_tokens");
+    let completion = count("output_tokens");
+
+    Ok(Reply {
+        content,
+        reasoning: (!reasoning.is_empty()).then_some(reasoning),
+        model: parsed.get("model").and_then(Value::as_str).unwrap_or_default().to_string(),
+        finish_reason: parsed.get("status").and_then(Value::as_str).map(str::to_string),
+        usage: Usage {
+            prompt_tokens: prompt,
+            completion_tokens: completion,
+            cache_hit_tokens: usage
+                .and_then(|u| u.get("input_tokens_details"))
+                .and_then(|d| d.get("cached_tokens"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default(),
+            cache_miss_tokens: 0,
+        },
+    })
 }
 
 /// What a call cost (`M-11`).
@@ -372,25 +469,120 @@ impl<'a> Client<'a> {
         if let Some(cached) = self.cache.get(&key, now) {
             return Ok(cached);
         }
-        let capabilities = Capabilities::observed(link.kind, &facts);
+        // `M-21`: whether the link serves `/v1/responses` is asked, not
+        // configured. Cached with everything else the probe learned.
+        let capabilities = Capabilities::observed(link.kind, &facts)
+            .with_responses(self.serves_responses(link));
         self.cache.put(key, capabilities.clone(), now);
         Ok(capabilities)
     }
 
+    /// Which wire protocol a link speaks (`M-21`).
+    ///
+    /// **From the probe, not from config guesswork.** A binding that declares
+    /// `protocol = responses` is a binding that is wrong the day the server is
+    /// upgraded, and wrong in a way that produces a 404 rather than a message
+    /// about configuration.
+    /// Stream a reply, token by token, with a first-token deadline
+    /// (`M-23`, `C-4`).
+    ///
+    /// Returns what arrived even when the stream was interrupted or the link
+    /// went silent — the caller decides what that means. A silent link is
+    /// failed over (`M-9`); an interruption is the operator's and is journalled
+    /// as a partial rather than discarded.
+    pub fn stream(
+        &self,
+        link: &Link,
+        request: &ChatRequest,
+        interrupt: impl FnMut() -> bool,
+        on_event: impl FnMut(&crate::stream::Event),
+    ) -> Result<crate::stream::Streamed> {
+        let base = Self::base(link)?.trim_end_matches('/');
+        let url = format!("{base}/v1/chat/completions");
+        self.check_egress(&url)?;
+
+        let mut streaming = request.clone();
+        streaming.stream = true;
+        let body =
+            crate::security::outbound(&streaming.to_json(&link.model), link, &self.redact).text;
+
+        let http = Self::authorise(link, Request::post_json(url, body));
+        let (args, stdin) = crate::net::Curl::new().streaming_invocation(&http)?;
+        crate::stream::read(
+            &crate::stream::streaming_args(args),
+            stdin.as_deref(),
+            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            interrupt,
+            on_event,
+        )
+    }
+
+    /// Ask whether `/v1/responses` exists (`M-21`).
+    ///
+    /// An empty POST: a server that serves the route answers 4xx-with-a-message
+    /// (the body is invalid), and one that does not answers 404 or 405. Both
+    /// are cheap, and neither generates a token.
+    ///
+    /// A transport failure answers **no**. Guessing yes on a failed probe would
+    /// route every call to a route that may not exist, and the 404 that follows
+    /// says nothing about configuration.
+    fn serves_responses(&self, link: &Link) -> bool {
+        let Ok(base) = Self::base(link) else { return false };
+        let url = format!("{}/v1/responses", base.trim_end_matches('/'));
+        if self.check_egress(&url).is_err() {
+            return false;
+        }
+        let probe = Self::authorise(link, Request::post_json(url, "{}".to_string()));
+        match self.transport.send(&probe) {
+            Ok(response) => !matches!(response.status, 404 | 405 | 501),
+            Err(_) => false,
+        }
+    }
+
+    pub fn protocol_from(capabilities: &Capabilities) -> Protocol {
+        if capabilities.responses {
+            Protocol::Responses
+        } else {
+            Protocol::ChatCompletions
+        }
+    }
+
+    /// Chat-completions, the universal baseline. Used when nothing has been
+    /// probed — every link speaks it, so it is the safe assumption rather than
+    /// a guess.
     pub fn protocol(link: &Link) -> Protocol {
-        // Every link speaks chat-completions. `/v1/responses` is opt-in and not
-        // implemented yet — see `M-21`.
         let _ = link;
         Protocol::ChatCompletions
     }
 
     /// One call to one link.
     pub fn chat(&self, link: &Link, request: &ChatRequest) -> Result<Reply> {
-        match Self::protocol(link) {
-            Protocol::Responses => Err(Error::unbound(
-                format!("link.{}", link.name),
-                "the /v1/responses protocol is not implemented yet (`M-21`)",
-            )),
+        self.speak(link, request, Self::protocol(link))
+    }
+
+    /// One call, on a named protocol (`M-21`).
+    pub fn speak(&self, link: &Link, request: &ChatRequest, protocol: Protocol) -> Result<Reply> {
+        match protocol {
+            Protocol::Responses => {
+                let base = Self::base(link)?.trim_end_matches('/');
+                let url = format!("{base}/v1/responses");
+                self.check_egress(&url)?;
+                let body = crate::security::outbound(
+                    &request.to_responses_json(&link.model),
+                    link,
+                    &self.redact,
+                )
+                .text;
+                let http = Self::authorise(link, Request::post_json(url, body));
+                let response = self.transport.send(&http)?;
+                if !response.is_success() {
+                    return Err(Error::unbound(
+                        format!("link.{}", link.name),
+                        format!("responses: {}", response.complaint()),
+                    ));
+                }
+                parse_responses(&response.body)
+            }
             Protocol::ChatCompletions => {
                 let base = Self::base(link)?.trim_end_matches('/');
                 let url = format!("{base}/v1/chat/completions");
@@ -528,6 +720,99 @@ pub fn models_method() -> Method {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_two_protocols_differ_only_at_the_link_edge() {
+        // `M-21`. The engine's message model is the same either way; only the
+        // serialiser knows the difference. A protocol that leaked into the
+        // engine would mean every caller had to know which link it was talking
+        // to.
+        let request = ChatRequest::new(vec![Message::user("hello")]);
+
+        let chat = request.to_json("small");
+        assert!(chat.contains("\"messages\""), "{chat}");
+        assert!(chat.contains("\"content\":\"hello\""), "a bare string: {chat}");
+
+        let responses = request.to_responses_json("small");
+        assert!(responses.contains("\"input\""), "{responses}");
+        assert!(responses.contains("\"input_text\""), "a typed array: {responses}");
+        assert!(!responses.contains("\"messages\""), "{responses}");
+    }
+
+    #[test]
+    fn a_responses_reply_is_read_out_of_its_deeper_shape() {
+        let body = r#"{
+          "model":"small","status":"completed",
+          "output":[
+            {"type":"reasoning","content":[{"type":"output_text","text":"thinking"}]},
+            {"type":"message","content":[{"type":"output_text","text":"the answer"}]}
+          ],
+          "usage":{"input_tokens":12,"output_tokens":3,
+                   "input_tokens_details":{"cached_tokens":8}}
+        }"#;
+        let reply = parse_responses(body).expect("parse");
+        assert_eq!(reply.content, "the answer");
+        // `M-22`: reasoning is kept apart, never folded into the message.
+        assert_eq!(reply.reasoning.as_deref(), Some("thinking"));
+        assert_eq!(reply.usage.prompt_tokens, 12);
+        assert_eq!(reply.usage.cache_hit_tokens, 8);
+        assert_eq!(reply.finish_reason.as_deref(), Some("completed"));
+    }
+
+    #[test]
+    fn a_responses_error_is_reported_rather_than_parsed_as_an_empty_answer() {
+        let body = r#"{"error":{"message":"model not found","type":"invalid_request"}}"#;
+        let err = parse_responses(body).expect_err("must not read as an empty reply");
+        assert!(format!("{err}").contains("model not found"), "{err}");
+    }
+
+    #[test]
+    fn a_link_that_serves_the_route_is_observed_as_serving_it() {
+        // The other direction: a 400 means the route exists and the empty body
+        // was rejected, which is exactly what an empty POST should produce.
+        let transport = Canned::new(vec![
+            Canned::ok(MODELS),
+            Canned::status(400, r#"{"error":{"message":"input is required"}}"#),
+        ]);
+        let mut client = Client::new(&transport);
+        let links = links();
+        let link = links.get("here").expect("here");
+
+        let caps = client.capabilities(&links, link, 1000).expect("probe");
+        assert!(caps.responses, "400 means the route is there");
+        assert_eq!(Client::protocol_from(&caps), Protocol::Responses);
+    }
+
+    #[test]
+    fn the_protocol_comes_from_the_probe_and_not_from_config() {
+        // `M-21`. A binding declaring `protocol = responses` is wrong the day
+        // the server is upgraded, and wrong in a way that produces a 404 rather
+        // than a message about configuration.
+        let mut caps = crate::probe::Capabilities::expected_for(crate::link::Kind::LmStudio);
+        assert_eq!(Client::protocol_from(&caps), Protocol::ChatCompletions, "the baseline");
+        caps = caps.with_responses(true);
+        assert_eq!(Client::protocol_from(&caps), Protocol::Responses);
+    }
+
+    #[test]
+    fn a_responses_call_goes_to_the_responses_route() {
+        let transport = Canned::new(vec![Canned::ok(
+            r#"{"model":"small","output":[{"type":"message","content":[{"type":"output_text","text":"hi"}]}]}"#,
+        )]);
+        let client = Client::new(&transport);
+        let links = links();
+        let here = links.get("here").expect("link");
+
+        let reply = client
+            .speak(here, &ChatRequest::new(vec![Message::user("x")]), Protocol::Responses)
+            .expect("call");
+        assert_eq!(reply.content, "hi");
+        assert!(
+            transport.seen.borrow()[0].ends_with("/v1/responses"),
+            "{:?}",
+            transport.seen.borrow()
+        );
+    }
     use crate::link::AssumeHealthy;
     use crate::net::Response;
     use std::cell::RefCell;
@@ -714,16 +999,28 @@ mod tests {
     #[test]
     fn capabilities_are_probed_once_and_then_cached() {
         // `M-6`: the second call must not hit the transport again.
-        let transport = Canned::new(vec![Canned::ok(MODELS)]);
+        //
+        // One probe is now two round trips — the model listing (`M-7`) and the
+        // `/v1/responses` endpoint (`M-21`) — because both are observed rather
+        // than configured. What matters is that the *second* `capabilities`
+        // call adds none.
+        let transport = Canned::new(vec![Canned::ok(MODELS), Canned::status(404, "{}")]);
         let mut client = Client::new(&transport);
         let links = links();
         let link = links.get("here").expect("here");
 
         let first = client.capabilities(&links, link, 1000).expect("probe");
         assert_eq!(first.context_length, Some(32768));
+        assert!(!first.responses, "a 404 on the route means it is not served");
+        let asked = transport.seen.borrow().len();
+
         let second = client.capabilities(&links, link, 1200).expect("cached");
         assert_eq!(first, second);
-        assert_eq!(transport.seen.borrow().len(), 1, "the second call was served from the cache");
+        assert_eq!(
+            transport.seen.borrow().len(),
+            asked,
+            "the second call was served entirely from the cache"
+        );
     }
 
     #[test]
@@ -731,14 +1028,23 @@ mod tests {
         // The other half of `M-6`: cached until the TTL, then re-checked. A
         // model swapped in LM Studio must not be believed to be the old one
         // forever.
-        let transport = Canned::new(vec![Canned::ok(MODELS), Canned::ok(MODELS)]);
+        let transport = Canned::new(vec![
+            Canned::ok(MODELS),
+            Canned::status(404, "{}"),
+            Canned::ok(MODELS),
+            Canned::status(404, "{}"),
+        ]);
         let mut client = Client::new(&transport);
         let links = links();
         let link = links.get("here").expect("here");
 
         client.capabilities(&links, link, 1000).expect("probe");
+        let after_first = transport.seen.borrow().len();
         client.capabilities(&links, link, 1000 + 3601).expect("re-probe");
-        assert_eq!(transport.seen.borrow().len(), 2, "past the ttl, it asks again");
+        assert!(
+            transport.seen.borrow().len() > after_first,
+            "past the ttl, it asks again"
+        );
     }
 
     #[test]

@@ -3033,3 +3033,111 @@ to a boundary that needs something outside itself:
 
 And `M-25` stays ⛔: inference on an LM Link peer is unreachable from outside LM
 Studio. Measured in `c2/b10/s01`, not assumed.
+
+
+---
+
+## Phase D — Batch 22, streaming and the second protocol
+
+Branch `perp/c4/b22`. `M-21`, `M-23` and `C-4` — the three requirements that
+were one piece of work wearing three numbers.
+
+### c4/b22/s01 — Streaming without an HTTP crate
+
+`N-11` still holds. `curl --no-buffer` writes each chunk to stdout as it
+arrives, so streaming is reading a child's stdout line by line rather than
+waiting for it to exit — `std::process` and nothing more.
+
+`--no-buffer` is the load-bearing flag and its own test says why: without it
+curl buffers, **the first token arrives at the same time as the last**, every
+test still passes, and the deadline protects nothing.
+
+### c4/b22/s02 — The first-token deadline is the point of `M-23`
+
+*A link that has said nothing in t seconds is failed over, not waited on.*
+
+The failure it prevents is expensive and looks like success. A server that
+accepted the connection, allocated the context and then wedged — a GPU in a bad
+state, a queue that will never drain — is indistinguishable from a model
+thinking hard. Without a deadline the loop waits out the **whole-request**
+timeout, which is minutes, and does it again on every retry.
+
+Twenty seconds: longer than a cold model's first token on a slow local rig, far
+shorter than the request timeout. After the first token the budget resets — a
+model that started answering has demonstrated it is alive.
+
+And the distinction that matters for `M-9`: **a silent link fails over, an
+interruption does not.** An interruption is the operator's decision, and quietly
+re-asking the same question somewhere else is not what they asked for.
+
+### c4/b22/s03 — `C-4`: the partial is journalled
+
+Already true in `chat.rs` since batch 13; now true of a real stream. `perp chat`
+prints tokens as they arrive, and whatever arrived when the stream ends — for
+any reason — is journalled, marked `partial=true` if it was interrupted.
+
+**A gap found while wiring it:** the streaming path journalled the *turn* and
+not the *cost*. `M-11` says every call is counted, and losing the accounting
+because the tokens arrived a few at a time would make every cost report quietly
+wrong in the direction that flatters it. Fixed before the batch closed.
+
+### c4/b22/s04 — `M-21`: converted at the link edge, chosen by the probe
+
+Two wire protocols, and the engine's message model is the same for both. Only
+the serialiser knows the difference — `input` rather than `messages`, `content`
+as a typed array rather than a bare string, `max_output_tokens` rather than
+`max_tokens`, and a reply nested two levels deeper.
+
+A protocol that leaked into the engine would mean every caller had to know which
+link it was talking to.
+
+**And it is observed, not configured.** A binding declaring
+`protocol = responses` is wrong the day the server is upgraded, and wrong in a
+way that produces a 404 rather than a message about configuration. So the probe
+asks: an empty POST to `/v1/responses` gets a 4xx-with-a-message from a server
+that serves it and a 404/405 from one that does not. Cached with everything else
+the probe learned, so it costs one round trip per TTL.
+
+A transport failure answers **no**. Guessing yes on a failed probe routes every
+call to a route that may not exist.
+
+### c4/b22/s05 — Run against the real API
+
+The operator set `DEEPSEEK_API_KEY`, so this is the first batch where the loop
+made a real cloud call:
+
+```
+$ perp chat --root .
+> In one short sentence: what is a Windows job object for?
+A Windows job object is used to manage and control a group of processes as a
+single unit, such as imposing resource limits, security restrictions, or
+tracking their completion.
+[via ds-fast — complete]
+
+$ perp cost --root .
+1 calls · 18 tokens in (0 cached) · 147 out · 1.2s · 0.000044
+work      1 calls  165 tokens  0.000044
+overhead  0 calls    0 tokens  0.000000   (0.0% of tokens)
+```
+
+Streamed token by token, journalled, costed, and split into work and overhead —
+the whole chain from batches 9, 15, 19 and 22 running at once, for
+**forty-four millionths of a dollar**.
+
+### c4/b22/s06 — Gates and red run
+
+- **gates:** green. 462 unit + 5 spine + 15 end-to-end = **482 tests**.
+- **red run: 14 mutations, 14 red**, after one correction that found a real
+  hole.
+
+*"A keepalive comment is read as content"* came back green, because replacing
+`strip_prefix("data:")?` with `trim_start_matches("data:")` changes nothing for
+a comment, a blank line or `event:` — all three still fail to parse as JSON.
+
+But it changes something the test never checked: **a bare JSON line with no
+`data:` prefix would be parsed as an event.** SSE framing is what says a line is
+data, and a parser that reads any JSON it sees would act on a fragment the
+protocol says to ignore. The assertion is in now. Red.
+
+**Batch 22 status:** 3 delivered, 0 carried. 482 tests.
+**146 requirements done, 5 in progress, 1 external-gated.**

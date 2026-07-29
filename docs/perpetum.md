@@ -241,9 +241,9 @@ assuming an OpenAI feature set.
 | 🟡 `M-8` | **Degradation ladder** for tool calls: native tool calling → JSON-schema constrained output → prompted block with a parse-and-repair loop (max 2 repairs, then the step fails honestly). The loop must complete with a model at the bottom rung. |
 | ✅ ~~`M-9`~~ | Failover on timeout, connection loss, rate limit, or malformed output beyond repair. Failover to a link of a **different privacy class** requires the policy to allow it and is always journalled. |
 | ✅ ~~`M-10`~~ | A substitution is never silent. The journal records which link produced every artefact, so "the 4B wrote this migration" is discoverable after the fact. |
-| 🟡 `M-21` | Two wire protocols are supported: **chat completions** (universal baseline) and **responses** (`/v1/responses`, LM Studio and OpenAI). The engine's internal message model is protocol-agnostic and converts at the link edge; a link declares its protocol from the probe, not from config guesswork. DeepSeek is chat-completions today. |
+| ✅ ~~`M-21`~~ | Two wire protocols are supported: **chat completions** (universal baseline) and **responses** (`/v1/responses`, LM Studio and OpenAI). The engine's internal message model is protocol-agnostic and converts at the link edge; a link declares its protocol from the probe, not from config guesswork. DeepSeek is chat-completions today. |
 | ✅ ~~`M-22`~~ | Reasoning/thinking content is a separate channel: journalled, shown in chat behind a fold, never concatenated into the assistant message, never replayed into the next request's prefix, and never accepted as evidence for `V-2`. |
-| 🟡 `M-23` | Streaming is required for the chat surface and optional for the loop, but a first-token deadline applies either way — a link that has said nothing in *t* seconds is failed over, not waited on. |
+| ✅ ~~`M-23`~~ | Streaming is required for the chat surface and optional for the loop, but a first-token deadline applies either way — a link that has said nothing in *t* seconds is failed over, not waited on. |
 
 ### 3.3 Cost, caching and context
 
@@ -395,7 +395,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`C-1`~~ | One binary, two modes: conversation and loop. Same tools, same permission classifier, same journal. Chat is not a second application with its own rules. |
 | 🟡 `C-2` | Work that comes out of a conversation becomes a requirement in the requirements source (`V-9`) before it is built. Chat does not create an untracked parallel backlog. |
 | ✅ ~~`C-3`~~ | Chat while the loop runs is read-only by default: it answers from the journal, the state file and read tools. A write from chat requires either a pause or a target outside the loop's current feature (`L-20`). |
-| 🟡 `C-4` | Responses stream and are interruptible mid-generation; the interrupted partial is journalled, not discarded. |
+| ✅ ~~`C-4`~~ | Responses stream and are interruptible mid-generation; the interrupted partial is journalled, not discarded. |
 | ✅ ~~`C-5`~~ | The conversation is journalled in the same stream as the loop, interleaved by time. "Why did it do that in cycle 3" is answerable months later. |
 | ✅ ~~`C-6`~~ | Slash commands are engine-side, never model-interpreted: `/status` `/pause` `/resume` `/step` `/approve` `/reject` `/rewind` `/links` `/cost` `/board` `/gate` `/explain` `/btw`. An unknown slash command is an error, not a prompt. |
 | ✅ ~~`C-7`~~ | `/explain <id\|sha\|step>` renders the evidence chain for a decision: the requirement, the reality check, the diff, the gate transcripts, the verifier's verdict, and the link that wrote it. |
