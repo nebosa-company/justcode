@@ -28,7 +28,7 @@ buttons, and keyboard shortcuts.
 | Move line up / down | `Alt+↑` / `Alt+↓` / **Edit → Move Line Up/Down** |
 | Toggle comment | `Ctrl+/` / **Edit → Toggle Comment** |
 | Uppercase / Lowercase | `Ctrl+Shift+U` / `Ctrl+Shift+L` (selection, or the word at the caret) |
-| Generate GUID | `Ctrl+Shift+G` (inserts a v4 UUID) |
+| Generate GUID | `Ctrl+Alt+G` (inserts a v4 UUID) |
 | Open link under caret | `Ctrl+Enter`, or `Ctrl`/`Cmd`-click a URL |
 | Toggle bookmark 1–3 | `Ctrl+Shift+1` … `Ctrl+Shift+3` / **Edit** menu |
 | Go to bookmark 1–3 | `Ctrl+1` … `Ctrl+3` / **Edit** menu |
@@ -53,6 +53,7 @@ start/end, and `PageUp`/`PageDown` (with `Shift` to extend) move by a page.
 | Keyboard shortcuts | `F1` / **Help → Shortcuts** |
 | Version | **Help → About JustCode** |
 | Find / replace | `Ctrl+F` / `Ctrl+H` |
+| Go to symbol | `Ctrl+Shift+G` / **Edit → Go to Symbol…** — a filterable list of the declarations in the current file. Disabled for a language with no symbol support, such as plain text |
 | Problems panel | `F8` opens and closes it / **View → Problems**, or click the problem count in the status bar |
 | Next / previous problem | `F4` / `Shift+F4` / **View → Next/Previous Problem** (wraps) |
 

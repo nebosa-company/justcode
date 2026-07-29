@@ -66,6 +66,10 @@ import {
   PROFILES as TERMINAL_PROFILES,
   DEFAULT_PROFILE as DEFAULT_TERMINAL,
   runInTerminal,
+  containsNode as terminalContains,
+  selectedText as terminalSelectedText,
+  copySelection as copyTerminalSelection,
+  focusActive as focusActiveTerminal,
 } from "./terminal.js";
 import { iconMarkup } from "./icons.js";
 
@@ -1559,7 +1563,39 @@ async function readClipboard() {
   }
 }
 
+/**
+ * Which surface a copy belongs to.
+ *
+ * Not `view.hasFocus`: opening the Edit menu moves focus to the menu, so by the
+ * time Copy is clicked neither the editor nor the terminal holds it. This
+ * remembers the last one that did, and the menu is neither.
+ */
+let lastCopySurface = "editor";
+
+document.addEventListener("focusin", (event) => {
+  if (terminalContains(event.target)) lastCopySurface = "terminal";
+  else if (event.target?.closest?.(".cm-editor")) lastCopySurface = "editor";
+});
+
+/** Copy is available with a tab open, or with a terminal selection to take. */
+function canCopy() {
+  return hasTab() || (lastCopySurface === "terminal" && terminalSelectedText() !== "");
+}
+
 async function editCopy() {
+  // A terminal selection wins only when the terminal is the surface in play;
+  // otherwise a stale terminal selection would quietly hijack every copy.
+  if (lastCopySurface === "terminal" && terminalSelectedText()) {
+    if (!(await copyTerminalSelection())) {
+      await message("Copy needs clipboard access, which the system declined.", {
+        title: "JustCode",
+        kind: "warning",
+      });
+    }
+    focusActiveTerminal();
+    return;
+  }
+
   const selection = view.state.selection.main;
   const range = selection.empty ? cursorLineRange() : selection;
   if (!(await writeClipboard(view.state.sliceDoc(range.from, range.to)))) {
@@ -2021,6 +2057,7 @@ initTerminals({
   onVisibility: () => {
     for (const pane of panes) pane.view.requestMeasure();
   },
+  copy: writeClipboard,
   onDock: (edge) => {
     localStorage.setItem(STORAGE.terminalDock, edge);
     // The panes have just been given more or less room; their gutters are
@@ -2173,7 +2210,7 @@ function editorContextMenu(event) {
     { label: t("edit.redo"), icon: "redo", accel: "Ctrl+Y", run: editRedo, enabled: hasTab },
     { separator: true },
     { label: t("edit.cut"), icon: "cut", accel: "Ctrl+X", run: editCut, enabled: hasTab },
-    { label: t("edit.copy"), icon: "copy", accel: "Ctrl+C", run: editCopy, enabled: hasTab },
+    { label: t("edit.copy"), icon: "copy", accel: "Ctrl+C", run: editCopy, enabled: canCopy() },
     { label: t("edit.paste"), icon: "paste", accel: "Ctrl+V", run: editPaste, enabled: hasTab },
     { separator: true },
     { label: t("edit.selectAll"), icon: "selectAll", accel: "Ctrl+A", run: editSelectAll, enabled: hasTab },
@@ -2305,7 +2342,7 @@ function buildMenus() {
       { label: t("edit.redo"), icon: "redo", accel: "Ctrl+Y", run: editRedo, enabled: hasTab },
       { separator: true },
       { label: t("edit.cut"), icon: "cut", accel: "Ctrl+X", run: editCut, enabled: hasTab },
-      { label: t("edit.copy"), icon: "copy", accel: "Ctrl+C", run: editCopy, enabled: hasTab },
+      { label: t("edit.copy"), icon: "copy", accel: "Ctrl+C", run: editCopy, enabled: canCopy() },
       { label: t("edit.paste"), icon: "paste", accel: "Ctrl+V", run: editPaste, enabled: hasTab },
       { separator: true },
       { label: t("edit.selectAll"), icon: "selectAll", accel: "Ctrl+A", run: editSelectAll, enabled: hasTab },
