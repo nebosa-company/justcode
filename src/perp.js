@@ -11,6 +11,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { iconMarkup } from "./icons.js";
+import { t } from "./i18n.js";
 
 // The safety net, not the mechanism. `perp:changed` from the watcher is what
 // normally triggers a re-read; this catches a workspace whose binding moves the
@@ -257,17 +258,41 @@ function renderHeader(view) {
   return header;
 }
 
-// Icon, label, and what the tab is for. The tooltip carries the second half:
-// "Diff" and "/btw" say nothing to someone meeting the panel for the first time,
-// and the tab strip has no room to explain itself.
-const TABS = [
-  ["timeline", "timeline", "Timeline", "Every step, newest first"],
-  ["chat", "chat", "Chat", "The conversation, and a note to the loop"],
-  ["approvals", "approvals", "Approvals", "Waiting on a person"],
-  ["diff", "diff", "Diff", "What the working tree has changed"],
-  ["btw", "btw", "/btw", "Asides waiting to be picked up"],
-  ["artifacts", "artifacts", "Artifacts", "Rendered from the journal"],
+/** The tabs, named once. The panel's strip and the Harness menu both read this.
+ *
+ * Keys rather than strings, resolved at render time: a label baked in at module
+ * evaluation would freeze whatever locale had loaded by then.
+ *
+ * The hint is the second half of the name. "Diff" and "/btw" say nothing to
+ * someone meeting the panel for the first time, and neither a tab strip nor a
+ * menu row has room to explain itself.
+ */
+export const TABS = [
+  { name: "timeline", icon: "timeline" },
+  { name: "chat", icon: "chat" },
+  { name: "approvals", icon: "approvals" },
+  { name: "diff", icon: "diff" },
+  { name: "btw", icon: "btw" },
+  { name: "artifacts", icon: "artifacts" },
 ];
+
+export function tabLabel(name) {
+  return t(`harness.tab.${name}`);
+}
+
+export function tabHint(name) {
+  return t(`harness.hint.${name}`);
+}
+
+/** Which tab is showing, so the menu can mark it. */
+export function currentTab() {
+  return state.tab;
+}
+
+/** Show a tab. Called from the Harness menu as well as from the strip. */
+export function showTab(name) {
+  selectTab(name);
+}
 
 function renderTabs() {
   const tabs = el("div", "perp-tabs");
@@ -280,7 +305,9 @@ function renderTabs() {
     btw: view.btw.length,
     artifacts: view.artifacts.length,
   };
-  for (const [name, icon, label, hint] of TABS) {
+  for (const { name, icon } of TABS) {
+    const label = tabLabel(name);
+    const hint = tabHint(name);
     const count = counts[name];
     const button = el("button", name === state.tab ? "active" : null);
     button.type = "button";
@@ -297,8 +324,8 @@ function renderTabs() {
   const refreshButton = el("button", "perp-refresh");
   refreshButton.type = "button";
   refreshButton.innerHTML = iconMarkup("refresh");
-  refreshButton.append(el("span", "perp-tab-label", "Refresh"));
-  refreshButton.title = "Re-read the journal now";
+  refreshButton.append(el("span", "perp-tab-label", t("harness.refresh")));
+  refreshButton.title = t("harness.hint.refresh");
   refreshButton.setAttribute("aria-label", refreshButton.title);
   refreshButton.addEventListener("click", () => refresh());
   tabs.append(refreshButton);

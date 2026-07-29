@@ -2623,6 +2623,30 @@ function buildMenus() {
         checked: () => Boolean(perpHost) && !perpHost.hidden,
         run: togglePerpPanel,
       },
+      { separator: true },
+      // Built from the panel's own table, so the menu cannot name a tab the
+      // panel does not have or miss one it gains. Each opens the panel first:
+      // asking for Diff while the panel is shut means you want to see Diff.
+      ...perp.TABS.map(({ name, icon }) => ({
+        label: perp.tabLabel(name),
+        icon,
+        // Marks the tab you are looking at, and shows nothing when the panel is
+        // shut — there is no current tab when there is no panel.
+        checked: () => Boolean(perpHost) && !perpHost.hidden && perp.currentTab() === name,
+        run: async () => {
+          await openPerpPanel();
+          perp.showTab(name);
+        },
+      })),
+      { separator: true },
+      {
+        label: t("harness.refresh"),
+        icon: "refresh",
+        run: async () => {
+          await openPerpPanel();
+          await perp.refresh();
+        },
+      },
     ],
   },
   {
@@ -3263,6 +3287,15 @@ async function perpRoot() {
   } catch {
     return null;
   }
+}
+
+/** Open the panel if it is shut, and leave it alone if it is not.
+ *
+ * The Harness menu's tab items need this rather than the toggle: asking for
+ * Approvals should not close the panel because it happened to be open.
+ */
+async function openPerpPanel() {
+  if (perpHost?.hidden) await togglePerpPanel();
 }
 
 async function togglePerpPanel() {

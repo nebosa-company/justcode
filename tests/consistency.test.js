@@ -67,6 +67,28 @@ test("no translation key is defined twice", () => {
   assert.deepEqual(duplicated, [], `later wins, earlier vanishes: ${duplicated.join(", ")}`);
 });
 
+test("every harness tab has a label, a hint and an icon", () => {
+  // The tab table builds its keys with a template literal — `harness.tab.${name}`
+  // — which the literal-key check above cannot see. This is that check for the
+  // one place that computes them, and it is why the table is a single list: the
+  // panel strip, the Harness menu and this test all read the same names.
+  const text = readFileSync("src/perp.js", "utf8");
+  const table = text.slice(
+    text.indexOf("export const TABS"),
+    text.indexOf("export function tabLabel"),
+  );
+  const tabs = [...table.matchAll(/name:\s*"([a-z]+)",\s*icon:\s*"([a-zA-Z]+)"/g)];
+
+  assert.ok(tabs.length >= 6, `the table parsed: found ${tabs.length}`);
+  const missing = [];
+  for (const [, name, icon] of tabs) {
+    if (!(`harness.tab.${name}` in EN)) missing.push(`label for ${name}`);
+    if (!(`harness.hint.${name}` in EN)) missing.push(`hint for ${name}`);
+    if (!(icon in PATHS)) missing.push(`icon ${icon} for ${name}`);
+  }
+  assert.deepEqual(missing, [], `a tab with no name renders blank:\n${missing.join("\n")}`);
+});
+
 test("every element id the front-end looks up exists in index.html", () => {
   const html = readFileSync("index.html", "utf8");
   const declared = new Set([...html.matchAll(/\bid="([a-zA-Z0-9_-]+)"/g)].map((m) => m[1]));
