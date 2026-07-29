@@ -154,13 +154,24 @@ pub struct Output {
     /// The full size before truncation, so the loop knows what it did not see.
     pub full_bytes: usize,
     pub budget: usize,
+    /// For a file read: the lines shown and how many the file has, so a model
+    /// that was cut off can ask for the rest by number (`T-6`).
+    pub lines: Option<Shown>,
+}
+
+/// Which lines of a file a read actually returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Shown {
+    pub first: usize,
+    pub last: usize,
+    pub total: usize,
 }
 
 impl Output {
     fn of(tool: Tool, text: String, budget: usize) -> Output {
         let full_bytes = text.len();
         if full_bytes <= budget {
-            return Output { tool, text, truncated: false, full_bytes, budget };
+            return Output { tool, text, truncated: false, full_bytes, budget, lines: None };
         }
         // Keep the tail: a failing command says why at the end.
         let start = text.len() - budget;
@@ -175,6 +186,63 @@ impl Output {
             truncated: true,
             full_bytes,
             budget,
+            lines: None,
+        }
+    }
+
+    /// A file read, sliced to a line range and then to the byte budget.
+    ///
+    /// Reads truncate from the **head**, not the tail, and the envelope names
+    /// the lines it returned. The tail rule is right for a shell command, whose
+    /// error is at the end, and wrong for a source file, whose imports are at
+    /// the start.
+    ///
+    /// An unattended run found out why. `read(path, from=1, to=20)` returned the
+    /// same last-8000-bytes blob as an unranged read, because the range was
+    /// advertised in the schema and ignored in the executor. The model narrowed
+    /// to `to=10`, got the identical blob, narrowed again — doing exactly the
+    /// right thing against a tool that was lying to it — until the no-progress
+    /// rule stopped the step. **Seven requirements died that way.**
+    fn of_file(text: &str, from: Option<usize>, to: Option<usize>, budget: usize) -> Output {
+        // `split_inclusive` keeps each line's own terminator, so a file with no
+        // trailing newline reads back byte-for-byte as it is on disk.
+        let all: Vec<&str> = text.split_inclusive('\n').collect();
+        let total = all.len();
+        let first = from.unwrap_or(1).max(1);
+        let last = to.unwrap_or(total).min(total);
+        if first > total || first > last {
+            return Output {
+                tool: Tool::Read,
+                text: String::new(),
+                truncated: false,
+                full_bytes: 0,
+                budget,
+                lines: Some(Shown { first, last: first.saturating_sub(1), total }),
+            };
+        }
+
+        let slice = &all[first - 1..last];
+        let full_bytes: usize = slice.iter().map(|line| line.len()).sum();
+
+        // Take whole lines from the front until the budget is spent, so the
+        // number we report is a line the model can count from.
+        let mut kept = String::new();
+        let mut shown_last = first - 1;
+        for line in slice {
+            if !kept.is_empty() && kept.len() + line.len() > budget {
+                break;
+            }
+            kept.push_str(line);
+            shown_last += 1;
+        }
+
+        Output {
+            tool: Tool::Read,
+            truncated: shown_last < last,
+            text: kept,
+            full_bytes,
+            budget,
+            lines: Some(Shown { first, last: shown_last, total }),
         }
     }
 
@@ -191,15 +259,29 @@ impl Output {
     }
 
     pub fn render(&self) -> String {
+        let note = match (self.lines, self.truncated) {
+            (Some(shown), true) => format!(
+                " · lines {}-{} of {} — TRUNCATED, read again with from={} for the rest",
+                shown.first,
+                shown.last,
+                shown.total,
+                shown.last + 1
+            ),
+            (Some(shown), false) => {
+                format!(" · lines {}-{} of {}", shown.first, shown.last, shown.total)
+            }
+            (None, true) => format!(
+                " · TRUNCATED to the last {} — {} bytes were not shown",
+                self.budget,
+                self.full_bytes - self.budget
+            ),
+            (None, false) => String::new(),
+        };
         let mut out = format!(
             "<<< {} output · {} bytes{} >>>\n",
             self.tool.as_str(),
             self.full_bytes,
-            if self.truncated {
-                format!(" · TRUNCATED to the last {} — {} bytes were not shown", self.budget, self.full_bytes - self.budget)
-            } else {
-                String::new()
-            }
+            note
         );
         out.push_str(&self.text);
         if !out.ends_with('\n') {
@@ -440,7 +522,9 @@ impl Host {
         let text = match call.tool {
             Tool::Read => {
                 let path = self.resolve(call.need("path")?)?;
-                std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?
+                let text = std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
+                let line = |name: &str| call.get(name).and_then(|raw| raw.trim().parse().ok());
+                return Ok(Output::of_file(&text, line("from"), line("to"), self.budget));
             }
             Tool::Write => {
                 let path = self.resolve(call.need("path")?)?;
@@ -680,6 +764,71 @@ mod tests {
             )
             .expect_err("ambiguous");
         assert!(format!("{err}").contains("appears 2 times"), "{err}");
+    }
+
+    #[test]
+    fn a_line_range_is_honoured_rather_than_advertised_and_ignored() {
+        let dir = tmpdir("read-range");
+        let body: String = (1..=50).map(|n| format!("line {n}
+")).collect();
+        std::fs::write(dir.join("f.txt"), &body).expect("write");
+        let host = Host::new(&dir);
+
+        let out = host
+            .run(&Call::new(Tool::Read).arg("path", "f.txt").arg("from", "1").arg("to", "3"))
+            .expect("read");
+        assert_eq!(out.text, "line 1
+line 2
+line 3
+");
+        assert_eq!(out.lines, Some(Shown { first: 1, last: 3, total: 50 }));
+        assert!(!out.truncated);
+
+        // The narrowing the model actually tried. It must return less, not the same.
+        let narrower = host
+            .run(&Call::new(Tool::Read).arg("path", "f.txt").arg("from", "1").arg("to", "2"))
+            .expect("read");
+        assert!(
+            narrower.text.len() < out.text.len(),
+            "narrowing the range narrows the output: {:?}",
+            narrower.text
+        );
+
+        let tail = host
+            .run(&Call::new(Tool::Read).arg("path", "f.txt").arg("from", "49"))
+            .expect("read");
+        assert_eq!(tail.text, "line 49
+line 50
+");
+    }
+
+    #[test]
+    fn a_file_too_big_to_show_is_cut_from_the_head_and_says_where_to_resume() {
+        // The head is where a source file keeps its imports, and the head is
+        // exactly what tail-truncation hid. Seven requirements were lost to it.
+        let dir = tmpdir("read-head");
+        let body: String = (1..=200).map(|n| format!("line {n}
+")).collect();
+        std::fs::write(dir.join("f.txt"), &body).expect("write");
+
+        let out = Host::new(&dir)
+            .with_budget(60)
+            .run(&Call::new(Tool::Read).arg("path", "f.txt"))
+            .expect("read");
+
+        assert!(out.text.starts_with("line 1
+"), "the head survives: {:?}", out.text);
+        assert!(out.truncated);
+        let shown = out.lines.expect("a read reports its lines");
+        assert_eq!(shown.first, 1);
+        assert_eq!(shown.total, 200);
+        assert!(shown.last < 200);
+
+        let rendered = out.render();
+        assert!(
+            rendered.contains(&format!("from={}", shown.last + 1)),
+            "and it names the line to resume from: {rendered}"
+        );
     }
 
     #[test]
