@@ -123,6 +123,11 @@ pub struct Agent<'a> {
     pub turns: Vec<Turn>,
     /// Cost records waiting to go in the journal (`M-11`).
     pending: Vec<crate::journal::Record>,
+    /// Workspace paths this run's calls wrote to, in first-touch order.
+    ///
+    /// `G-3` refuses `git add .` — a batch stages the files its steps touched,
+    /// and this is the only place that knows which those are.
+    touched: Vec<String>,
     /// The step the current item is running under, so its calls are attributed
     /// to it rather than to nothing.
     at_step: Option<crate::step::StepId>,
@@ -149,6 +154,7 @@ impl<'a> Agent<'a> {
             spend: crate::budget::Spend::default(),
             turns: Vec::new(),
             pending: Vec::new(),
+            touched: Vec::new(),
             at_step: None,
             now: crate::time::now,
         }
@@ -376,9 +382,17 @@ impl<'a> Agent<'a> {
     }
 
     /// Run the calls and render the results as data (`T-7`, `S-1`).
-    fn run_calls(&self, calls: &[Call]) -> String {
+    fn run_calls(&mut self, calls: &[Call]) -> String {
         let mut out = String::new();
         for call in calls {
+            if matches!(call.tool, crate::tool::Tool::Write | crate::tool::Tool::Patch) {
+                if let Some(path) = call.get("path") {
+                    let path = path.trim().to_string();
+                    if !path.is_empty() && !self.touched.contains(&path) {
+                        self.touched.push(path);
+                    }
+                }
+            }
             let rendered = match self.host.run(call) {
                 Ok(output) => output.render(),
                 // A refusal is a result, not an error. The model needs to see
@@ -415,6 +429,21 @@ impl Work for Agent<'_> {
 
     fn spend(&self) -> crate::budget::Spend {
         self.spend
+    }
+
+    /// The model that did the work, in the shape a git trailer needs (`G-2`).
+    ///
+    /// The address is a `.invalid` one by construction — RFC 2606 reserves it
+    /// precisely so a machine identity cannot collide with a real mailbox, and
+    /// inventing a plausible address for a model would be worse than saying
+    /// nothing.
+    fn author(&self) -> Option<String> {
+        let link = self.links.resolve(self.role, self.health, self.mode).ok()?;
+        Some(format!("{} via perp <{}@perp.invalid>", link.model, link.name))
+    }
+
+    fn touched(&self) -> Vec<String> {
+        self.touched.clone()
     }
 
     fn drain_records(&mut self) -> Vec<crate::journal::Record> {
@@ -959,6 +988,64 @@ to: 60
         assert!(
             matches!(done, Done::Ok { .. }),
             "it reached its own conclusion rather than being cut off: {done:?}"
+        );
+    }
+
+    #[test]
+    fn a_step_reports_the_files_it_wrote_so_the_batch_can_stage_them() {
+        // `G-3` refuses `git add .`, so a batch stages the files its steps
+        // touched — and this is the only place that knows which those are. Four
+        // unattended runs committed nothing at all, partly because nothing was
+        // recording this.
+        let dir = tmpdir("agent-touched");
+        std::fs::write(dir.join("f.txt"), "before
+").expect("write");
+
+        let script = vec![
+            "```perp-call
+tool: read
+path: f.txt
+```",
+            "```perp-call
+tool: write
+path: src/new.py
+content: x = 1
+```",
+            "```perp-call
+tool: patch
+path: f.txt
+expect: before
+replace: after
+```",
+            // A second write to the same path is one path, not two.
+            "```perp-call
+tool: write
+path: src/new.py
+content: x = 2
+```",
+            "```perp-call
+tool: shell
+command: echo hi
+```",
+            "Done.",
+        ];
+
+        let transport = Scripted::new(script);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("G-3", "write things", "then say what").expect("item")],
+        );
+        let task = Work::next(&mut agent).expect("one item");
+        let _ = agent.perform(&task);
+
+        assert_eq!(
+            Work::touched(&agent),
+            vec!["src/new.py".to_string(), "f.txt".to_string()],
+            "writes and patches, in first-touch order, deduplicated — and reads and              shells are not files this step wrote"
         );
     }
 

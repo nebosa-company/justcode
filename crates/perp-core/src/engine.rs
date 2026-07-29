@@ -114,6 +114,24 @@ pub trait Work {
         Vec::new()
     }
 
+    /// Who to credit for what this work produced, as a git identity (`G-2`).
+    ///
+    /// `None` when there is nobody to name — better than a trailer git cannot
+    /// parse. A first run of the landing wiring wrote `Co-Authored-By: perp`,
+    /// which is not an identity and which no forge would read as one.
+    fn author(&self) -> Option<String> {
+        None
+    }
+
+    /// Workspace paths this work wrote to, for staging (`G-3`).
+    ///
+    /// Default: none, which is correct for work that only reads and runs
+    /// commands. Staging is explicit — `git add .` is refused — so a batch that
+    /// cannot say what it touched commits nothing rather than sweeping the tree.
+    fn touched(&self) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Which step the engine is about to run this task under.
     ///
     /// Told rather than guessed: a work that mints its own step ids would be a
