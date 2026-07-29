@@ -1829,6 +1829,15 @@ button.primary:hover {
    `#perp-panel` each already carry an override for. Without this the badge
    stayed on screen after a run ended, saying "thinking" at an idle harness —
    caught by watching a real run finish, not by reading the code. */
+.perp-root {
+  margin-left: 0.4rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  opacity: 0.75;
+  font-size: 0.85em;
+}
+
 /* The collapsed model-call line. Present, countable, and visibly not an event. */
 .perp-timeline li.calls .perp-summary {
   opacity: 0.6;

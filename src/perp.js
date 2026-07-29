@@ -220,6 +220,15 @@ function renderHeader(view) {
       : `cycle ${position.cycle} · ${position.stage ?? "—"}`;
   header.append(el("span", "perp-where", where));
 
+  // Which workspace this is. `cycle 1 · b4` alone is ambiguous the moment two
+  // projects' files are open, and the panel follows the active tab.
+  if (state.root) {
+    const name = state.root.replace(/[\/]+$/, "").split(/[\/]/).pop() || state.root;
+    const label = el("span", "perp-root", name);
+    label.title = state.root;
+    header.append(label);
+  }
+
   const counts = el("span", "perp-counts");
   counts.append(el("span", "perp-ok", `${position.done} done`));
   if (position.blocked > 0) {

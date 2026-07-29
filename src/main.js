@@ -483,6 +483,7 @@ function activateTab(id) {
   activeTabId = id;
   renderTabs();
   renderStatus();
+  followPerpWorkspace();
   pane.view.focus();
 }
 
@@ -3125,6 +3126,28 @@ perp.configure({
 });
 
 /** The workspace the panel reads. The folder of whatever file is open. */
+/** The workspace the panel is currently reading, to notice when it changes. */
+let perpAttachedRoot = null;
+
+/** Re-point the panel when the active tab belongs to a different workspace.
+ *
+ * The panel used to bind whichever workspace was current when it opened and
+ * never look again, so opening it against a file outside a project refused —
+ * and then switching to a project file changed nothing, because nothing
+ * re-checked.
+ *
+ * A tab with no workspace leaves the panel where it is. Blanking it because you
+ * glanced at a scratch file would be worse than showing a run you can still
+ * name, and the header names it.
+ */
+async function followPerpWorkspace() {
+  if (!perpHost || perpHost.hidden) return;
+  const root = await perpRoot();
+  if (!root || root === perpAttachedRoot) return;
+  perpAttachedRoot = root;
+  await perp.attach(root);
+}
+
 /** The workspace the panel reads: the nearest ancestor holding a binding.
  *
  * The walk is in Rust, because it is a filesystem question. This used to strip
@@ -3160,5 +3183,6 @@ async function togglePerpPanel() {
   }
   perpHost.hidden = false;
   perp.mount(perpHost);
+  perpAttachedRoot = root;
   await perp.attach(root);
 }
