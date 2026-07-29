@@ -397,11 +397,42 @@ fn lead_process_group(_command: &mut Command) {
 #[derive(Debug, Default)]
 pub struct Nursery {
     children: Vec<Child>,
+    /// The kernel-owned set every child joins (`X-4`). Created lazily: a
+    /// nursery that never spawns should not create a job object.
+    job: Option<crate::job::Job>,
+    containment: Option<crate::job::Containment>,
 }
 
 impl Nursery {
     pub fn new() -> Nursery {
         Nursery::default()
+    }
+
+    /// How this nursery's children are actually contained, once it has spawned
+    /// something. `None` before the first spawn — there is nothing to contain,
+    /// and claiming a guarantee about an empty set would be the sort of true
+    /// statement that misleads.
+    pub fn containment(&self) -> Option<crate::job::Containment> {
+        self.containment
+    }
+
+    fn ensure_job(&mut self) {
+        if self.containment.is_some() {
+            return;
+        }
+        match crate::job::Job::create() {
+            Some(job) => {
+                self.job = Some(job);
+                self.containment = Some(if cfg!(windows) {
+                    crate::job::Containment::JobObject
+                } else {
+                    crate::job::Containment::ProcessGroup
+                });
+            }
+            // Reported rather than hidden: the loop still runs, and the
+            // journal can say the weaker guarantee was in force.
+            None => self.containment = Some(crate::job::Containment::ParentWalk),
+        }
     }
 
     pub fn adopt(&mut self, child: Child) {
@@ -422,8 +453,19 @@ impl Nursery {
             .stderr(Stdio::null());
         spec.env.apply(&mut command);
         lead_process_group(&mut command);
+        self.ensure_job();
         let child = command.spawn().map_err(|e| Error::io(&spec.cwd, e))?;
         let pid = child.id();
+
+        // Adopted immediately after spawn. Everything the child starts from
+        // here inherits membership, so the tree is contained without the
+        // harness having to find it.
+        if let Some(job) = &self.job {
+            if !job.adopt(pid) {
+                self.containment = Some(crate::job::Containment::ParentWalk);
+            }
+        }
+
         self.children.push(child);
         Ok(pid)
     }
@@ -572,6 +614,28 @@ mod tests {
         assert_eq!(run.stdout_tail.lines().count(), TAIL_LINES);
         assert!(run.stdout_tail.contains("line120"), "the tail keeps the end, not the start");
         assert!(run.transcript().contains("truncated"), "truncation must be visible");
+    }
+
+    #[test]
+    fn a_spawned_child_is_contained_by_the_kernel_not_by_a_parent_walk() {
+        // `X-4`. `taskkill /T` walks the parent chain, so a grandchild whose
+        // immediate parent has exited is an orphan and survives — and none of
+        // it runs at all if the engine is killed -9. The job object (Windows)
+        // and the process group (POSIX) are kernel-owned and do not care.
+        let dir = tmpdir("nursery-containment");
+        let mut nursery = Nursery::new();
+        assert_eq!(nursery.containment(), None, "nothing spawned, nothing claimed");
+
+        let spec = Spec::new(script("ping -n 3 127.0.0.1"), &dir, Duration::from_secs(10));
+        nursery.spawn(&spec).expect("spawn");
+
+        let containment = nursery.containment().expect("something was spawned");
+        assert!(
+            containment.survives_engine_death(),
+            "the guarantee `X-4` asks for is not in force: {}",
+            containment.describe()
+        );
+        assert_eq!(nursery.kill_all(), 1);
     }
 
     #[test]

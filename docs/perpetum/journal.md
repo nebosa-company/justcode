@@ -2227,3 +2227,164 @@ of them only after a false green was chased down, which is the number that
 matters most.
 
 **The harness runs a batch on its own.** That was the cycle's one stated goal.
+
+
+---
+
+# Cycle 4
+
+## Phase D — Batch 16, OS integration
+
+Branch `perp/c4/b16`. Twelve requirements, and **the first third-party
+dependency this project has taken.**
+
+### c4/b16/s01 — The permission table is the module
+
+`X-1` lists eleven capabilities. The code that opens a URL is four lines; the
+requirement is *which* URLs open without asking. So `os::classify` is one total
+match over one enum, in one place — a permission table scattered across ten call
+sites is a permission table nobody can read as a whole, and this one has to be
+arguable.
+
+The calls, and why:
+
+| capability | policy | because |
+|---|---|---|
+| read/write/delete inside the workspace | auto | it is the workspace |
+| read outside | approve unless allowlisted | `X-2` |
+| **write** outside | approve, always | `X-2`, no allowlist |
+| **delete** outside | **never** | irreversible, and the capability an unattended loop has least business exercising |
+| clipboard **write** | auto | the loop's own data |
+| clipboard **read** | approve | whatever the operator last copied, which is routinely a password |
+| open localhost or a workspace file | auto | `X-7` |
+| open anything else | approve | including `mailto:`, which is a message the operator did not write |
+| register with the OS scheduler | approve | outlives the cycle, the session, and the memory of agreeing |
+| **GUI automation** | **never** | `X-11` |
+
+Two of those are `Never` rather than `Approve`, and the difference is the whole
+point: a capability that cannot be unlocked cannot be reached by an approval
+that should not have been given.
+
+The URL test is the one worth reading:
+
+```
+assert!(!auto("http://localhost.evil.test/"));
+```
+
+A host that merely *starts with* localhost is not localhost. Same class of bug
+as batch 15's subdomain suffix match, caught in a different module.
+
+### c4/b16/s02 — `X-4`, and changing `forbid` to `deny`
+
+The operator approved `windows-sys` in cycle 3's Phase C, for a real job object
+and nothing else. This is where it lands, and it cost a lint change.
+
+**The problem.** `taskkill /F /T /PID` walks the *parent chain*. A grandchild
+whose immediate parent has already exited is an orphan, is no longer reachable
+from that chain, and survives. And none of it runs at all if the engine is
+killed `-9`, because nothing gets to run.
+
+**The fix.** A job object created with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
+Children are added to a kernel-owned set, and when the last handle closes —
+including because the process holding it was killed without warning — **the
+kernel terminates every process in the job**. No cooperation, no walk, no
+orphans. POSIX already had the equivalent from `process_group(0)`.
+
+**The cost.** Those are `unsafe` calls, and the workspace lint was
+`unsafe_code = "forbid"`, which cannot be relaxed at a module. It is now `deny`,
+with exactly one module opting in by name. Every `unsafe` block carries a
+`// SAFETY:` comment saying what makes it sound. That trade is written into
+`Cargo.toml` rather than left for someone to find in a diff.
+
+**The honest part.** `Containment` is a three-value enum the nursery reports:
+`JobObject`, `ProcessGroup`, `ParentWalk`. Only the first two return true from
+`survives_engine_death()`. If job creation fails, the loop still runs — and the
+journal can say the *weaker* guarantee was in force, rather than the code
+silently pretending it was not.
+
+Also deliberate: `Nursery::containment()` is `None` before the first spawn. There
+is nothing to contain, and claiming a guarantee about an empty set is the kind of
+true statement that misleads.
+
+### c4/b16/s03 — Waking up is not continuing
+
+`X-10`. A process that sleeps for eight hours and carries on is reasoning from
+facts that were true yesterday: the peer is gone, the token expired, the clock
+jumped. None of those announce themselves.
+
+`WakeCheck::after` compares the last journal record's timestamp to the clock on
+waking. A gap over ten minutes — longer than any gate, shorter than a lunch
+break — means reprobe the links and reconcile before anything else.
+
+**And a clock that moved backwards is caught too.** An NTP correction, a VM
+restore, a dual boot: every duration the loop computed is now wrong, in the
+direction that flatters it.
+
+### c4/b16/s04 — Notifications that cannot be answered
+
+`X-5` implements `O-6`'s sink for the desktop. The body of an approval
+notification says *"Approve at the machine — approvals never arrive over the
+network"*, because a notification that reads as answerable invites someone to try
+to answer it, and the design decision in `O-6` was to **remove** the
+authentication problem rather than solve it.
+
+`Event` has no reply path at all. The only thing that comes back is a `/btw`,
+through its own queue, with its own rules — including that it cannot cross the
+approval boundary.
+
+A notifier that fails does not stop the loop. The entire premise of the
+notification is that nobody is watching; failing a batch because a toast did not
+render inverts that.
+
+### c4/b16/s05 — Gates and red run
+
+- **gates:** green, through the engine — `perp run --cycle 4 --stage b16`.
+  386 unit + 5 spine + 15 end-to-end = **406 tests**.
+- **red run: 14 mutations, 14 red** — one after the test that should have caught
+  it was written.
+
+  ```
+  os.rs       deleting outside becomes approvable      deleting_outside_is_never          101 red
+  os.rs       writing outside is free                  the_workspace_root_is_the_boundary 101 red
+  os.rs       the read allowlist covers everything     an_allowlisted_read_is_free        101 red
+  os.rs       reading the clipboard is free            the_clipboard_is_asymmetric        101 red
+  os.rs       any http url opens without asking        localhost_opens_freely             101 red
+  os.rs       gui automation becomes approvable        gui_automation_is_never            101 red
+  os.rs       scheduling is free                       scheduling_is_asked                101 red
+  os.rs       a missing tool is reported present       discovery_actually_asks            101 red
+  os.rs       a long sleep does not force a reconcile  waking_after_a_long_gap            101 red
+  os.rs       a backwards clock is ignored             a_clock_that_moved_backwards       101 red
+  os.rs       the approval notice reads as answerable  a_notification_says_walk_to_it     101 red
+  os.rs       notification text is not shell-safe      the_desktop_command_survives_quotes 101 red
+  job.rs      parent-walk claims the strong guarantee  the_containment_says_what_it_does  101 red
+  process.rs  children are not put in the job          a_spawned_child_is_contained       101 red
+  ```
+
+**The correction found a real hole.** *"A missing tool is reported present"*
+came back green, because every existing test built a `Toolchain` **by hand** —
+so `discover`, the part that actually talks to the machine, had no test at all.
+Written now: it runs `cargo --version` and `perp-not-a-real-tool --version` for
+real, and checks that the first returns a version string starting with `cargo `
+and the second is recorded as missing with its reason.
+
+Second correction on top of that: the first re-aimed mutation hit the
+`Ok(non-success)` arm, which a *missing binary* never reaches — a program that is
+not there fails at spawn, not at exit. Re-aimed again at the `Err` arm, which is
+the path a missing tool takes. Red.
+
+Three batches in a row now where the red run found something the test suite
+alone did not. That is the argument for the discipline, made three times.
+
+### c4/b16/s06 — What is carried
+
+- **`X-6`** — screenshot capture is classified `auto` and has no
+  implementation. It is evidence for `V-6` (independent verification), which is
+  batch 21, and building a capture path before the thing that consumes it would
+  be building it against a guess.
+- **`X-9`** — scheduler registration is classified `approve` and has no
+  implementation. Task Scheduler, systemd and launchd are three unrelated
+  interfaces, and the one that matters is the one the operator's machine has.
+  Batch 24.
+
+**Batch 16 status:** 9 of 12 delivered, 2 carried, 1 (`X-4`) closed from 🟡.
+406 tests.

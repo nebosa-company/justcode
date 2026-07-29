@@ -22,6 +22,8 @@
 //! | [`artifact`] | `A-1`–`A-7`, `O-2` |
 //! | [`metrics`] | `O-5`, `O-7` |
 //! | [`security`] | `S-1`, `S-3`–`S-6`, `N-6` |
+//! | [`os`] | `X-1`–`X-3`, `X-5`–`X-11` |
+//! | [`job`] | `X-4` — the only module allowed `unsafe` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -62,6 +64,7 @@ pub mod engine;
 pub mod error;
 pub mod gate;
 pub mod git;
+pub mod job;
 pub mod journal;
 pub mod ladder;
 pub mod json;
@@ -71,6 +74,7 @@ pub mod metrics;
 pub mod lock;
 pub mod net;
 pub mod phase;
+pub mod os;
 pub mod probe;
 pub mod process;
 pub mod prompt;
@@ -99,6 +103,8 @@ pub use journal::{Journal, Kind, Record};
 pub use ladder::{Ladder, Next, Rung};
 pub use link::{Link, Links, Mode, Role};
 pub use metrics::{Cycle, Snapshot};
+pub use job::{Containment, Job};
+pub use os::{Capability, Toolchain, WakeCheck};
 pub use lock::{Concurrency, Lock};
 pub use phase::{Machine, Measured, Park, Phase, Stop};
 pub use probe::{Capabilities, ModelFacts, ProbeCache};
