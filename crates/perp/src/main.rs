@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use perp_core::binding::Binding;
+use perp_core::engine::{Engine, Gates};
+use perp_core::phase::{Machine, Measured, Phase};
 use perp_core::gate::{self, Gate};
 use perp_core::git::Repo;
 use perp_core::journal::{Journal, Record};
@@ -65,6 +67,16 @@ usage:
       Resolve a role to a link and ask it. Prints the reply, the provenance of
       whichever link answered, and any link that was tried first and failed.
 
+  perp run [--cycle <n>] [--stage <b12|D>] [--root <dir>] [--dry-run]
+      Drive the loop: take the write lock, run the project's gates one step at
+      a time, journal an intent before each and an outcome after, and stop for
+      one of exactly three reasons — the backlog is exhausted, the batch is
+      blocked, or a budget parked it. Exits non-zero if it stopped blocked.
+
+  perp phase [--phase <A-G>] [--cycle <n>] [--root <dir>]
+      Measure the workspace and say whether the current phase's exit condition
+      is met, and why not if it is not. Measured, never asserted.
+
   perp cost [--root <dir>]
       Replay the journal and report what the loop spent, by link and by role.
       Local links show tokens and time and no money.
@@ -104,6 +116,8 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("links") => cmd_links(&args[1..]),
         Some("ask") => cmd_ask(&args[1..]),
         Some("cost") => cmd_cost(&args[1..]),
+        Some("run") => cmd_run(&args[1..]),
+        Some("phase") => cmd_phase(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -532,4 +546,123 @@ fn write_state(path: &Path, rendered: &str) -> Result<()> {
     atomic::write_atomic(path, rendered)?;
     println!("wrote {}", path.display());
     Ok(())
+}
+
+/// Drive the loop. The point of the whole harness: the operator stops typing
+/// `perp gate` and the engine does it, under a lock, with a budget, writing a
+/// terminal record that says which of `L-14`'s three reasons ended it.
+fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
+    let root = root_of(args);
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let cycle: u32 = flag(args, "--cycle")
+        .map(|text| text.parse().map_err(|_| format!("--cycle takes a number, not `{text}`")))
+        .transpose()?
+        .unwrap_or(1);
+    let stage = flag(args, "--stage").unwrap_or("D");
+
+    let target = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| binding.root().join("crates/target"));
+    let mut work = Gates::from_binding(&binding, &target).map_err(|e| e.to_string())?;
+
+    if args.contains(&"--dry-run") {
+        // What it would do, without taking the lock, running a gate or writing
+        // a record.
+        println!("would run in {}, cycle {cycle}, stage {stage}:", root.display());
+        for gate in Gate::from_binding(&binding).map_err(|e| e.to_string())? {
+            println!("  step: gate {} — {}", gate.name, gate.command);
+        }
+        println!("  and a terminal record saying why it stopped");
+        return Ok(());
+    }
+
+    let mut engine = Engine::open(&root).map_err(|e| e.to_string())?;
+    let budgets = engine.budgets();
+    if budgets.cycle.is_unlimited() && budgets.batch.is_unlimited() {
+        // Not an error: an unattended run with no ceiling is a choice, and one
+        // the operator should have made on purpose rather than by omission.
+        eprintln!("note: no budget is declared — this run has no ceiling in any currency");
+    }
+
+    let report = engine.run(cycle, stage, &mut work, 0).map_err(|e| e.to_string())?;
+    if let Some(previous) = &report.took_over {
+        println!("took over an abandoned lock from {previous}");
+    }
+    println!("{}", report.describe());
+    println!("spent {}", report.spend);
+
+    match &report.stop {
+        Some(perp_core::phase::Stop::BatchBlocked { why, .. }) => Err(format!("blocked: {why}")),
+        _ if report.failed > 0 => Err(format!("{} gates red", report.failed)),
+        _ => Ok(()),
+    }
+}
+
+/// Say whether the current phase is over, from the workspace rather than from
+/// anyone's opinion of it (`L-2`).
+fn cmd_phase(args: &[&str]) -> std::result::Result<(), String> {
+    let root = root_of(args);
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let cycle: u32 = flag(args, "--cycle")
+        .map(|text| text.parse().map_err(|_| format!("--cycle takes a number, not `{text}`")))
+        .transpose()?
+        .unwrap_or(1);
+
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+    let projection = replay(&records);
+
+    let vision = binding.resolve("path.vision").map(|p| p.exists()).unwrap_or(false);
+
+    // `L-4`: the state file is a projection, so "matches" means re-rendering it
+    // produces the same thing. The `Updated:` line is dropped from both sides —
+    // it is the render time, not a fact about the journal, and comparing it
+    // would report every state file as stale the moment the clock moved.
+    let state_matches = match binding.resolve("out.state") {
+        Ok(path) => match std::fs::read_to_string(&path) {
+            Ok(text) => without_timestamp(&text) == without_timestamp(&render(&projection, 0)),
+            Err(_) => false,
+        },
+        Err(_) => true,
+    };
+
+    let measured = Measured::from_workspace(
+        true,
+        vision,
+        0,
+        1,
+        0,
+        u32::try_from(projection.done.len()).unwrap_or(u32::MAX),
+        false,
+        false,
+        u32::from(projection.open_step.is_some()),
+        state_matches,
+    );
+
+    let phase = flag(args, "--phase")
+        .and_then(|text| text.chars().next())
+        .and_then(Phase::parse)
+        .unwrap_or(Phase::F);
+    let machine = Machine::at(cycle, phase);
+    let exit = machine.phase().exit(5);
+
+    println!("{} in {}", machine.phase(), root.display());
+    println!("  exit condition: {}", exit.describe());
+    match exit.check(&measured) {
+        perp_core::phase::Outcome::Met => {
+            println!("  met");
+            Ok(())
+        }
+        perp_core::phase::Outcome::NotMet { because } => {
+            println!("  not met: {because}");
+            Err(because)
+        }
+    }
+}
+
+/// The projection without its render time, for comparing a state file against
+/// the journal it claims to be a view of.
+fn without_timestamp(text: &str) -> String {
+    text.lines().filter(|line| !line.contains("Updated:")).collect::<Vec<_>>().join("
+")
 }

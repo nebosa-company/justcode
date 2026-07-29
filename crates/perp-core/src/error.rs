@@ -19,6 +19,11 @@ pub enum Error {
     Record { line: usize, reason: String },
     /// A step id is not `c<cycle>/<stage>/s<seq>`.
     Step { text: String, reason: String },
+    /// The harness declined to do something it is capable of doing: a `Never`
+    /// intent, a missing approval, a phase transition the machine does not
+    /// allow. Distinct from the failures above because it is a **decision**,
+    /// not a defect, and the message is the reasoning rather than a diagnosis.
+    Refused { what: String, reason: String },
 }
 
 impl Error {
@@ -28,6 +33,17 @@ impl Error {
 
     pub fn unbound(key: impl Into<String>, reason: impl Into<String>) -> Self {
         Error::Unbound { key: key.into(), reason: reason.into() }
+    }
+
+    pub fn refused(what: impl Into<String>, reason: impl Into<String>) -> Self {
+        Error::Refused { what: what.into(), reason: reason.into() }
+    }
+
+    /// Whether this is a decision rather than a defect. The engine parks on a
+    /// refusal and reports a failure on anything else, so the difference has to
+    /// be askable rather than inferred from the message text.
+    pub fn is_refusal(&self) -> bool {
+        matches!(self, Error::Refused { .. })
     }
 }
 
@@ -39,6 +55,7 @@ impl fmt::Display for Error {
             Error::Json { at, reason } => write!(f, "invalid JSON at byte {at}: {reason}"),
             Error::Record { line, reason } => write!(f, "journal line {line}: {reason}"),
             Error::Step { text, reason } => write!(f, "step id `{text}`: {reason}"),
+            Error::Refused { what, reason } => write!(f, "refused `{what}`: {reason}"),
         }
     }
 }

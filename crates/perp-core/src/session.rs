@@ -225,7 +225,21 @@ impl Session {
     /// Declare a step. The intent hits the journal before anything happens, so
     /// a kill between here and `close` is visible rather than silent.
     pub fn begin(&mut self, step: StepId, summary: &str, idempotent: bool) -> Result<StepGuard<'_>> {
-        let record = Record::intent(step.clone(), time::now(), summary).idempotent(idempotent);
+        self.begin_for(step, summary, idempotent, &[])
+    }
+
+    /// The same, citing the requirements the step serves (`V-9` — cited here,
+    /// minted only in the requirements document).
+    pub fn begin_for(
+        &mut self,
+        step: StepId,
+        summary: &str,
+        idempotent: bool,
+        requirements: &[String],
+    ) -> Result<StepGuard<'_>> {
+        let record = Record::intent(step.clone(), time::now(), summary)
+            .for_requirements(requirements.iter().map(String::as_str))
+            .idempotent(idempotent);
         self.journal.append(&record)?;
         self.next_seq = self.next_seq.max(step.seq + 1);
         Ok(StepGuard {

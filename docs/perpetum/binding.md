@@ -30,7 +30,8 @@ every gate in this cycle is a real command with a real transcript in
 | Impact weights | `docs/prioritization/weights.md` | separate file, separate meaning |
 | Batches | `docs/prioritization/batches.md` | |
 | Conflicts | `docs/prioritization/conflicts.md` | |
-| State | [`docs/perpetum/state.md`](state.md) | |
+| State | [`docs/perpetum/state.md`](state.md) | **generated** — `perp run` rewrites it after every step (`L-4`) |
+| Cycle notes | [`docs/perpetum/cycle-notes.md`](cycle-notes.md) | hand-written narrative; not read by the engine |
 | Journal | [`docs/perpetum/journal.md`](journal.md) | steps + gate transcripts; the truth for cycle 1 |
 | Progress board | `docs/perpetum/progress-board.md` | rewritten at every feature's step 7 |
 | Release notes | `docs/perpetum/release-notes.md` | the harness's own, separate from the editor's |
@@ -65,10 +66,26 @@ gate.lint    = cargo clippy --workspace --all-targets -- -D warnings
 gate.build   = cargo build --workspace
 gate.test    = cargo test --workspace
 
+budget.cycle.money   = 5.00
+budget.cycle.seconds = 28800
+budget.batch.money   = 1.00
+budget.batch.seconds = 5400
+
 git.branch.batch = perp/c{cycle}/b{batch}
 git.branch.init  = perp/c{cycle}/init
 git.push         = approval
 ```
+
+The budgets are the ceilings an unattended run stops at (`L-9`). Money is
+counted from what the links actually reported, never estimated (`L-10`), so a
+`local-only` cycle spends nothing against the money lines and everything against
+the wall-clock ones — which is why both exist. **No token limit is declared**:
+tokens are the currency this project has no calibration for yet, and inventing a
+number would produce a ceiling that stops good runs and permits bad ones. It
+goes in once a cycle has run long enough to say what normal looks like.
+
+An eight-hour cycle and a dollar is deliberately an overnight run, not a
+weekend: the design target in the vision is *a bill under a dollar* by morning.
 
 Two journals, deliberately: [`journal.md`](journal.md) is **cycle 1's operator
 journal**, written by hand while the engine is being built, and

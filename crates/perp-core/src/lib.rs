@@ -11,6 +11,11 @@
 //! | Module | Requirements |
 //! |---|---|
 //! | [`binding`] | `L-21` |
+//! | [`engine`] | the driver — `L-1`, `L-9`, `L-14`, `L-17`, `L-20` |
+//! | [`phase`] | `L-1`, `L-2`, `L-14` |
+//! | [`budget`] | `L-9`, `L-10` |
+//! | [`lock`] | `L-17`, `L-18`, `L-20` |
+//! | [`ladder`] | `M-8` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -40,16 +45,21 @@
 pub mod approval;
 pub mod atomic;
 pub mod binding;
+pub mod budget;
 pub mod client;
 pub mod cost;
+pub mod engine;
 pub mod error;
 pub mod gate;
 pub mod git;
 pub mod journal;
+pub mod ladder;
 pub mod json;
 pub mod link;
 pub mod local;
+pub mod lock;
 pub mod net;
+pub mod phase;
 pub mod probe;
 pub mod process;
 pub mod prompt;
@@ -65,10 +75,15 @@ pub mod watchdog;
 mod testutil;
 
 pub use binding::Binding;
+pub use budget::{Budget, Budgets, Spend};
+pub use engine::{Done, Engine, Gates, Task, Work};
 pub use error::{Error, Result};
 pub use gate::{Attempts, Gate, GateResult, Verdict};
 pub use journal::{Journal, Kind, Record};
+pub use ladder::{Ladder, Next, Rung};
 pub use link::{Link, Links, Mode, Role};
+pub use lock::{Concurrency, Lock};
+pub use phase::{Machine, Measured, Park, Phase, Stop};
 pub use probe::{Capabilities, ModelFacts, ProbeCache};
 pub use process::{Env, Exit, Nursery, Run, Spec};
 pub use session::{Decision, Finding, Probe, Session, StepGuard};

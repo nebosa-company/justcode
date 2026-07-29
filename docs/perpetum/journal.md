@@ -1568,3 +1568,201 @@ to a harness that runs itself.
   requirement are batch 16.
 
 **Batch 11 status:** 11 of 12 delivered, 1 carried, 0 blocked. 262 tests.
+
+
+---
+
+## Phase D — Batch 12, the loop driver
+
+Branch `perp/c3/b12`. Nine requirements. **The batch this whole cycle was for:
+at the end of it the harness ran a batch on itself.**
+
+### c3/b12/s01 — A phase is over when the workspace says so
+
+`L-2` is one sentence — *the engine evaluates it; the model does not get to
+assert it* — and it is the sentence the rest of the design leans on. So the
+exit condition is a value, not prose and not a closure: `Exit::BatchesDelivered(5)`
+checked against a `Measured`, which records **where its numbers came from**.
+
+- `Measured::from_workspace` is the only constructor that produces something a
+  phase will accept. Anything a model says arrives via `.claimed()` and
+  `Machine::advance` refuses it by name, citing `L-2`.
+- `Measured::disagreements` exists so a model's account can be *recorded and
+  compared* rather than either trusted or thrown away. When they differ, the
+  difference is the interesting thing.
+- This is structural, not cryptographic, and the doc comment says so. The claim
+  is only that there is one door into the workspace and everything a model
+  produces goes through the other one.
+
+There is deliberately **no `done: bool` field** on `Measured`. The moment a
+predicate can read a summary judgement, the summary judgement is what gets
+optimised.
+
+### c3/b12/s02 — Three currencies, and no conversion between them
+
+`L-9`/`L-10`. Tokens, wall-clock, money. Two decisions did the work:
+
+- **Money is read off the ledger; time is observed by the engine.** The ledger
+  knows how long the *links* took and nothing about how long a gate ran, so
+  `Spend::from_ledger` takes elapsed seconds as an argument rather than
+  inventing them. `Spend::link_seconds` keeps the link's share separable, for
+  telling "the loop is slow" from "the link is slow".
+- **A budget parks; it does not interrupt.** Killing a step mid-flight leaves an
+  open intent, an unclosed process group and possibly half an edit, and reclaims
+  a budget that is already spent. `Park` is a separate type from `Stop` for
+  exactly this reason: one is resumable and the other is terminal, and a reader
+  scanning the journal should not have to parse prose to tell them apart.
+
+The test that matters: a `local-only` cycle spends **zero money and blows the
+wall-clock budget**. "Local is free" is the assumption that lets a loop run all
+weekend.
+
+### c3/b12/s03 — One writer, and how a lock is allowed to be broken
+
+`L-17`, `L-18`, `L-20`. The lock is a file created with `create_new`, so the
+creation *is* the acquisition — no check-then-create window.
+
+Asking the OS whether a pid is alive needs platform calls this crate does not
+have (`N-11`), so a holder writes a heartbeat instead and a lock that stops
+beating past its TTL can be taken. **Taking one is never silent:** `Lock::broke()`
+returns the previous holder, and the engine journals the takeover *before any
+work*, so the record of what it inherited exists even if it dies too.
+
+Two smaller calls, both the conservative side:
+
+- An **unreadable** lock file is not a free lock. Someone wrote it. Guessing it
+  is junk is how two processes end up writing.
+- The gate lock is keyed on the **build target directory**, not the repository.
+  Two worktrees sharing one `CARGO_TARGET_DIR` collide and must serialise; two
+  with their own targets do not. Locking the repo would serialise work that was
+  safe.
+
+### c3/b12/s04 — The ladder, and why the bottom rung is not JSON
+
+`M-8`. Native tool calls → JSON-schema constrained output → a fenced
+`perp-call` block of `key: value` lines.
+
+The bottom rung is deliberately **not** JSON. The models that need it are the
+ones that cannot reliably close a brace, and asking them for the format they are
+worst at is how a repair loop stops converging. Two repairs, quoting the real
+parse error, then down a rung — or, at the bottom, the step fails **with that
+error** rather than with a substitute for one.
+
+Small things the tests pin: a link rejecting a rung (`400: unknown parameter
+tools`) costs no repair, because the model did not fail — the link did. A reply
+with no tool call is a plain answer, not a parse failure. Prose around a good
+block is ignored rather than refused, because small models narrate.
+
+### c3/b12/s05 — The driver
+
+`L-1`, and the point of the batch. `Engine::run` takes the write lock, walks
+tasks, journals an intent before each and an outcome after, checks budgets at
+every boundary and never inside a step, and writes exactly one terminal record
+naming which of `L-14`'s three conditions ended it.
+
+The engine knows the *shape* of work, not any particular work: a `Work` hands it
+one `Task` at a time. The implementation that ships with it is `Gates` — run the
+project's gates, one per step, keeping every transcript. **One gate per step**
+rather than all three in one, because a step that runs three commands and reports
+one verdict cannot say which was red without a reader parsing prose, and the step
+id is what every other surface cites. It needs no model, which is why it is the
+one that exists first: a driver whose only implementation needs a GPU is a driver
+nobody can test.
+
+`Done` has no variant meaning "probably fine". A red gate is `Failed` and the
+loop continues, because a red gate is information. `Blocked` stops the batch.
+
+### c3/b12/s06 — Running it on itself
+
+```
+$ perp run --root . --cycle 3 --stage b12
+3 steps (c3/b12/s19–c3/b12/s21) — stopped: the backlog is exhausted
+spent 0 tokens, 3s, $0.000000
+```
+
+Journal afterwards:
+
+```
+c3/b12/s19 intent          gate: lint
+c3/b12/s19 outcome  true   gate lint is green      [transcript]
+c3/b12/s20 intent          gate: build
+c3/b12/s20 outcome  true   gate build is green     [transcript]
+c3/b12/s21 intent          gate: test
+c3/b12/s21 outcome  true   gate test is green      [transcript]
+c3/b12/s22 intent          stopped: the backlog is exhausted
+c3/b12/s22 outcome  true   stopped: ...            stop=backlog-exhausted
+```
+
+**Two findings from the first real run, neither predictable from the document:**
+
+1. **The first run overwrote `state.md`.** It was supposed to: the binding
+   declares `out.state`, and `L-4` says the state file is a projection rewritten
+   after every outcome. But that path had been carrying a hand-written cycle
+   narrative since cycle 1. The binding was working exactly as designed and the
+   narrative was squatting on a generated file. Split: `state.md` is the
+   engine's, `cycle-notes.md` is the operator's, and the binding table now says
+   which is which. No requirement needed minting — `L-4` already said this; the
+   documentation had simply never been made to agree with it.
+
+2. **No budget was declared**, and the engine said so rather than running
+   without a ceiling in silence. `budget.*` keys are now in the binding: a
+   dollar and ninety minutes a batch, five dollars and eight hours a cycle. **No
+   token limit** — tokens are the currency this project has no calibration for,
+   and an invented number is a ceiling that stops good runs and permits bad
+   ones.
+
+### c3/b12/s07 — Gates and red run
+
+- **gates:** green first time — `perp gate all --step c3/b12/s23`, pinned to
+  `567114b`. 297 unit + 5 spine + 15 end-to-end = **317 tests**.
+- **red run: 14 mutations, 14 red** — but only after two false greens were run
+  down:
+
+  ```
+  phase.rs   a model claim advances a phase          a_phase_exit_is_measured_not_asserted    101 red
+  phase.rs   sunset becomes reachable                sunset_is_never_reached_by_the_engine    101 red
+  phase.rs   the loop reopens at A instead of B      a_runs_once_and_the_loop_returns_to_b    101 red
+  phase.rs   every stop gets the same tag            the_three_stops_are_distinguishable      101 red
+  budget.rs  the wall-clock limit is ignored         a_local_link_is_free_and_still_costs     101 red
+  budget.rs  a limit is only reached past it         the_limit_is_reached_at_the_limit        101 red
+  lock.rs    a live lock is treated as stale         the_second_writer_is_told_who_has_it     101 red
+  lock.rs    an unreadable lock is treated as free   an_unreadable_lock_is_not_a_free_lock    101 red
+  lock.rs    parallel admitted with no worktrees     parallel_without_worktrees_is_refused    101 red
+  ladder.rs  repairs are unbounded                   two_repairs_then_the_step_fails          101 red
+  ladder.rs  the bottom rung is dropped              the_ladder_starts_at_the_best_rung       101 red
+  engine.rs  the budget verdict is ignored           a_budget_parks_at_the_boundary           101 red
+  engine.rs  no terminal record is written           the_backlog_running_out_writes_its_own   101 red
+  engine.rs  the lock is leaked when blocked         the_lock_is_released_even_when_blocked   101 red
+  ```
+
+**The two false greens are the interesting part**, and `V-10` is why they were
+caught rather than counted:
+
+- *"the bottom rung is dropped from the ladder"* passed because
+  `Ladder::for_link` falls back to `Prompted` when the list is empty — the
+  mutation was real, the test simply was not the one that pinned it.
+  Re-aimed at `rungs_for`'s own test: red.
+- *"no terminal record is written"* passed because the arm it edited was
+  already unreachable: Rust match arms are ordered, `(Some(stop), _)` matched
+  first, and the text changed while the behaviour did not. **This is exactly the
+  case `V-10` exists for** — a mutation that is applied but inert produces a
+  green that means nothing. Redone as an early return: red.
+
+### c3/b12/s08 — What is carried
+
+Three of the nine are 🟡, and each for a reason that is a dependency rather than
+a shortcut:
+
+- **`L-17`** — the refusal is built and tested, but `Engine::run` passes
+  `worktrees_available = false` unconditionally, so opting into parallelism is
+  currently unreachable rather than merely unused. It becomes reachable with
+  `G-11` in batch 22.
+- **`L-20`** — the writer lock is real and enforced. `chat_mode` is a function
+  with no chat to apply it to until batch 13.
+- **`M-8`** — the ladder is complete and proven in isolation, including the
+  bottom rung end-to-end, but nothing drives it against a live model yet: the
+  loop issues no model calls until batch 13. Marking it done on the strength of
+  a unit test would be the kind of claim this project exists to not make.
+
+**Batch 12 status:** 6 of 9 delivered, 3 carried, 0 blocked. 317 tests.
+**The harness now runs a batch on its own.**

@@ -302,7 +302,7 @@ impl Host {
         };
         let real = probe.canonicalize().unwrap_or(probe);
         if !real.starts_with(&root) {
-            return Err(Error::unbound(
+            return Err(Error::refused(
                 "path",
                 format!("`{relative}` resolves outside the workspace, which needs an approval (`X-2`)"),
             ));
@@ -313,8 +313,8 @@ impl Host {
     /// Classify, then run. There is no method that skips the first half.
     pub fn run(&self, call: &Call) -> Result<Output> {
         match classify(call) {
-            Policy::Never { reason } => Err(Error::unbound(call.signature(), reason)),
-            Policy::Approve { reason } => Err(Error::unbound(
+            Policy::Never { reason } => Err(Error::refused(call.signature(), reason)),
+            Policy::Approve { reason } => Err(Error::refused(
                 call.signature(),
                 format!("needs approval: {reason}"),
             )),
@@ -327,7 +327,7 @@ impl Host {
         if let Policy::Never { reason } = classify(call) {
             // `T-13`: an approval does not unlock a Never, and saying so names
             // who tried.
-            return Err(Error::unbound(
+            return Err(Error::refused(
                 call.signature(),
                 format!("{reason} — refused even with {by}'s approval"),
             ));
@@ -364,13 +364,13 @@ impl Host {
             Tool::Shell => self.shell(call.need("command")?)?,
             Tool::Git => self.shell(&format!("git {}", call.need("args")?))?,
             Tool::Gate => {
-                return Err(Error::unbound(
+                return Err(Error::refused(
                     "gate",
                     "run through `gate::run_all`, which keeps the transcript (`V-2`)",
                 ))
             }
             Tool::Fetch => {
-                return Err(Error::unbound(
+                return Err(Error::refused(
                     "fetch",
                     "reached execute() without an approval, which cannot happen",
                 ))
@@ -401,13 +401,13 @@ pub fn patch(path: &Path, expect: &str, replace: &str) -> Result<String> {
     let before = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
     let hits = before.matches(expect).count();
     if hits == 0 {
-        return Err(Error::unbound(
+        return Err(Error::refused(
             format!("patch {}", path.display()),
             "the text to replace is not in the file — it has changed since the loop last read it",
         ));
     }
     if hits > 1 {
-        return Err(Error::unbound(
+        return Err(Error::refused(
             format!("patch {}", path.display()),
             format!("the text to replace appears {hits} times; it must identify one place"),
         ));

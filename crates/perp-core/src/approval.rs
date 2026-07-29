@@ -187,9 +187,9 @@ impl Queue {
             .entries
             .iter_mut()
             .find(|entry| entry.request.id == id)
-            .ok_or_else(|| Error::unbound(format!("approval #{id}"), "is not in the queue"))?;
+            .ok_or_else(|| Error::refused(format!("approval #{id}"), "is not in the queue"))?;
         if entry.verdict != Verdict::Pending {
-            return Err(Error::unbound(
+            return Err(Error::refused(
                 format!("approval #{id}"),
                 format!("was already settled: {:?}", entry.verdict),
             ));
