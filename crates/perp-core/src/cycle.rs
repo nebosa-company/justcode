@@ -449,12 +449,9 @@ impl Driver<'_> {
             // The step's own files, plus the evidence the harness wrote about
             // them — a commit with the work and no journal is half a record.
             let mut paths = crate::engine::Work::touched(&leg);
-            for key in ["out.journal", "out.state", "out.board"] {
-                if let Ok(path) = engine.session().binding().get(key) {
-                    let path = path.to_string();
-                    if self.root.join(&path).exists() && !paths.contains(&path) {
-                        paths.push(path);
-                    }
+            for path in evidence_paths(&self.root, engine.session().binding()) {
+                if !paths.contains(&path) {
+                    paths.push(path);
                 }
             }
             match land_batch(&self.root, &step, &covered, &subject, &paths, crate::engine::Work::author(&leg)) {
@@ -483,8 +480,52 @@ impl Driver<'_> {
         let mut engine = Engine::open(&self.root)?;
         let target = self.root.join("crates/target");
         let mut gates = Gates::from_binding(engine.session().binding(), &target)?;
-        engine.run(cycle, &phase.letter().to_string(), &mut gates, 0)
+        let report = engine.run(cycle, &phase.letter().to_string(), &mut gates, 0)?;
+
+        // A leg that writes evidence and does not commit it leaves the tree
+        // dirty, and the next run starts on someone else's mess. A three-batch
+        // run landed all three batches and still ended with a modified journal,
+        // because phase E ran after the last one.
+        if report.failed == 0 {
+            let paths = evidence_paths(&self.root, engine.session().binding());
+            let step = report
+                .last_step
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| format!("c{cycle}/{}", phase.letter()));
+            let subject = format!("Record {phase} evidence");
+            let mut report = report;
+            match land_batch(&self.root, &step, &["V-2".to_string()], &subject, &paths, None) {
+                Ok(Some(sha)) => report.warnings.push(format!("committed evidence as {sha}")),
+                Ok(None) => {}
+                Err(e) => report.warnings.push(format!("evidence not committed: {e}")),
+            }
+            return Ok(report);
+        }
+        Ok(report)
     }
+}
+
+/// The evidence a leg writes about itself, for staging (`G-3`, `A-2`).
+///
+/// Named paths, because `git add .` is refused. The artifacts directory is
+/// included as a directory: `git add` on it stages the files inside, and the
+/// board is regenerated wholesale rather than edited.
+fn evidence_paths(root: &std::path::Path, binding: &crate::Binding) -> Vec<String> {
+    let mut paths = Vec::new();
+    for key in ["out.journal", "out.state", "out.board"] {
+        if let Ok(path) = binding.get(key) {
+            let path = path.to_string();
+            if root.join(&path).exists() && !paths.contains(&path) {
+                paths.push(path);
+            }
+        }
+    }
+    let artifacts = "docs/perpetum/artifacts".to_string();
+    if root.join(&artifacts).exists() {
+        paths.push(artifacts);
+    }
+    paths
 }
 
 /// The branch a batch works on, from `git.branch.batch` (`G-1`).
@@ -606,6 +647,32 @@ path.requirements = docs/perpetum.md
         assert_eq!(branch_for(&binding, 1, 1), crate::git::batch_branch(1, 1));
         assert_eq!(branch_for(&binding, 1, 2), crate::git::batch_branch(1, 2));
         assert_ne!(branch_for(&binding, 1, 1), branch_for(&binding, 1, 2));
+    }
+
+    #[test]
+    fn the_evidence_a_leg_writes_is_named_so_it_can_be_staged() {
+        // A three-batch run landed all three batches and still ended with a
+        // modified journal and an unstaged board, because phase E ran after the
+        // last batch and nothing committed what it wrote.
+        let (dir, binding) = bound("out.journal = docs/perpetum/journal.jsonl
+out.state = docs/perpetum/state.md
+");
+
+        // Nothing written yet: nothing to name.
+        assert!(evidence_paths(&dir, &binding).is_empty());
+
+        std::fs::write(dir.join("docs/perpetum/journal.jsonl"), "{}
+").expect("journal");
+        std::fs::create_dir_all(dir.join("docs/perpetum/artifacts")).expect("artifacts");
+        std::fs::write(dir.join("docs/perpetum/artifacts/board.html"), "<p>").expect("board");
+
+        let paths = evidence_paths(&dir, &binding);
+        assert!(paths.contains(&"docs/perpetum/journal.jsonl".to_string()), "{paths:?}");
+        assert!(paths.contains(&"docs/perpetum/artifacts".to_string()), "{paths:?}");
+        assert!(
+            !paths.contains(&"docs/perpetum/state.md".to_string()),
+            "a path the binding names but nothing has written is not staged: {paths:?}"
+        );
     }
 
     #[test]
