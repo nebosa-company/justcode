@@ -1504,8 +1504,14 @@ fn cmd_cycle(args: &[&str]) -> std::result::Result<(), String> {
     println!("nothing was marked done — the loop writes evidence, a person reads it and marks");
     println!("read it with: perp explain <requirement>");
 
+    // A cycle that ended with a red gate exits non-zero. The first hour-long
+    // run left failing tests behind and exited 0, because only a blocked batch
+    // was checked — and an unattended run's exit code is the one thing a
+    // scheduler reads.
+    let failed: u32 = outcome.legs.iter().map(|leg| leg.report.failed).sum();
     match &outcome.stop {
         Some(perp_core::phase::Stop::BatchBlocked { why, .. }) => Err(format!("blocked: {why}")),
+        _ if failed > 0 => Err(format!("{failed} step(s) failed")),
         _ => Ok(()),
     }
 }

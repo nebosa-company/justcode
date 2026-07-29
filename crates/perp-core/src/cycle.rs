@@ -33,6 +33,39 @@ use crate::phase::{Advance, Machine, Measured, Phase, Stop};
 /// in progress means unfinished — and `✅`, `⛔`, `🔶` and `❌` are not: done,
 /// externally gated, conflicting and declined are all "not the loop's to pick
 /// up".
+/// Requirements this cycle has already attempted, from the journal.
+///
+/// The loop may not mark its own work done (`V-2`), so the requirements source
+/// looks identical after a batch as before it. Without this the second batch
+/// picks up the first batch's items again, and an hour-long run redoes the same
+/// four things fifteen times — which is exactly what a long run is for finding.
+///
+/// Attempted, not *succeeded*: an item that failed is not retried inside the
+/// same cycle either. `L-11`'s watchdog says repeating an unproductive thing is
+/// an error rather than a retry, and the next cycle is where a second attempt
+/// belongs.
+pub fn attempted(records: &[crate::journal::Record], cycle: u32) -> Vec<String> {
+    let mut seen = Vec::new();
+    for record in records.iter().filter(|r| r.step.cycle == cycle) {
+        for id in &record.requirements {
+            if id != "V-2" && !seen.contains(id) {
+                seen.push(id.clone());
+            }
+        }
+    }
+    seen
+}
+
+/// The backlog with everything this cycle has already touched removed.
+pub fn remaining(source: &str, records: &[crate::journal::Record], cycle: u32, limit: usize) -> Vec<Item> {
+    let done = attempted(records, cycle);
+    backlog(source, usize::MAX)
+        .into_iter()
+        .filter(|item| !done.contains(&item.requirement))
+        .take(limit)
+        .collect()
+}
+
 pub fn backlog(source: &str, limit: usize) -> Vec<Item> {
     let mut items = Vec::new();
     // Checked before the loop, not inside it: the earlier version pushed an
@@ -275,9 +308,48 @@ impl Driver<'_> {
 
             outcome.legs.push(Leg { phase, report, advanced });
 
+            // A leg reporting `BacklogExhausted` means *that leg's* work ran
+            // out, not that the cycle has none left. Conflating the two ended
+            // the first hour-long run after 99 seconds and three of twenty-four
+            // requirements — the driver asked for a batch, got "exhausted", and
+            // stopped.
+            //
+            // The cycle's backlog is the requirements source minus what this
+            // cycle has attempted, and that is what `L-14`'s condition means
+            // here.
             if let Some(stop) = stop {
-                outcome.stop = Some(stop);
-                break;
+                let cycle_done = match Engine::open(&self.root) {
+                    Ok(engine) => {
+                        let seen = engine.session().journal().read_all().unwrap_or_default();
+                        let source = engine
+                            .session()
+                            .binding()
+                            .resolve("path.requirements")
+                            .ok()
+                            .and_then(|p| std::fs::read_to_string(p).ok())
+                            .unwrap_or_default();
+                        remaining(&source, &seen, cycle, 1).is_empty()
+                    }
+                    Err(_) => true,
+                };
+                if cycle_done || !matches!(stop, Stop::BacklogExhausted) {
+                    outcome.stop = Some(stop);
+                    break;
+                }
+            }
+
+            // A red gate means the batch was not delivered. Starting the next
+            // one would be piling work on a tree whose tests do not pass, and
+            // the gate that then goes red belongs to nobody.
+            if let Some(leg) = outcome.legs.last() {
+                if leg.report.failed > 0 && leg.report.stop.is_none() {
+                    let blocked = Stop::BatchBlocked {
+                        batch: format!("b{batches_done}"),
+                        why: format!("{} step(s) failed and the gate is red", leg.report.failed),
+                    };
+                    outcome.stop = Some(blocked);
+                    break;
+                }
             }
             if let Some(park) = park {
                 outcome.parked = Some(park.reason);
@@ -315,7 +387,9 @@ impl Driver<'_> {
             .ok()
             .and_then(|p| std::fs::read_to_string(p).ok())
             .unwrap_or_default();
-        let items = backlog(&source, self.items_per_batch);
+        // Everything this cycle already attempted comes off the list first.
+        let seen = engine.session().journal().read_all()?;
+        let items = remaining(&source, &seen, cycle, self.items_per_batch);
 
         // An empty backlog is `L-14`'s exhausted condition, and the engine
         // reaches it by being handed no work rather than by being told.
@@ -403,6 +477,49 @@ mod tests {
         for phase in [Phase::B, Phase::C, Phase::E, Phase::F] {
             assert_ne!(phase.exit(5), crate::phase::Exit::BatchesDelivered(5));
         }
+    }
+
+    #[test]
+    fn a_cycle_does_not_pick_up_what_it_already_attempted() {
+        // The loop may not mark its own work done, so the requirements source
+        // looks identical after a batch as before it. Without this the second
+        // batch redoes the first batch's items, and an hour-long run repeats
+        // the same four things fifteen times.
+        use crate::journal::Record;
+        use crate::step::StepId;
+
+        let step = |n: u32| StepId::new(1, "b1", n).expect("step");
+        let records = vec![
+            Record::outcome(step(1), 100, true, "did it").for_requirements(["L-2"]),
+            // A gate cites `V-2` on every batch; that must not take `V-2` off a
+            // backlog it was never on.
+            Record::outcome(step(2), 200, true, "gate").for_requirements(["V-2"]),
+        ];
+
+        let left = remaining(SOURCE, &records, 1, 10);
+        let ids: Vec<&str> = left.iter().map(|i| i.requirement.as_str()).collect();
+        assert_eq!(ids, ["L-3"], "L-2 was attempted; L-3 was not");
+
+        // A different cycle starts clean — a second attempt belongs there.
+        let next = remaining(SOURCE, &records, 2, 10);
+        assert_eq!(next.len(), 2, "cycle 2 may try L-2 again");
+    }
+
+    #[test]
+    fn a_failed_item_is_not_retried_inside_the_same_cycle() {
+        // `L-11`: repeating an unproductive thing is an error, not a retry.
+        use crate::journal::Record;
+        use crate::step::StepId;
+        let records = vec![Record::outcome(
+            StepId::new(1, "b1", 1).expect("step"),
+            100,
+            false,
+            "L-2 made no progress",
+        )
+        .for_requirements(["L-2"])];
+        let ids: Vec<String> =
+            remaining(SOURCE, &records, 1, 10).into_iter().map(|i| i.requirement).collect();
+        assert!(!ids.contains(&"L-2".to_string()), "{ids:?}");
     }
 
     #[test]

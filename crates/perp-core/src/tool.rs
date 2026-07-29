@@ -279,13 +279,30 @@ impl From<crate::git::Policy> for Policy {
     }
 }
 
+/// The tools a model may actually be offered.
+///
+/// `Gate` is not among them, and that absence is the fix for a real failure. It
+/// was in the schema, and every call to it was refused with *"run through
+/// `gate::run_all`, which keeps the transcript"*. An unattended run showed the
+/// model finishing its work, calling `gate` to check itself, being refused,
+/// then hunting — `glob(**/gates*)`, `glob(**/gate*)`, `glob(**)` — until the
+/// turn cap fired. **Five of six items failed that way with the work already
+/// done.**
+///
+/// Advertising a tool that cannot succeed is worse than not having it: the
+/// model behaves reasonably and pays for it. The gates run as the second half
+/// of every leg; the model neither invokes them nor needs to know they exist.
+pub fn offered() -> Vec<Tool> {
+    Tool::ALL.iter().copied().filter(|tool| *tool != Tool::Gate).collect()
+}
+
 /// The tool schemas, generated once and byte-stable (`T-5`).
 ///
 /// Stable because it is part of the prompt's stable prefix (`M-12`): a schema
 /// block that reorders between calls costs cache-miss rates on every one.
 pub fn schemas() -> String {
     let mut out = String::from("tools:\n");
-    for tool in Tool::ALL {
+    for tool in offered() {
         out.push_str(&format!("  {}\n", tool.describe()));
     }
     out
@@ -293,7 +310,7 @@ pub fn schemas() -> String {
 
 /// The tools as a provider's `tools` array (`M-8`, native rung).
 ///
-/// Built from the same `Tool::ALL` that [`schemas`] renders, so the wire format
+/// Built from the same [`offered`] list that [`schemas`] renders, so the wire format
 /// and the prompt cannot end up describing different tools — which would make
 /// the ladder's rungs disagree about what exists.
 pub fn wire_schemas() -> crate::json::Value {
@@ -340,7 +357,7 @@ pub fn wire_schemas() -> crate::json::Value {
             ),
         ])
     };
-    Value::Arr(Tool::ALL.iter().copied().map(function).collect())
+    Value::Arr(offered().into_iter().map(function).collect())
 }
 
 /// Runs calls, after classifying them.
@@ -526,6 +543,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_tool_that_can_never_succeed_is_not_offered() {
+        // Found by an unattended run. `gate` was in the schema and every call
+        // to it was refused, so the model finished its work, called `gate` to
+        // check itself, was refused, and then hunted for the gate until the
+        // turn cap fired. Five of six items failed that way with the work
+        // already done.
+        assert!(!offered().contains(&Tool::Gate), "it always refuses");
+        assert!(!schemas().contains("gate("), "so the prompt must not name it");
+
+        let wire = crate::json::to_string(&wire_schemas());
+        assert!(!wire.contains("\"name\":\"gate\""), "nor the wire schema: {wire}");
+
+        // Everything else is still offered, and both surfaces agree.
+        for tool in [Tool::Read, Tool::Write, Tool::Patch, Tool::Shell, Tool::Grep] {
+            assert!(offered().contains(&tool), "{tool:?}");
+            assert!(wire.contains(&format!("\"name\":\"{}\"", tool.as_str())));
+        }
+    }
+
+    #[test]
+    fn the_gate_tool_still_refuses_if_something_reaches_it() {
+        // Not offered is not the same as not defended. A call that arrives
+        // anyway — a model that saw an older schema, a replayed transcript —
+        // is still refused, and still says why.
+        let dir = tmpdir("tool-gate-refused");
+        let err = Host::new(&dir)
+            .run_approved(&Call::new(Tool::Gate), "the operator")
+            .expect_err("still refused");
+        assert!(format!("{err}").contains("V-2"), "{err}");
+    }
+
+    #[test]
     fn fetch_needs_an_approval_and_then_still_needs_the_allowlist() {
         // `T-1` with `S-4`. Approving *a* fetch is not approving *any* host, so
         // both apply: `run` refuses without an approval, and `run_approved`
@@ -571,7 +620,9 @@ mod tests {
         // `T-5`: it lives in the stable prefix, so it must not move (`M-12`).
         assert_eq!(schemas(), schemas());
         assert!(schemas().contains("patch(path, expect, replace)"));
-        assert_eq!(schemas().lines().count(), Tool::ALL.len() + 1);
+        // `offered()`, not `Tool::ALL`: the schema lists what a model may
+        // actually call, and `gate` is deliberately not among them.
+        assert_eq!(schemas().lines().count(), offered().len() + 1);
     }
 
     #[test]

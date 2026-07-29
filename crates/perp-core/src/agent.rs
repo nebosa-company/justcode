@@ -33,7 +33,27 @@ use crate::tool::{Call, Host, Output};
 /// asked a model twelve times is not making progress, it is arguing with
 /// itself, and `L-11`'s watchdog would catch it eventually at much greater
 /// cost.
-pub const MAX_TURNS: u32 = 12;
+pub const MAX_TURNS: u32 = 40;
+
+/// Consecutive turns that changed nothing before a step is called stuck
+/// (`L-11`).
+///
+/// This is the number that actually decides, and it replaces a flat turn count
+/// that decided badly. A 24-requirement unattended run reported **11 done** when
+/// **20** were implemented, tested and passing: the cap fired *after* the work,
+/// while the model was verifying its own edits, and a careful model was punished
+/// for being careful.
+///
+/// `L-11` already had the right rule — *N consecutive steps with no workspace
+/// change*. A turn that writes, patches or runs a command is progress. A turn
+/// that only reads is not, and four of those in a row is a model going in
+/// circles rather than one being thorough.
+pub const MAX_QUIET_TURNS: u32 = 4;
+
+/// Whether a call changes the workspace, and so counts as progress (`L-11`).
+fn is_progress(call: &Call) -> bool {
+    matches!(call.tool, crate::tool::Tool::Write | crate::tool::Tool::Patch | crate::tool::Tool::Shell)
+}
 
 /// One unit of work a model is asked to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,12 +201,24 @@ impl<'a> Agent<'a> {
         ];
         let mut transcript = String::new();
         let mut turns = 0;
+        let mut quiet = 0;
 
         loop {
             turns += 1;
+            // `L-11`: consecutive turns that changed nothing, not turns. The
+            // ceiling below is a cost bound, not the decision.
+            if quiet >= MAX_QUIET_TURNS {
+                return Done::Failed {
+                    summary: format!(
+                        "{} changed nothing in {MAX_QUIET_TURNS} consecutive turns",
+                        item.requirement
+                    ),
+                    detail: transcript,
+                };
+            }
             if turns > MAX_TURNS {
                 return Done::Failed {
-                    summary: format!("{} made no progress in {MAX_TURNS} turns", item.requirement),
+                    summary: format!("{} hit the {MAX_TURNS}-turn ceiling", item.requirement),
                     detail: transcript,
                 };
             }
@@ -279,6 +311,12 @@ impl<'a> Agent<'a> {
                     );
                 }
                 Next::Calls(calls) => {
+                    // A turn that wrote, patched or ran something is progress.
+                    if calls.iter().any(is_progress) {
+                        quiet = 0;
+                    } else {
+                        quiet += 1;
+                    }
                     self.turns.push(Turn {
                         rung: ladder.rung().as_str().to_string(),
                         calls: calls.len(),
@@ -295,6 +333,7 @@ impl<'a> Agent<'a> {
                     messages.push(Message::user(results));
                 }
                 Next::Repair { complaint, attempt, .. } => {
+                    quiet += 1;
                     transcript.push_str(&format!("\n[repair {attempt}: {complaint}]\n"));
                     messages.push(Message::assistant(content));
                     messages.push(Message::user(format!(
@@ -787,6 +826,55 @@ path: f.txt
     }
 
     #[test]
+    fn a_careful_model_is_not_punished_for_verifying_its_own_edits() {
+        // The finding from a 24-requirement unattended run: it reported **11
+        // done** when **20** were implemented, tested and passing. The flat
+        // turn cap fired *after* the work, while the model re-read the files to
+        // confirm its patches had landed.
+        //
+        // `L-11`'s rule is the right one: consecutive turns that changed
+        // nothing. Here every third turn writes, so it must never trip.
+        let dir = tmpdir("agent-careful");
+        std::fs::write(dir.join("f.txt"), "a
+").expect("write");
+
+        let mut script: Vec<&str> = Vec::new();
+        for _ in 0..6 {
+            script.push("```perp-call
+tool: read
+path: f.txt
+```");
+            script.push("```perp-call
+tool: read
+path: f.txt
+```");
+            script.push("```perp-call
+tool: write
+path: f.txt
+content: b
+```");
+        }
+        script.push("Done.");
+
+        let transport = Scripted::new(script);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-11", "be careful", "verify each edit").expect("item")],
+        );
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+        assert!(
+            matches!(done, Done::Ok { .. }),
+            "read-read-write is progress, not spinning: {done:?}"
+        );
+        assert!(agent.turns.len() > 12, "and it ran past the old flat cap: {}", agent.turns.len());
+    }
+
+    #[test]
     fn a_step_that_argues_with_itself_fails_rather_than_looping() {
         // Not a budget — `L-9` owns those. A step that has asked a model twelve
         // times is not making progress.
@@ -813,8 +901,9 @@ path: f.txt
         let task = Work::next(&mut agent).expect("one item");
         let done = agent.perform(&task);
         let Done::Failed { summary, .. } = &done else { panic!("{done:?}") };
-        assert!(summary.contains("no progress in 12 turns"), "the cap is what fired: {summary}");
-        assert_eq!(u32::try_from(agent.turns.len()).unwrap_or(0), MAX_TURNS);
+        assert!(summary.contains("changed nothing"), "the no-progress rule fired: {summary}");
+        assert_eq!(u32::try_from(agent.turns.len()).unwrap_or(0), MAX_QUIET_TURNS,
+            "and it stopped after four quiet turns rather than forty");
     }
 
     #[test]
