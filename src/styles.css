@@ -1748,6 +1748,16 @@ button.primary:hover {
   display: none;
 }
 
+/* The row that puts the editor and the panel side by side. Without it the
+   panel stacks under the workspace, because the app shell is a column. */
+#workspace-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
 /* The Perpetum panel (`I-3`). Docked right, and styled from the editor's own
    variables so it follows the theme rather than declaring its own colours. */
 #perp-panel {

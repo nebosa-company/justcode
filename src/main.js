@@ -2751,6 +2751,14 @@ window.addEventListener(
       else run();
       return;
     }
+    // The menu's `accel` is display text only — every real shortcut is wired
+    // here. The Perpetum entry advertised Ctrl+Alt+P and nothing listened,
+    // which only showed up when the app was actually driven.
+    if (ctrl && event.altKey && event.key.toLowerCase() === "p") {
+      event.preventDefault();
+      togglePerpPanel();
+      return;
+    }
     // stopPropagation as well as preventDefault: CodeMirror's lint keymap also
     // claims F8, for "go to next problem". Left to run, it moved the caret on
     // every toggle — including the press that closes the panel again.
