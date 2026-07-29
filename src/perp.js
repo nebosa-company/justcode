@@ -280,7 +280,10 @@ function renderTimeline(body, view) {
   const list = el("ul", "perp-timeline");
   // Newest first: the thing that just happened is the thing being looked for.
   for (const entry of [...view.timeline].reverse().slice(0, 200)) {
-    const row = el("li", entry.ok === false ? "bad" : null);
+    // Accounting reads quieter than an event: the round-trip count is worth
+    // seeing, but it is not something that happened.
+    const tone = entry.ok === false ? "bad" : entry.kind === "calls" ? "calls" : null;
+    const row = el("li", tone);
     row.append(el("code", "perp-step", entry.step));
     row.append(el("span", "perp-summary", entry.summary));
     if (entry.requirements.length) {

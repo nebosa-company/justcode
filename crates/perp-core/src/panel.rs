@@ -122,9 +122,50 @@ impl View {
         let mut timeline = Vec::new();
         let mut chat = Vec::new();
 
+        // A model call is accounting, not an event. `M-11` put every one of them
+        // in the journal so the ledger survives a restart, which was right — and
+        // it made them 73% of a real run's timeline, all carrying the same
+        // summary, so the events worth reading were buried under filler.
+        //
+        // Collapsed rather than dropped: a step that took twelve round trips
+        // should say so, because that is exactly what you want to see when one is
+        // going badly. The count and the charge stay; the repetition goes.
+        let mut calls: std::collections::HashMap<String, (usize, f64)> =
+            std::collections::HashMap::new();
+        for record in records {
+            if let Some(entry) = crate::cost::from_record(record) {
+                let seen = calls.entry(record.step.to_string()).or_insert((0, 0.0));
+                seen.0 += 1;
+                seen.1 += entry.charge;
+            }
+        }
+        let mut summarised: std::collections::HashSet<String> = std::collections::HashSet::new();
+
         for record in records {
             if let Some(line) = chat_line(record) {
                 chat.push(line);
+                continue;
+            }
+            if crate::cost::from_record(record).is_some() {
+                // One line per step, at the position of its first call, so the
+                // summary sits where the work did rather than at the end.
+                let step = record.step.to_string();
+                if !summarised.insert(step.clone()) {
+                    continue;
+                }
+                let (count, charge) = calls.get(&step).copied().unwrap_or((1, 0.0));
+                timeline.push(Entry {
+                    step,
+                    at: record.at,
+                    kind: "calls",
+                    summary: format!(
+                        "{count} model call{} · ${charge:.4}",
+                        if count == 1 { "" } else { "s" }
+                    ),
+                    ok: None,
+                    requirements: record.requirements.clone(),
+                    transcript: None,
+                });
                 continue;
             }
             // `/btw` is in the timeline as itself, not as a chat line: it is an
@@ -437,6 +478,53 @@ impl Sidecar {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_calls_are_one_line_per_step_not_one_line_each() {
+        // A real run put 179 accounting records in a 246-entry timeline, all
+        // reading `coder · link ds-fast · model deepseek-v4-flash`, so the 67
+        // entries that were actual events were buried. `M-11` was right to
+        // journal them; the panel was wrong to render them as events.
+        let step = crate::step::StepId::new(1, "b4", 28).expect("step");
+        let mut records = vec![Record::intent(step.clone(), 100, "T-15: add snake_to_camel")
+            .for_requirements(["T-15"])];
+        for n in 0..12 {
+            records.push(crate::cost::annotate(
+                Record::outcome(step.clone(), 101 + n, true, "coder · link ds-fast"),
+                &crate::cost::Entry {
+                    step: step.to_string(),
+                    role: "coder".into(),
+                    link: "ds-fast".into(),
+                    model: "deepseek-v4-flash".into(),
+                    usage: crate::cost::Usage {
+                        cache_hit_tokens: 1024,
+                        cache_miss_tokens: 83,
+                        output_tokens: 144,
+                    },
+                    latency_ms: 2476,
+                    charge: 0.000_5,
+                },
+            ));
+        }
+        records.push(
+            Record::outcome(step.clone(), 200, true, "T-15: all 82 tests pass")
+                .for_requirements(["T-15"]),
+        );
+
+        let view = View::of(&records, &Approvals::new(), Vec::new(), 300);
+        let calls: Vec<&Entry> = view.timeline.iter().filter(|e| e.kind == "calls").collect();
+        assert_eq!(calls.len(), 1, "twelve calls, one line: {:?}", view.timeline.len());
+        assert_eq!(calls[0].summary, "12 model calls · $0.0060");
+        assert_eq!(calls[0].step, "c1/b4/s28");
+
+        // And the events survive untouched.
+        assert_eq!(view.timeline.len(), 3, "intent, the collapsed calls, the outcome");
+        assert!(
+            view.timeline.iter().any(|e| e.summary.contains("all 82 tests pass")),
+            "{:?}",
+            view.timeline
+        );
+    }
 
     #[test]
     fn approving_from_the_panel_needs_something_to_approve_against() {
