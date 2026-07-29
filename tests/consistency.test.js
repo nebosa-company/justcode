@@ -89,6 +89,48 @@ test("every harness tab has a label, a hint and an icon", () => {
   assert.deepEqual(missing, [], `a tab with no name renders blank:\n${missing.join("\n")}`);
 });
 
+test("a menu item's enabled and checked are references, not calls", () => {
+  // `menu.js` does `if (item.enabled && !item.enabled())`, so passing the result
+  // hands it a boolean to call. `enabled: canCopy()` did exactly that: with no
+  // file open the result was `false` and short-circuited, and with a file open it
+  // was `true`, `true()` threw, and because the render happens on the line before
+  // the dropdown is unhidden the entire Edit menu opened as nothing.
+  //
+  // It survived because the failing case is the useful one — a menu only breaks
+  // once there is something to edit.
+  const offenders = [];
+  for (const { name, text } of sources()) {
+    for (const match of text.matchAll(/\b(enabled|checked):\s*([a-zA-Z_$][\w$.]*)\(\)/g)) {
+      offenders.push(`${name}: ${match[1]}: ${match[2]}()`);
+    }
+  }
+  assert.deepEqual(offenders, [], `evaluated once and then called:\n${offenders.join("\n")}`);
+});
+
+test("top-level menu mnemonics are lowercase and unique", () => {
+  // The bar matches with `menu.mnemonic === key` against a lowercased key, so an
+  // uppercase mnemonic never matches anything — and two menus claiming the same
+  // letter means the second is unreachable by keyboard. Both were true of the
+  // Harness menu the day it was added: `"H"` never matched, and `h` was Help's.
+  const text = readFileSync("src/main.js", "utf8");
+  const mnemonics = [...text.matchAll(/^\s*mnemonic:\s*"([A-Za-z])",/gm)].map((m) => m[1]);
+  assert.ok(mnemonics.length >= 4, `found ${mnemonics.length}`);
+
+  const upper = mnemonics.filter((letter) => letter !== letter.toLowerCase());
+  assert.deepEqual(upper, [], `never matches a lowercased key: ${upper.join(", ")}`);
+
+  // `has` then `add`. `Set.add` returns the set, which is always truthy, so
+  // `!seen.add(letter)` is always false — a red run caught this assertion
+  // agreeing with everything.
+  const seen = new Set();
+  const clashing = mnemonics.filter((letter) => {
+    if (seen.has(letter)) return true;
+    seen.add(letter);
+    return false;
+  });
+  assert.deepEqual(clashing, [], `two menus claim the same Alt key: ${clashing.join(", ")}`);
+});
+
 test("every element id the front-end looks up exists in index.html", () => {
   const html = readFileSync("index.html", "utf8");
   const declared = new Set([...html.matchAll(/\bid="([a-zA-Z0-9_-]+)"/g)].map((m) => m[1]));

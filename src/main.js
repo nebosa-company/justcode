@@ -2214,7 +2214,8 @@ function editorContextMenu(event) {
     { label: t("edit.redo"), icon: "redo", accel: "Ctrl+Y", run: editRedo, enabled: hasTab },
     { separator: true },
     { label: t("edit.cut"), icon: "cut", accel: "Ctrl+X", run: editCut, enabled: hasTab },
-    { label: t("edit.copy"), icon: "copy", accel: "Ctrl+C", run: editCopy, enabled: canCopy() },
+    // Same as the Edit menu's: the reference, not the result.
+    { label: t("edit.copy"), icon: "copy", accel: "Ctrl+C", run: editCopy, enabled: canCopy },
     { label: t("edit.paste"), icon: "paste", accel: "Ctrl+V", run: editPaste, enabled: hasTab },
     { separator: true },
     { label: t("edit.selectAll"), icon: "selectAll", accel: "Ctrl+A", run: editSelectAll, enabled: hasTab },
@@ -2346,7 +2347,14 @@ function buildMenus() {
       { label: t("edit.redo"), icon: "redo", accel: "Ctrl+Y", run: editRedo, enabled: hasTab },
       { separator: true },
       { label: t("edit.cut"), icon: "cut", accel: "Ctrl+X", run: editCut, enabled: hasTab },
-      { label: t("edit.copy"), icon: "copy", accel: "Ctrl+C", run: editCopy, enabled: canCopy() },
+      // `canCopy`, not `canCopy()`. The menu calls `enabled` when it renders, so
+      // passing the result gave it a boolean to call: with a file open the
+      // result is `true`, `true()` throws, and the throw happens on the line
+      // before the dropdown is unhidden — so the whole Edit menu opened as
+      // nothing. With no file open the result is `false`, which short-circuits
+      // and hides the bug, which is why it survived: it only breaks once there
+      // is something to edit.
+      { label: t("edit.copy"), icon: "copy", accel: "Ctrl+C", run: editCopy, enabled: canCopy },
       { label: t("edit.paste"), icon: "paste", accel: "Ctrl+V", run: editPaste, enabled: hasTab },
       { separator: true },
       { label: t("edit.selectAll"), icon: "selectAll", accel: "Ctrl+A", run: editSelectAll, enabled: hasTab },
@@ -2614,7 +2622,10 @@ function buildMenus() {
     // not a piece of chrome you show and hide, and View had already outgrown the
     // window with it in there.
     label: t("menu.harness"),
-    mnemonic: "H",
+    // Lowercase, because the bar matches `menu.mnemonic === key` against a
+    // lowercased key — `"H"` matched nothing at all. And `a`, not `h`: Help
+    // already holds `h`, and Alt+H meaning Help is older than this app.
+    mnemonic: "a",
     items: [
       {
         label: t("harness.progress"),
