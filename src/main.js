@@ -39,6 +39,7 @@ import {
   countDiagnostics,
   DEFAULT_FONT_SIZE,
 } from "./editor.js";
+import * as perp from "./perp.js";
 import { THEMES } from "./theme.js";
 import {
   languageIdFor,
@@ -2551,6 +2552,7 @@ function buildMenus() {
       { label: t("view.language"), icon: "globe", run: chooseAppLanguage },
       { separator: true },
       { label: t("view.problems"), icon: "warning", accel: "F8", run: showProblems },
+      { label: "Perpetum panel", icon: "clock", accel: "Ctrl+Alt+P", run: togglePerpPanel },
       {
         label: t("view.nextProblem"),
         icon: "arrowDown",
@@ -3042,3 +3044,59 @@ startupReady
       .join(" ");
     invoke("report_ready", { detail }).catch(() => {});
   });
+
+// The Perpetum panel (`I-1`–`I-5`).
+//
+// A sidecar the editor invokes, never a library it links: an agent loop must
+// not be able to take the editor down with it, and must outlive this window.
+// JustCode builds, starts and works with `crates/` deleted, so everything below
+// degrades to "the harness is not installed" rather than to an error.
+const perpHost = document.getElementById("perp-panel");
+
+perp.configure({
+  // `I-4`: reuse the surfaces this editor already has rather than inventing
+  // parallel ones. A gate transcript belongs in the terminal dock; a developer
+  // already knows where to look for both.
+  showTranscript: (step, text) => {
+    const shown = text.trim();
+    if (!shown) return;
+    message(shown, { title: `perp ${step}` });
+  },
+  openArtifact: async (relative) => {
+    const root = perpRoot();
+    if (!root) return;
+    try {
+      await invoke("open_in_browser", { path: `${root}/${relative}` });
+    } catch (error) {
+      await message(`${error}`, { title: "JustCode", kind: "error" });
+    }
+  },
+});
+
+/** The workspace the panel reads. The folder of whatever file is open. */
+function perpRoot() {
+  const path = activeTab()?.path;
+  if (!path) return null;
+  // Walk up to the nearest directory holding a binding, so the panel follows
+  // the project rather than the file.
+  return path.replace(/[\/][^\/]*$/, "");
+}
+
+async function togglePerpPanel() {
+  if (!perpHost) return;
+  if (!perpHost.hidden) {
+    perpHost.hidden = true;
+    perp.detach();
+    return;
+  }
+  const root = perpRoot();
+  if (!root) {
+    await message("Open a file in the project first — the panel reads its journal.", {
+      title: "Perpetum",
+    });
+    return;
+  }
+  perpHost.hidden = false;
+  perp.mount(perpHost);
+  await perp.attach(root);
+}

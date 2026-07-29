@@ -1,0 +1,661 @@
+//! The panel's data surface (`I-1`–`I-5`).
+//!
+//! The panel is **a view onto the journal, not a second source of truth**
+//! (`I-5`). So this module renders one JSON document from the records and
+//! nothing else: no in-memory session, no state the editor owns, nothing that
+//! can drift from what is on disk.
+//!
+//! Everything follows from that one decision:
+//!
+//! - **Closing the editor does not stop the loop, and reopening re-attaches**
+//!   (`I-5`), because there is nothing to attach *to*. The panel reads a file
+//!   and renders it. Attachment is not a connection; it is a read.
+//! - **The engine is a sidecar** (`I-2`). It is a separate process the editor
+//!   invokes, never a library it links. An agent loop must not be able to take
+//!   the editor down with it, and must outlive the editor window — both of
+//!   which are properties of *being a different process*, not of careful coding.
+//! - **Nothing under `src/` depends on `crates/`** (vision clause 6). The
+//!   editor shells out to a binary that may not be installed, and says so when
+//!   it is not.
+//!
+//! The panel therefore cannot show anything the CLI cannot, which is the
+//! intended constraint rather than a limitation: two surfaces that can disagree
+//! is one surface too many.
+
+use crate::approval::Queue as Approvals;
+use crate::json::Value;
+use crate::journal::{Kind, Record};
+use crate::metrics::{Cycle, Snapshot};
+use crate::state::{replay, Projection};
+
+/// What the panel needs, in one document (`I-3`).
+///
+/// Assembled in one pass so every section describes the same moment. A panel
+/// that fetched chat and approvals separately could show an approval that the
+/// timeline says was already answered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct View {
+    pub projection: Projection,
+    pub metrics: Cycle,
+    pub snapshot: Snapshot,
+    pub timeline: Vec<Entry>,
+    pub chat: Vec<ChatLine>,
+    pub artifacts: Vec<String>,
+    /// The approvals queue, and the diff each one is asking about (`I-3`).
+    pub approvals: Vec<Pending>,
+    /// The working tree's diff, read from git rather than stored.
+    pub diff: Option<String>,
+}
+
+/// One thing waiting on a person, with what it would change (`I-3`).
+///
+/// **Approving from the panel opens the diff first**, so the diff travels with
+/// the request rather than being fetched when the button is pressed. A button
+/// that could be pressed before the diff loaded is a button that gets pressed
+/// before the diff loaded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pending {
+    pub id: u64,
+    pub what: String,
+    pub why: String,
+    pub raised_at: i64,
+    /// What approving would let happen. `None` when the action changes no
+    /// files — a push, a tag — and the panel then says so rather than showing
+    /// an empty diff pane that reads as "no changes".
+    pub diff: Option<String>,
+}
+
+impl Pending {
+    /// Whether the panel may offer an approve button (`I-3`).
+    ///
+    /// Only with something to show. An approval offered next to a diff that
+    /// failed to load is the exact thing this requirement was written to
+    /// prevent — the operator confirms what they can see, and if they can see
+    /// nothing they should not be confirming.
+    pub fn is_reviewable(&self) -> bool {
+        self.diff.as_ref().is_some_and(|diff| !diff.trim().is_empty())
+    }
+
+    /// What the panel shows when it will not offer the button.
+    pub fn why_not_reviewable(&self) -> &'static str {
+        match &self.diff {
+            None => "this action changes no files — approve it where it was asked for",
+            Some(_) => "the diff could not be read, so there is nothing to approve against",
+        }
+    }
+}
+
+/// One row of the journal timeline (`I-3`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Entry {
+    pub step: String,
+    pub at: i64,
+    pub kind: &'static str,
+    pub summary: String,
+    pub ok: Option<bool>,
+    pub requirements: Vec<String>,
+    /// A gate transcript, when the step has one. The panel shows these in the
+    /// **terminal dock** rather than inventing a viewer (`I-4`).
+    pub transcript: Option<String>,
+}
+
+/// One side of the conversation, pulled back out of the shared stream (`C-5`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatLine {
+    pub speaker: String,
+    pub text: String,
+    pub at: i64,
+    pub partial: bool,
+}
+
+impl View {
+    pub fn of(
+        records: &[Record],
+        approvals: &Approvals,
+        artifacts: Vec<String>,
+        now: i64,
+    ) -> View {
+        let projection = replay(records);
+        let metrics = Cycle::count(records);
+        let snapshot = Snapshot::of(&projection, records, approvals.pending(now).len());
+
+        let mut timeline = Vec::new();
+        let mut chat = Vec::new();
+
+        for record in records {
+            if let Some(line) = chat_line(record) {
+                chat.push(line);
+                continue;
+            }
+            // `/btw` is in the timeline as itself, not as a chat line: it is an
+            // aside about the work, and mixing it into the conversation loses
+            // the classification.
+            timeline.push(Entry {
+                step: record.step.to_string(),
+                at: record.at,
+                kind: match record.kind {
+                    Kind::Intent => "intent",
+                    Kind::Outcome => "outcome",
+                },
+                summary: record.summary.clone(),
+                ok: record.ok,
+                requirements: record.requirements.clone(),
+                transcript: record
+                    .detail
+                    .clone()
+                    .filter(|detail| detail.starts_with("gate:")),
+            });
+        }
+
+        View {
+            projection,
+            metrics,
+            snapshot,
+            timeline,
+            chat,
+            artifacts,
+            approvals: Vec::new(),
+            diff: None,
+        }
+    }
+
+    /// Attach the working tree's diff and the approvals queue (`I-3`).
+    ///
+    /// The diff is **read from git**, never stored in the journal — git already
+    /// keeps it, and a second copy is a second thing that can disagree. Same
+    /// decision as `C-7`'s evidence chain.
+    pub fn with_review(
+        mut self,
+        repo: &crate::git::Repo,
+        approvals: &Approvals,
+        now: i64,
+    ) -> View {
+        self.diff = repo.plumbing(&["diff", "--stat", "--", "."]).ok().filter(|d| !d.trim().is_empty());
+        let file_diff = repo.plumbing(&["diff", "--", "."]).ok().filter(|d| !d.trim().is_empty());
+
+        self.approvals = approvals
+            .pending(now)
+            .into_iter()
+            .map(|entry| Pending {
+                id: entry.request.id,
+                what: entry.request.what.clone(),
+                why: entry.request.why.clone(),
+                raised_at: entry.request.raised_at,
+                // An action that touches files gets the diff; one that does not
+                // gets `None` and says why, rather than an empty pane that
+                // reads as "nothing to see".
+                diff: touches_files(&entry.request.what).then(|| file_diff.clone()).flatten(),
+            })
+            .collect();
+        self
+    }
+
+    /// Gate failures, for the editor's **Problems** panel (`I-4`).
+    ///
+    /// Reusing the surface the editor already has rather than building a second
+    /// list of red things — a developer already knows where problems appear.
+    pub fn problems(&self) -> Vec<&Entry> {
+        self.timeline.iter().filter(|entry| entry.ok == Some(false)).collect()
+    }
+
+    /// Transcripts, for the **terminal dock** (`I-4`).
+    pub fn transcripts(&self) -> Vec<(&str, &str)> {
+        self.timeline
+            .iter()
+            .filter_map(|entry| {
+                entry.transcript.as_deref().map(|text| (entry.step.as_str(), text))
+            })
+            .collect()
+    }
+
+    pub fn to_json(&self) -> String {
+        crate::json::to_string(&self.to_value())
+    }
+
+    fn to_value(&self) -> Value {
+        let obj = |pairs: Vec<(&str, Value)>| {
+            Value::Obj(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
+        };
+        let strings = |items: &[String]| {
+            Value::Arr(items.iter().map(|s| Value::str(s.clone())).collect())
+        };
+
+        obj(vec![
+            ("version", Value::str(crate::VERSION)),
+            (
+                "position",
+                obj(vec![
+                    (
+                        "cycle",
+                        self.projection.cycle.map_or(Value::Null, |c| Value::int(i64::from(c))),
+                    ),
+                    (
+                        "stage",
+                        self.projection
+                            .stage
+                            .clone()
+                            .map_or(Value::Null, Value::str),
+                    ),
+                    (
+                        "in_flight",
+                        self.projection
+                            .open_step
+                            .as_ref()
+                            .map_or(Value::Null, |step| Value::str(step.to_string())),
+                    ),
+                    ("done", Value::int(as_i64(self.projection.done.len()))),
+                    ("blocked", Value::int(as_i64(self.projection.blocked.len()))),
+                ]),
+            ),
+            (
+                "spend",
+                obj(vec![
+                    ("tokens", Value::int(self.metrics.tokens)),
+                    ("money", Value::Num(format!("{:.6}", self.metrics.money))),
+                    ("calls", Value::int(as_i64(self.metrics.model_calls))),
+                    ("gates_run", Value::int(as_i64(self.metrics.gates_run))),
+                    ("gates_green", Value::int(as_i64(self.metrics.gates_green))),
+                ]),
+            ),
+            (
+                "approvals",
+                Value::int(as_i64(self.snapshot.approvals_pending)),
+            ),
+            (
+                "btw",
+                Value::Arr(
+                    self.projection
+                        .pending_btw
+                        .iter()
+                        .map(|item| {
+                            obj(vec![
+                                ("id", Value::int(as_i64_u64(item.id))),
+                                ("class", Value::str(item.class.to_string())),
+                                ("source", Value::str(item.source.clone())),
+                                ("text", Value::str(item.text.clone())),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            (
+                "timeline",
+                Value::Arr(
+                    self.timeline
+                        .iter()
+                        .map(|entry| {
+                            obj(vec![
+                                ("step", Value::str(entry.step.clone())),
+                                ("at", Value::int(entry.at)),
+                                ("kind", Value::str(entry.kind)),
+                                ("summary", Value::str(entry.summary.clone())),
+                                (
+                                    "ok",
+                                    entry.ok.map_or(Value::Null, Value::Bool),
+                                ),
+                                ("requirements", strings(&entry.requirements)),
+                                (
+                                    "transcript",
+                                    entry
+                                        .transcript
+                                        .clone()
+                                        .map_or(Value::Null, Value::str),
+                                ),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            (
+                "chat",
+                Value::Arr(
+                    self.chat
+                        .iter()
+                        .map(|line| {
+                            obj(vec![
+                                ("speaker", Value::str(line.speaker.clone())),
+                                ("text", Value::str(line.text.clone())),
+                                ("at", Value::int(line.at)),
+                                ("partial", Value::Bool(line.partial)),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            ("artifacts", strings(&self.artifacts)),
+            (
+                "diff",
+                self.diff.clone().map_or(Value::Null, Value::str),
+            ),
+            (
+                "approvals_pending",
+                Value::Arr(
+                    self.approvals
+                        .iter()
+                        .map(|pending| {
+                            obj(vec![
+                                ("id", Value::int(as_i64_u64(pending.id))),
+                                ("what", Value::str(pending.what.clone())),
+                                ("why", Value::str(pending.why.clone())),
+                                ("raised_at", Value::int(pending.raised_at)),
+                                (
+                                    "diff",
+                                    pending.diff.clone().map_or(Value::Null, Value::str),
+                                ),
+                                ("reviewable", Value::Bool(pending.is_reviewable())),
+                                (
+                                    "why_not",
+                                    if pending.is_reviewable() {
+                                        Value::Null
+                                    } else {
+                                        Value::str(pending.why_not_reviewable())
+                                    },
+                                ),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+        ])
+    }
+}
+
+/// Whether an action's effect is visible in a diff.
+///
+/// A push or a tag moves refs and changes no file, so showing the working
+/// tree's diff next to it would be showing something unrelated — which is worse
+/// than showing nothing, because it looks like the thing being approved.
+fn touches_files(what: &str) -> bool {
+    let lower = what.to_ascii_lowercase();
+    !(lower.starts_with("git push")
+        || lower.starts_with("git tag")
+        || lower.contains("publish")
+        || lower.contains("deploy"))
+}
+
+fn as_i64(n: usize) -> i64 {
+    i64::try_from(n).unwrap_or(i64::MAX)
+}
+
+fn as_i64_u64(n: u64) -> i64 {
+    i64::try_from(n).unwrap_or(i64::MAX)
+}
+
+/// Pull a chat turn back out of the shared journal. `None` for a record that is
+/// not one — most are not.
+fn chat_line(record: &Record) -> Option<ChatLine> {
+    let detail = record.detail.as_deref()?;
+    let speaker = detail
+        .split_whitespace()
+        .find_map(|part| part.strip_prefix("speaker="))?
+        .to_string();
+    let text = detail.split_once("\n\n").map(|(_, body)| body).unwrap_or("").to_string();
+    Some(ChatLine {
+        speaker,
+        text,
+        at: record.at,
+        partial: detail.contains("partial=true"),
+    })
+}
+
+/// How the editor finds the engine (`I-2`).
+///
+/// A path to a binary, which may not be there. The editor must build, start and
+/// work with `crates/` deleted — so "not installed" is an ordinary state with a
+/// message, not an error condition to handle defensively at twenty call sites.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Sidecar {
+    Available { program: String },
+    Missing { looked_for: String },
+}
+
+impl Sidecar {
+    /// Look for the binary. `PERP_BIN` first, so an operator can point the
+    /// editor at a build without installing one.
+    pub fn find() -> Sidecar {
+        let program = std::env::var("PERP_BIN").unwrap_or_else(|_| "perp".to_string());
+        Sidecar::Available { program }
+    }
+
+    pub fn is_available(&self) -> bool {
+        matches!(self, Sidecar::Available { .. })
+    }
+
+    /// What the panel says when the harness is not installed. A blank panel
+    /// reads as broken; this reads as absent, which is what it is.
+    pub fn explain(&self) -> String {
+        match self {
+            Sidecar::Available { program } => format!("using {program}"),
+            Sidecar::Missing { looked_for } => format!(
+                "the perp harness is not installed ({looked_for} was not found). \
+                 The editor works without it; the panel has nothing to show."
+            ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn approving_from_the_panel_needs_something_to_approve_against() {
+        // `I-3`: *approving from the panel opens the diff first*. The button is
+        // only offered when there is a diff behind it — one shown next to a
+        // pane that failed to load is exactly what this requirement was written
+        // to prevent. The operator confirms what they can see.
+        let reviewable = Pending {
+            id: 1,
+            what: "patch crates/perp-core/src/panel.rs".into(),
+            why: "outside the workspace".into(),
+            raised_at: T,
+            diff: Some("--- a/x
++++ b/x
+@@ -1 +1 @@
+-a
++b
+".into()),
+        };
+        assert!(reviewable.is_reviewable());
+
+        let unloaded = Pending { diff: Some("   ".into()), ..reviewable.clone() };
+        assert!(!unloaded.is_reviewable(), "a blank diff is not a diff");
+        assert!(unloaded.why_not_reviewable().contains("nothing to approve against"));
+
+        let no_files = Pending { diff: None, ..reviewable };
+        assert!(!no_files.is_reviewable());
+        assert!(no_files.why_not_reviewable().contains("changes no files"));
+    }
+
+    #[test]
+    fn an_action_that_changes_no_file_is_not_shown_a_diff() {
+        // A push or a tag moves refs. Showing the working tree's diff next to
+        // one would show something unrelated — worse than showing nothing,
+        // because it looks like the thing being approved.
+        assert!(!touches_files("git push origin main"));
+        assert!(!touches_files("git tag v0.3.0"));
+        assert!(!touches_files("publish the board to a gist"));
+        assert!(!touches_files("deploy to production"));
+
+        assert!(touches_files("patch src/main.rs"));
+        assert!(touches_files("write docs/notes.md"));
+    }
+
+    #[test]
+    fn the_diff_is_read_from_git_and_not_kept_in_the_journal() {
+        // Same decision as `C-7`'s evidence chain: git already keeps it, and a
+        // second copy is a second thing that can disagree.
+        let dir = crate::testutil::tmpdir("panel-diff");
+        let repo = crate::git::Repo::at(&dir);
+        // Not a repository, so there is no diff — and the answer is `None`
+        // rather than an empty string that would render as "no changes".
+        let view = View::of(&journal(), &Approvals::new(), Vec::new(), T)
+            .with_review(&repo, &Approvals::new(), T);
+        assert!(view.diff.is_none(), "{:?}", view.diff);
+        assert!(view.approvals.is_empty());
+
+        let parsed = crate::json::parse(&view.to_json()).expect("valid JSON");
+        assert_eq!(parsed.get("diff"), Some(&Value::Null), "unknown is null, not empty");
+        assert!(parsed.get("approvals_pending").is_some());
+    }
+
+    #[test]
+    fn a_pending_approval_reaches_the_panel_with_its_reason() {
+        let dir = crate::testutil::tmpdir("panel-approvals");
+        let repo = crate::git::Repo::at(&dir);
+        let mut queue = Approvals::new();
+        queue.raise(
+            crate::approval::Request {
+                id: 0,
+                what: "git push origin perp/c4/b25".into(),
+                why: "pushing puts work on a machine that is not this one".into(),
+                command: None,
+                diff: None,
+                requirement: Some("G-5".into()),
+                step: StepId::new(4, "b25", 1).expect("step"),
+                cycle: 4,
+                raised_at: T,
+            },
+        );
+
+        let view = View::of(&[], &queue, Vec::new(), T).with_review(&repo, &queue, T);
+        assert_eq!(view.approvals.len(), 1);
+        let pending = &view.approvals[0];
+        assert!(pending.why.contains("not this one"), "{}", pending.why);
+        // A push changes no file, so no diff and the panel says why rather than
+        // offering a button next to an empty pane.
+        assert!(!pending.is_reviewable());
+
+        let parsed = crate::json::parse(&view.to_json()).expect("valid JSON");
+        let queued = parsed
+            .get("approvals_pending")
+            .and_then(Value::as_arr)
+            .expect("array");
+        assert_eq!(queued[0].get("reviewable"), Some(&Value::Bool(false)));
+        assert!(queued[0].get("why_not").and_then(Value::as_str).is_some());
+    }
+    use crate::chat::Turn;
+    use crate::step::StepId;
+
+    const T: i64 = 1_700_000_000;
+
+    fn step(n: u32) -> StepId {
+        StepId::new(4, "b18", n).expect("step")
+    }
+
+    fn journal() -> Vec<Record> {
+        let mut records = vec![
+            Record::intent(step(1), T, "run the gate").for_requirements(["I-5"]),
+            Record::outcome(step(1), T + 5, true, "gate lint is green")
+                .for_requirements(["I-5"])
+                .with_detail("gate: lint\nsha: abc1234\nexit 0\n"),
+            Record::outcome(step(2), T + 10, false, "gate build is red")
+                .with_detail("gate: build\nerror: mismatched types\nexit 101\n"),
+        ];
+        records.push(Turn::operator("why did the build go red?", T + 20).record(step(3)));
+        records.push(
+            Turn::assistant("because a type changed", T + 25, "here").record(step(4)),
+        );
+        records
+    }
+
+    #[test]
+    fn the_panel_is_a_view_and_holds_nothing_of_its_own() {
+        // `I-5`. Two views of the same records are identical, which is only
+        // true because neither keeps state. That is also why closing the editor
+        // cannot stop the loop: there is nothing to disconnect.
+        let records = journal();
+        let first = View::of(&records, &Approvals::new(), Vec::new(), T);
+        let second = View::of(&records, &Approvals::new(), Vec::new(), T);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn the_conversation_comes_back_out_of_the_shared_stream() {
+        let view = View::of(&journal(), &Approvals::new(), Vec::new(), T);
+        assert_eq!(view.chat.len(), 2, "one from each side");
+        assert_eq!(view.chat[0].speaker, "operator");
+        assert!(view.chat[0].text.contains("why did the build"), "{:?}", view.chat[0]);
+        assert_eq!(view.chat[1].speaker, "assistant");
+
+        // And the chat is not also in the timeline — one record, one place.
+        assert!(
+            !view.timeline.iter().any(|entry| entry.summary.contains("why did the build")),
+            "a record shows in one section, not two"
+        );
+    }
+
+    #[test]
+    fn gate_failures_go_to_the_editors_problems_panel() {
+        // `I-4`: reuse the surface the editor already has. A developer knows
+        // where problems appear; a second list of red things is a second place
+        // to forget to look.
+        let view = View::of(&journal(), &Approvals::new(), Vec::new(), T);
+        let problems = view.problems();
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].summary.contains("build is red"), "{:?}", problems[0]);
+    }
+
+    #[test]
+    fn transcripts_go_to_the_terminal_dock_rather_than_a_new_viewer() {
+        let view = View::of(&journal(), &Approvals::new(), Vec::new(), T);
+        let transcripts = view.transcripts();
+        assert_eq!(transcripts.len(), 2, "both gates kept one");
+        assert!(transcripts[0].1.contains("cargo") || transcripts[0].1.contains("gate:"));
+    }
+
+    #[test]
+    fn the_document_describes_one_moment() {
+        // Assembled in one pass. Fetching chat and approvals separately could
+        // show an approval the timeline says was already answered.
+        let view = View::of(&journal(), &Approvals::new(), Vec::new(), T);
+        let json = view.to_json();
+        let parsed = crate::json::parse(&json).expect("valid JSON");
+
+        assert!(parsed.get("position").is_some());
+        assert!(parsed.get("timeline").is_some());
+        assert!(parsed.get("chat").is_some());
+        assert!(parsed.get("spend").is_some());
+        assert_eq!(
+            parsed.get("version").and_then(Value::as_str),
+            Some(crate::VERSION),
+            "so a panel from a different build can say so"
+        );
+    }
+
+    #[test]
+    fn journal_text_survives_the_json_round_trip() {
+        // A transcript contains quotes, backslashes and newlines routinely.
+        let records = vec![Record::outcome(step(1), T, false, "gate build is red")
+            .with_detail("gate: build\nerror: expected `\"a\\b\"`\nexit 101\n")];
+        let view = View::of(&records, &Approvals::new(), Vec::new(), T);
+        let parsed = crate::json::parse(&view.to_json()).expect("valid JSON");
+        let timeline = parsed.get("timeline").and_then(Value::as_arr).expect("timeline");
+        let transcript = timeline[0].get("transcript").and_then(Value::as_str).expect("transcript");
+        assert!(transcript.contains(r#"expected `"a\b"`"#), "{transcript}");
+    }
+
+    #[test]
+    fn a_missing_harness_reads_as_absent_rather_than_broken() {
+        // The editor must build, start and work with `crates/` deleted. A blank
+        // panel looks like a bug; this says what is actually going on.
+        let missing = Sidecar::Missing { looked_for: "perp".into() };
+        assert!(!missing.is_available());
+        let text = missing.explain();
+        assert!(text.contains("not installed"), "{text}");
+        assert!(text.contains("editor works without it"), "{text}");
+    }
+
+    #[test]
+    fn an_empty_journal_produces_a_document_rather_than_a_failure() {
+        let view = View::of(&[], &Approvals::new(), Vec::new(), T);
+        assert!(view.timeline.is_empty());
+        assert!(view.chat.is_empty());
+        let parsed = crate::json::parse(&view.to_json()).expect("still valid JSON");
+        assert_eq!(
+            parsed.get("position").and_then(|p| p.get("cycle")),
+            Some(&Value::Null),
+            "unknown is null, not zero — zero would be a claim"
+        );
+    }
+}

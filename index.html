@@ -70,6 +70,12 @@
         <div id="panes"></div>
       </div>
 
+      <!-- The Perpetum panel (`I-3`). Hidden until asked for, and a view onto
+           the harness's journal rather than a second source of truth — closing
+           the editor does not stop a loop, and reopening just reads again.
+           JustCode works with the harness absent; the panel says so. -->
+      <aside id="perp-panel" hidden aria-label="Perpetum harness"></aside>
+
       <div id="statusbar">
         <span id="status-path">No file</span>
         <span class="spacer"></span>

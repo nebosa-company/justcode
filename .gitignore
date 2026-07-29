@@ -18,6 +18,10 @@ dist-ssr
 src-tauri/target/
 src-tauri/gen/
 
+# The harness workspace builds into its own target/ (crates/ is a separate
+# cargo workspace from src-tauri/, deliberately — see docs/perpetum/binding.md).
+crates/target/
+
 # Bundles produced by scripts/pack.mjs
 *.msi
 *.nsis.zip
@@ -44,3 +48,11 @@ Thumbs.db
 # Local Claude Code state; .claude/launch.json is shared deliberately.
 .claude/settings.local.json
 .claude/state/
+
+# Perpetum harness runtime state. The control file and the locks are churn, not
+# documentation — `G-13` splits them: the journal, state, board and artifacts are
+# versioned deliberately, and these are not.
+/control
+/write.lock
+/gate.lock
+crates/target/
