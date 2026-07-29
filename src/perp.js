@@ -10,6 +10,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { iconMarkup } from "./icons.js";
 
 // The safety net, not the mechanism. `perp:changed` from the watcher is what
 // normally triggers a re-read; this catches a workspace whose binding moves the
@@ -256,20 +257,39 @@ function renderHeader(view) {
   return header;
 }
 
+// Icon, label, and what the tab is for. The tooltip carries the second half:
+// "Diff" and "/btw" say nothing to someone meeting the panel for the first time,
+// and the tab strip has no room to explain itself.
+const TABS = [
+  ["timeline", "timeline", "Timeline", "Every step, newest first"],
+  ["chat", "chat", "Chat", "The conversation, and a note to the loop"],
+  ["approvals", "approvals", "Approvals", "Waiting on a person"],
+  ["diff", "diff", "Diff", "What the working tree has changed"],
+  ["btw", "btw", "/btw", "Asides waiting to be picked up"],
+  ["artifacts", "artifacts", "Artifacts", "Rendered from the journal"],
+];
+
 function renderTabs() {
   const tabs = el("div", "perp-tabs");
   const view = state.view;
-  const entries = [
-    ["timeline", `Timeline (${view.timeline.length})`],
-    ["chat", `Chat (${view.chat.length})`],
-    ["approvals", `Approvals (${view.approvals_pending.length})`],
-    ["diff", "Diff"],
-    ["btw", `/btw (${view.btw.length})`],
-    ["artifacts", `Artifacts (${view.artifacts.length})`],
-  ];
-  for (const [name, label] of entries) {
-    const button = el("button", name === state.tab ? "active" : null, label);
+  const counts = {
+    timeline: view.timeline.length,
+    chat: view.chat.length,
+    approvals: view.approvals_pending.length,
+    diff: null,
+    btw: view.btw.length,
+    artifacts: view.artifacts.length,
+  };
+  for (const [name, icon, label, hint] of TABS) {
+    const count = counts[name];
+    const button = el("button", name === state.tab ? "active" : null);
     button.type = "button";
+    button.innerHTML = iconMarkup(icon);
+    button.append(el("span", "perp-tab-label", count === null ? label : `${label} (${count})`));
+    // The count belongs in the tooltip too — it is the tab's own state, and the
+    // label is the first thing to go when the panel is dragged narrow.
+    button.title = count === null ? `${label} — ${hint}` : `${label} (${count}) — ${hint}`;
+    button.setAttribute("aria-label", button.title);
     button.addEventListener("click", () => selectTab(name));
     tabs.append(button);
   }

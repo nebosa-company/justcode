@@ -105,6 +105,7 @@ const STORAGE = {
   session: "justcode.session",
   terminalDock: "justcode.terminalDock",
   perpPanel: "justcode.perpPanel",
+  perpWidth: "justcode.perpWidth",
 };
 
 const MAX_RECENT_FILES = 15;
@@ -2593,16 +2594,6 @@ function buildMenus() {
       { separator: true },
       { label: t("view.problems"), icon: "warning", accel: "F8", run: showProblems },
       {
-        label: t("view.perpetumPanel"),
-        icon: "clock",
-        accel: "Ctrl+Alt+P",
-        // Its siblings show their state; this one did not, so the menu could not
-        // answer "is it open?" — and `menu.js` has supported `checked` all along,
-        // `aria-checked` included.
-        checked: () => Boolean(perpHost) && !perpHost.hidden,
-        run: togglePerpPanel,
-      },
-      {
         label: t("view.nextProblem"),
         icon: "arrowDown",
         accel: "F4",
@@ -2615,6 +2606,22 @@ function buildMenus() {
         accel: "Shift+F4",
         enabled: hasTab,
         run: () => goToProblem(-1),
+      },
+    ],
+  },
+  {
+    // Its own menu rather than a line in View. The harness is a thing you drive,
+    // not a piece of chrome you show and hide, and View had already outgrown the
+    // window with it in there.
+    label: t("menu.harness"),
+    mnemonic: "H",
+    items: [
+      {
+        label: t("harness.progress"),
+        icon: "brain",
+        accel: "Ctrl+Alt+H",
+        checked: () => Boolean(perpHost) && !perpHost.hidden,
+        run: togglePerpPanel,
       },
     ],
   },
@@ -2771,7 +2778,10 @@ window.addEventListener(
     // The menu's `accel` is display text only — every real shortcut is wired
     // here. The Perpetum entry advertised Ctrl+Alt+P and nothing listened,
     // which only showed up when the app was actually driven.
-    if (ctrl && event.altKey && event.key.toLowerCase() === "p") {
+    //
+    // H for Harness. P collided with print and paste in muscle memory and named
+    // the old panel rather than what the menu is now called.
+    if (ctrl && event.altKey && event.key.toLowerCase() === "h") {
       event.preventDefault();
       togglePerpPanel();
       return;
@@ -3126,15 +3136,83 @@ startupReady
 // JustCode builds, starts and works with `crates/` deleted, so everything below
 // degrades to "the harness is not installed" rather than to an error.
 const perpHost = document.getElementById("perp-panel");
+const perpResizer = document.getElementById("perp-resizer");
+
+/** Drag the panel's edge to resize it, and remember the width.
+ *
+ * Clamped by the stylesheet's own `min-width` and `max-width` read at drag time
+ * rather than duplicated here, so the two cannot drift apart. Keyboard as well
+ * as pointer: the handle is a focusable separator, which is the one control here
+ * that is useless without arrow keys.
+ */
+function initPerpResizer() {
+  if (!perpResizer || !perpHost) return;
+
+  const limits = () => {
+    const style = getComputedStyle(perpHost);
+    return {
+      min: parseFloat(style.minWidth) || 200,
+      max: parseFloat(style.maxWidth) || window.innerWidth * 0.6,
+    };
+  };
+  const setWidth = (px) => {
+    const { min, max } = limits();
+    const width = Math.round(Math.max(min, Math.min(px, max)));
+    perpHost.style.width = `${width}px`;
+    localStorage.setItem(STORAGE.perpWidth, String(width));
+  };
+
+  perpResizer.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    // Captured so a fast drag that outruns the 5px handle keeps its events.
+    perpResizer.setPointerCapture(event.pointerId);
+    perpResizer.classList.add("dragging");
+    document.body.classList.add("perp-resizing");
+
+    const move = (moved) => setWidth(window.innerWidth - moved.clientX);
+    const done = () => {
+      perpResizer.removeEventListener("pointermove", move);
+      perpResizer.classList.remove("dragging");
+      document.body.classList.remove("perp-resizing");
+    };
+    perpResizer.addEventListener("pointermove", move);
+    perpResizer.addEventListener("pointerup", done, { once: true });
+    perpResizer.addEventListener("pointercancel", done, { once: true });
+  });
+
+  perpResizer.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 48 : 12;
+    if (event.key === "ArrowLeft") setWidth(perpHost.offsetWidth + step);
+    else if (event.key === "ArrowRight") setWidth(perpHost.offsetWidth - step);
+    else return;
+    event.preventDefault();
+  });
+
+  const remembered = Number(localStorage.getItem(STORAGE.perpWidth));
+  if (remembered > 0) setWidth(remembered);
+}
+initPerpResizer();
 
 perp.configure({
   // `I-4`: reuse the surfaces this editor already has rather than inventing
   // parallel ones. A gate transcript belongs in the terminal dock; a developer
   // already knows where to look for both.
+  // A gate transcript is a document — hundreds of lines of compiler output that
+  // you scroll, search and copy from. It was going to `message()`, which is a
+  // modal with an OK button and no scrollback worth the name.
+  //
+  // No temp file: the text lives in the journal, and a tab does not need a path.
+  // It opens unsaved and named for its step, so closing it asks nothing and
+  // saving it is your decision rather than a side effect of looking.
   showTranscript: (step, text) => {
     const shown = text.trim();
     if (!shown) return;
-    message(shown, { title: `perp ${step}` });
+    openTab({
+      path: null,
+      name: `${step.replace(/[\/]/g, "-")}.transcript.txt`,
+      text: shown,
+    });
+    renderStatus();
   },
   openArtifact: async (relative) => {
     const root = await perpRoot();
@@ -3191,6 +3269,7 @@ async function togglePerpPanel() {
   if (!perpHost) return;
   if (!perpHost.hidden) {
     perpHost.hidden = true;
+    if (perpResizer) perpResizer.hidden = true;
     localStorage.setItem(STORAGE.perpPanel, "false");
     // Hidden, not detached: the status-bar signal keeps working, so closing the
     // panel does not blind you to a run that is still going.
@@ -3205,6 +3284,7 @@ async function togglePerpPanel() {
     return;
   }
   perpHost.hidden = false;
+  if (perpResizer) perpResizer.hidden = false;
   localStorage.setItem(STORAGE.perpPanel, "true");
   perp.mount(perpHost);
   perpAttachedRoot = root;

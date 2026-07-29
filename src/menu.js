@@ -116,6 +116,7 @@ export function renderMenuItems(container, items, close, parent = null) {
         renderMenuItems(flyout, item.submenu(), close, { button, hide });
         flyout.hidden = false;
         button.setAttribute("aria-expanded", "true");
+        place(button, flyout);
         if (focusFirst) {
           const first = flyout.querySelector(".menu-item:not(:disabled)");
           first?.focus();
@@ -374,6 +375,37 @@ export function closeContextMenu() {
  * Shows a context menu at viewport coordinates `x`/`y`, nudged back inside the
  * window if it would otherwise hang off the bottom or the side.
  */
+/** Put a submenu flyout beside its item, in viewport coordinates.
+ *
+ * The flyout is `position: fixed` rather than absolute, because a dropdown tall
+ * enough to need `overflow-y: auto` clips absolutely-positioned descendants —
+ * and a non-visible overflow on one axis makes the other compute to `auto`, so
+ * "Recent" turned into a horizontal scrollbar inside the parent instead of a
+ * list to the right of it. Fixed escapes the clip; staying a DOM child of the
+ * item's wrapper keeps `mouseleave` working, which moving it to `<body>` would
+ * have broken.
+ */
+function place(button, flyout) {
+  const item = button.getBoundingClientRect();
+  const { width, height } = flyout.getBoundingClientRect();
+  const rtl = getComputedStyle(button).direction === "rtl";
+
+  // Beside the item, flipped to its other side when there is no room — a menu
+  // near the right edge must not run off it.
+  let left = rtl ? item.left - width : item.right;
+  if (!rtl && left + width > window.innerWidth - 4) left = item.left - width;
+  if (rtl && left < 4) left = item.right;
+  left = Math.max(4, Math.min(left, window.innerWidth - width - 4));
+
+  // Aligned with the item, lifted just enough to stay on screen.
+  const top = Math.max(4, Math.min(item.top - 4, window.innerHeight - height - 4));
+
+  flyout.style.insetInlineStart = "auto";
+  flyout.style.insetInlineEnd = "auto";
+  flyout.style.left = `${left}px`;
+  flyout.style.top = `${top}px`;
+}
+
 export function showContextMenu(x, y, items) {
   closeContextMenu();
 

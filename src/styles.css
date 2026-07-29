@@ -217,6 +217,9 @@ body {
      called View | Perpetum", which is exactly what it looked like. */
   max-height: calc(100vh - 2.5rem);
   overflow-y: auto;
+  /* Explicit, because `overflow-y: auto` alone makes `overflow-x` compute from
+     `visible` to `auto` — which is how a submenu became a horizontal scrollbar. */
+  overflow-x: hidden;
   overscroll-behavior: contain;
   white-space: nowrap;
   padding: 4px;
@@ -1598,9 +1601,9 @@ button.primary:hover {
 }
 
 .menu-flyout {
-  position: absolute;
-  top: -4px;
-  inset-inline-start: 100%;
+  /* Fixed, not absolute: see `place` in menu.js. An ancestor that scrolls clips
+     an absolute descendant, and the flyout has to sit outside its parent. */
+  position: fixed;
   min-width: 260px;
   max-height: 60vh;
   overflow-y: auto;
@@ -1774,6 +1777,7 @@ button.primary:hover {
 #perp-panel {
   display: flex;
   flex-direction: column;
+  container: perp / inline-size;
   width: 26rem;
   min-width: 18rem;
   max-width: 40vw;
@@ -1782,6 +1786,33 @@ button.primary:hover {
   background: var(--bg);
   color: var(--fg);
   font-size: 0.85rem;
+}
+
+#perp-resizer {
+  flex: none;
+  width: 5px;
+  margin-right: -2px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 5;
+}
+
+#perp-resizer:hover,
+#perp-resizer:focus-visible,
+#perp-resizer.dragging {
+  background: var(--accent, #4ec27f);
+  outline: none;
+}
+
+#perp-resizer[hidden] {
+  display: none;
+}
+
+/* While dragging, the pointer owns the window: text must not select and the
+   editor must not fight for the cursor. */
+body.perp-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 #perp-panel[hidden] {
@@ -1910,6 +1941,20 @@ button.primary:hover {
   margin: 0.5rem 0 0;
   opacity: 0.7;
   font-size: 0.85em;
+}
+
+.perp-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Narrow the panel far enough and the labels go before the icons do, so the
+   tabs stay usable rather than wrapping into three rows. */
+@container perp (max-width: 24rem) {
+  .perp-tab-label {
+    display: none;
+  }
 }
 
 .perp-tabs {

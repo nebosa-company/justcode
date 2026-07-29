@@ -63,6 +63,15 @@ const PATHS = {
   splitDown: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/><path d="M6 16h12" opacity=".55"/>',
   splitLeft: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M7 8v8" opacity=".55"/>',
   splitRight: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M17 8v8" opacity=".55"/>',
+  // The Harness menu and the panel's own tabs. Two lobes and a stem, drawn as a
+  // pair of mirrored curves so it reads at 16px rather than turning to mush.
+  brain: '<path d="M12 5.5A3 3 0 0 0 6.5 7a3 3 0 0 0-1.4 5.6A3 3 0 0 0 7 18a2.5 2.5 0 0 0 5 .5z"/><path d="M12 5.5A3 3 0 0 1 17.5 7a3 3 0 0 1 1.4 5.6A3 3 0 0 1 17 18a2.5 2.5 0 0 1-5 .5z"/><path d="M12 5.5v13"/>',
+  timeline: '<path d="M5 4v16"/><circle cx="5" cy="8" r="1.6"/><circle cx="5" cy="16" r="1.6"/><path d="M9 8h10"/><path d="M9 16h6"/>',
+  chat: '<path d="M20 12a7 7 0 0 1-7 7H9l-4 3v-4.6A7 7 0 0 1 13 5a7 7 0 0 1 7 7z"/>',
+  approvals: '<path d="M4 7a2 2 0 0 1 2-2h9l5 5v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m8.5 13 2.5 2.5 4.5-5"/>',
+  diff: '<path d="M6 4v10a3 3 0 0 0 3 3h6"/><path d="m12 14 3 3-3 3"/><circle cx="6" cy="4" r="1.6"/><path d="M18 6v6"/><path d="M15 9h6"/>',
+  btw: '<path d="M5 5h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-7l-4 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M12 8v3"/><path d="M12 13h.01"/>',
+  artifacts: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5"/><path d="M12 12v9"/><path d="m12 12-8-4.5"/>',
 };
 
 /** Returns the markup for an icon, sized in `em` so it tracks the button text. */
