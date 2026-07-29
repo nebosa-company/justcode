@@ -97,6 +97,27 @@ impl Kind {
     }
 }
 
+/// Where every artifact lives, and the only place that says so (`A-2`).
+///
+/// The path used to be spelled out in five places, and `out.board` in the
+/// binding named a sixth that nothing wrote — `/board` resolved
+/// `docs/perpetum/progress-board.md` while the engine wrote
+/// `docs/perpetum/artifacts/board.html`, so the command read a file that had
+/// never existed. The artifact path is the authority; the binding key is gone.
+pub const DIR: &str = "docs/perpetum/artifacts";
+
+/// The artifacts directory inside a workspace.
+pub fn dir_in(root: &Path) -> PathBuf {
+    root.join(DIR)
+}
+
+impl Kind {
+    /// Where this kind's one file lives in a workspace.
+    pub fn path_in(self, root: &Path) -> PathBuf {
+        dir_in(root).join(self.file_name())
+    }
+}
+
 impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
@@ -567,6 +588,25 @@ mod tests {
     }
 
     #[test]
+    fn one_place_says_where_an_artifact_lives() {
+        // `/board` resolved `out.board`, which every binding set to
+        // `docs/perpetum/progress-board.md`, while the engine wrote
+        // `docs/perpetum/artifacts/board.html`. The command read a file that had
+        // never existed, and the path was spelled out in five other places
+        // besides. The artifact path is the authority and this is it.
+        let root = std::path::Path::new("/w");
+        assert_eq!(dir_in(root), root.join(DIR));
+        assert_eq!(Kind::Board.path_in(root), root.join(DIR).join("board.html"));
+
+        // Every kind resolves under the same directory, one file each (`A-2`).
+        for kind in Kind::ALL {
+            let path = kind.path_in(root);
+            assert_eq!(path.parent(), Some(dir_in(root).as_path()), "{kind}");
+            assert!(path.to_string_lossy().ends_with(".html"), "{kind}");
+        }
+    }
+
+    #[test]
     fn every_kind_renders_and_is_self_contained() {
         let records = journal();
         let projection = replay(&records);
@@ -644,7 +684,7 @@ mod tests {
 
     #[test]
     fn publishing_outside_the_workspace_needs_an_approval() {
-        let inside = Destination::Workspace(PathBuf::from("docs/perpetum/artifacts"));
+        let inside = Destination::Workspace(PathBuf::from(DIR));
         assert_eq!(publish_policy(&inside), crate::approval::Policy::Auto, "rendering is free");
 
         // Including the ones that call themselves private.

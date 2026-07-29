@@ -1087,8 +1087,12 @@ fn run_command(
             ))
         }
         Command::Board => {
-            std::fs::read_to_string(binding.resolve("out.board").map_err(|e| e.to_string())?)
-                .map_err(|e| e.to_string())
+            // The artifact path is the authority. `out.board` named
+            // `docs/perpetum/progress-board.md`, which nothing has ever
+            // written — this command read a file that did not exist while the
+            // board sat in the artifacts directory beside it.
+            let path = perp_core::artifact::Kind::Board.path_in(binding.root());
+            std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
         }
         Command::Links => Ok(format!(
             "links: {}",
@@ -1151,7 +1155,7 @@ fn cmd_artifact(args: &[&str]) -> std::result::Result<(), String> {
         name => vec![artifact::Kind::parse(name).map_err(|e| e.to_string())?],
     };
 
-    let dir = binding.root().join("docs/perpetum/artifacts");
+    let dir = perp_core::artifact::dir_in(binding.root());
     let provenance = artifact::Provenance::from_journal(
         projection.cycle.unwrap_or(1),
         time::now(),
@@ -1318,7 +1322,7 @@ fn cmd_panel(args: &[&str]) -> std::result::Result<(), String> {
     let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
     let records = journal.read_all().map_err(|e| e.to_string())?;
 
-    let dir = binding.root().join("docs/perpetum/artifacts");
+    let dir = perp_core::artifact::dir_in(binding.root());
     let artifacts = std::fs::read_dir(&dir)
         .map(|entries| {
             let mut names: Vec<String> = entries

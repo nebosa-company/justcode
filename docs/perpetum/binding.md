@@ -58,7 +58,6 @@ path.links          = docs/perpetum/links.md
 
 out.journal = docs/perpetum/journal.jsonl
 out.state   = docs/perpetum/state.md
-out.board   = docs/perpetum/progress-board.md
 
 gate.cwd     = crates
 gate.timeout = 900

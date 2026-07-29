@@ -413,7 +413,7 @@ impl Engine {
         )
         .sha(crate::git::Repo::at(&self.root).head_sha().ok());
 
-        let dir = self.root.join("docs/perpetum/artifacts");
+        let dir = crate::artifact::dir_in(&self.root);
         match crate::artifact::try_render(
             crate::artifact::Kind::Board,
             &projection,
@@ -1010,7 +1010,7 @@ mod tests {
         // `A-7` on the engine's own path: the directory is made a file, so the
         // write cannot succeed. The steps still close green.
         let root = workspace("engine-board-warn");
-        let artifacts = root.join("docs/perpetum/artifacts");
+        let artifacts = crate::artifact::dir_in(&root);
         std::fs::create_dir_all(artifacts.parent().unwrap_or(&root)).expect("dirs");
         std::fs::write(&artifacts, "not a directory").expect("write");
 

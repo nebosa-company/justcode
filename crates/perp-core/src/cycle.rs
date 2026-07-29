@@ -511,9 +511,13 @@ impl Driver<'_> {
 /// Named paths, because `git add .` is refused. The artifacts directory is
 /// included as a directory: `git add` on it stages the files inside, and the
 /// board is regenerated wholesale rather than edited.
+///
+/// The board is not looked up through `out.board`. That key named a file
+/// nothing ever wrote; [`crate::artifact::DIR`] is where artifacts actually
+/// go, and it is the authority.
 fn evidence_paths(root: &std::path::Path, binding: &crate::Binding) -> Vec<String> {
     let mut paths = Vec::new();
-    for key in ["out.journal", "out.state", "out.board"] {
+    for key in ["out.journal", "out.state"] {
         if let Ok(path) = binding.get(key) {
             let path = path.to_string();
             if root.join(&path).exists() && !paths.contains(&path) {
@@ -521,7 +525,7 @@ fn evidence_paths(root: &std::path::Path, binding: &crate::Binding) -> Vec<Strin
             }
         }
     }
-    let artifacts = "docs/perpetum/artifacts".to_string();
+    let artifacts = crate::artifact::DIR.to_string();
     if root.join(&artifacts).exists() {
         paths.push(artifacts);
     }
@@ -663,12 +667,12 @@ out.state = docs/perpetum/state.md
 
         std::fs::write(dir.join("docs/perpetum/journal.jsonl"), "{}
 ").expect("journal");
-        std::fs::create_dir_all(dir.join("docs/perpetum/artifacts")).expect("artifacts");
-        std::fs::write(dir.join("docs/perpetum/artifacts/board.html"), "<p>").expect("board");
+        std::fs::create_dir_all(crate::artifact::dir_in(&dir)).expect("artifacts");
+        std::fs::write(crate::artifact::Kind::Board.path_in(&dir), "<p>").expect("board");
 
         let paths = evidence_paths(&dir, &binding);
         assert!(paths.contains(&"docs/perpetum/journal.jsonl".to_string()), "{paths:?}");
-        assert!(paths.contains(&"docs/perpetum/artifacts".to_string()), "{paths:?}");
+        assert!(paths.contains(&crate::artifact::DIR.to_string()), "{paths:?}");
         assert!(
             !paths.contains(&"docs/perpetum/state.md".to_string()),
             "a path the binding names but nothing has written is not staged: {paths:?}"
