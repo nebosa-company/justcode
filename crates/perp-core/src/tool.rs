@@ -73,8 +73,23 @@ impl Tool {
             .ok_or_else(|| Error::unbound("tool", format!("`{text}` is not a tool")))
     }
 
+    /// `(required, all)` parameter names, for the wire schema.
+    fn parameters(self) -> (&'static [&'static str], &'static [&'static str]) {
+        match self {
+            Tool::Read => (&["path"], &["path", "from", "to"]),
+            Tool::Glob => (&["pattern"], &["pattern"]),
+            Tool::Grep => (&["pattern"], &["pattern", "path"]),
+            Tool::Write => (&["path", "content"], &["path", "content"]),
+            Tool::Patch => (&["path", "expect", "replace"], &["path", "expect", "replace"]),
+            Tool::Shell => (&["command"], &["command", "timeout"]),
+            Tool::Git => (&["args"], &["args"]),
+            Tool::Gate => (&[], &["name"]),
+            Tool::Fetch => (&["url"], &["url"]),
+        }
+    }
+
     /// One line, for the schema block.
-    fn describe(self) -> &'static str {
+    pub fn describe(self) -> &'static str {
         match self {
             Tool::Read => "read(path, [from], [to]) — a file, or a line range of one",
             Tool::Glob => "glob(pattern) — paths matching a pattern, newest first",
@@ -169,6 +184,12 @@ impl Output {
     /// what is inside as an instruction is doing something the envelope says
     /// not to — and the harness does not consult it either way: no policy
     /// decision anywhere reads an `Output`.
+    /// A refusal, shaped as an output so the model reads it the same way it
+    /// reads everything else — as data, in an envelope (`T-7`).
+    pub fn refusal(tool: Tool, text: &str) -> Output {
+        Output::of(tool, text.to_string(), DEFAULT_BUDGET)
+    }
+
     pub fn render(&self) -> String {
         let mut out = format!(
             "<<< {} output · {} bytes{} >>>\n",
@@ -268,6 +289,58 @@ pub fn schemas() -> String {
         out.push_str(&format!("  {}\n", tool.describe()));
     }
     out
+}
+
+/// The tools as a provider's `tools` array (`M-8`, native rung).
+///
+/// Built from the same `Tool::ALL` that [`schemas`] renders, so the wire format
+/// and the prompt cannot end up describing different tools — which would make
+/// the ladder's rungs disagree about what exists.
+pub fn wire_schemas() -> crate::json::Value {
+    use crate::json::Value;
+    let function = |tool: Tool| {
+        let (required, properties) = tool.parameters();
+        Value::Obj(vec![
+            ("type".into(), Value::str("function")),
+            (
+                "function".into(),
+                Value::Obj(vec![
+                    ("name".into(), Value::str(tool.as_str())),
+                    ("description".into(), Value::str(tool.describe())),
+                    (
+                        "parameters".into(),
+                        Value::Obj(vec![
+                            ("type".into(), Value::str("object")),
+                            (
+                                "properties".into(),
+                                Value::Obj(
+                                    properties
+                                        .iter()
+                                        .map(|name| {
+                                            (
+                                                (*name).to_string(),
+                                                Value::Obj(vec![(
+                                                    "type".into(),
+                                                    Value::str("string"),
+                                                )]),
+                                            )
+                                        })
+                                        .collect(),
+                                ),
+                            ),
+                            (
+                                "required".into(),
+                                Value::Arr(
+                                    required.iter().map(|n| Value::str(*n)).collect(),
+                                ),
+                            ),
+                        ]),
+                    ),
+                ]),
+            ),
+        ])
+    };
+    Value::Arr(Tool::ALL.iter().copied().map(function).collect())
 }
 
 /// Runs calls, after classifying them.

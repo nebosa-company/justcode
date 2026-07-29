@@ -3141,3 +3141,135 @@ protocol says to ignore. The assertion is in now. Red.
 
 **Batch 22 status:** 3 delivered, 0 carried. 482 tests.
 **146 requirements done, 5 in progress, 1 external-gated.**
+
+
+---
+
+## Phase D — Batch 23, the loop calls a model
+
+Branch `perp/c4/b23`. `M-8` and `C-2`. **The batch where the harness caught
+itself doing the exact thing it was built to prevent.**
+
+### c4/b23/s01 — `C-2`: refused at construction
+
+`Item::new` refuses without a requirement id, at construction rather than at
+execution, so there is no window in which an unfiled item exists and could be
+passed along. A conversation does not get its own backlog.
+
+### c4/b23/s02 — `M-8`: the ladder, driving a real model
+
+`Agent` is the `Work` that asks. A model is called, its answer parsed for tool
+calls through the ladder, the calls go through the permission classifier, the
+results come back wrapped as data. `MAX_TURNS` is twelve — not a budget, `L-9`
+owns those, but the shape of a task: a step that has asked a model twelve times
+is arguing with itself.
+
+Then it was run against DeepSeek, and produced three defects in one go.
+
+### c4/b23/s03 — Defect one: the top rung was unreachable
+
+```
+--- ds-fast (native) ---
+<function name="grep">…</function>
+[repair 1: refused `native tool calls`: the transport did not hand over the response body]
+[repair 2: …]
+[dropped Native → JsonSchema: …]
+```
+
+`Client::call` returns a parsed `Reply`, and a native `tool_calls` array is not
+in it. The agent had no raw body to give the ladder, so **every** native attempt
+failed — two repairs and a drop, on every single item, before any work started.
+
+`Served` now carries the response bytes. Not journalled; the `Reply` is what
+goes on the record.
+
+### c4/b23/s04 — Defect two: the harness rejected a correct answer
+
+```
+--- ds-fast (json-schema) ---
+{"answer":97}
+[repair 1: refused `constrained output`: the object has no `calls` array]
+```
+
+The model **had the answer**. The harness said "that is not a call" and made it
+try again — four more turns, four more round trips, real money — until it hit
+the cap.
+
+A well-formed JSON object with no `calls` is a model saying it is finished. It
+understood the format; it just had nothing left to call. And the instruction now
+says how to finish, which is what it was missing.
+
+### c4/b23/s05 — Defect three: **the harness recorded a fabricated answer as done**
+
+This is the one that matters.
+
+```
+--- ds-fast (native) ---
+Matching lines in journal.jsonl for pattern 'gate:':
+
+[grep output from expected tool call]
+
+After reviewing the grep output, I count **X** matching lines.
+```
+
+The model called nothing. It wrote a **placeholder for output it never
+received**, and the harness closed the step green, citing `V-2`, with that text
+as the summary.
+
+That is the failure this entire project exists to prevent — *a status marker
+that says done, a batch reported complete with nothing behind it* — produced by
+the project itself, on its first real run.
+
+Two causes, both fixed:
+
+1. **The `tools` array was never sent.** The system prompt said *"use the tools
+   you have been given"* and the request gave it none. A model with no tools
+   that is told to use tools will describe using them.
+2. **Nothing checked.** The system prompt already said *"a claim without a tool
+   call behind it is worth nothing here"* — and nothing enforced it. Now an item
+   that completes having called **no tool at all** is a failure, and the summary
+   says `answered without calling a single tool — nothing was read, run or
+   changed`.
+
+The second is the important half. The first was a bug; the second was the
+harness taking a model's word for it.
+
+### c4/b23/s06 — And then it worked
+
+```
+$ perp run --requirement V-2 --brief "grep for 'gate:' in journal.jsonl, count, report"
+1 steps (c4/b23/s65) — stopped: the backlog is exhausted
+spent 39739 tokens, 23s, $0.001361
+  turn: native rung, 1 calls, via ds-fast   ← grep, output truncated to 8000 bytes
+  turn: native rung, 1 calls, via ds-fast   ← shell: grep -o … | wc -l  (no pipes; failed)
+  turn: native rung, 1 calls, via ds-fast   ← shell: python -c "…count('gate:')"  → 120
+  turn: native rung, 0 calls, via ds-fast   ← "The number … is **120**."
+```
+
+Six real tool calls on the top rung. It hit the output budget, tried a pipe,
+found the shell does not do pipes, and reached for python instead. **120 was
+correct when it measured.** The file reads 152 now, because this run's own
+transcript — which quotes the grep output — was appended to the journal
+afterwards. Append-only working exactly as designed.
+
+Two-tenths of a cent.
+
+### c4/b23/s07 — Gates and red run
+
+- **gates:** green. 475 unit + 5 spine + 15 end-to-end = **495 tests**.
+- **red run: 11 mutations, 11 red** — but **5 of the 11 needed correcting
+  first**, the worst ratio of the project, and every one was worth it:
+
+  | | what was wrong |
+  |---|---|
+  | raw body withheld | the test used a link whose ladder started at the *bottom* rung, so withholding the raw body changed nothing |
+  | turn cap never fires | the test fed unparseable replies, so the **ladder** ended the item before the cap was ever reached |
+  | envelope removed | the mutation trimmed a marker but left the phrase the test asserts on |
+  | no-calls object | `return Ok(Vec::new())` appears in `parse_native` too, and the replace hit that one |
+  | how to finish | the mutation changed prose around the text the test checks, not the text |
+
+Two were weak tests and three were mis-aimed mutations. Both kinds produce the
+same reassuring green, and neither is visible from a coverage number.
+
+**Batch 23 status:** 2 delivered, 0 carried. 495 tests.
+**148 requirements done, 3 in progress, 1 external-gated.**

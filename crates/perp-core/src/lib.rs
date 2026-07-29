@@ -11,6 +11,7 @@
 //! | Module | Requirements |
 //! |---|---|
 //! | [`binding`] | `L-21` |
+//! | [`agent`] | `M-8`, `C-2` — the `Work` that calls a model |
 //! | [`engine`] | the driver — `L-1`, `L-9`, `L-14`, `L-17`, `L-20` |
 //! | [`phase`] | `L-1`, `L-2`, `L-14` |
 //! | [`budget`] | `L-9`, `L-10` |
@@ -55,6 +56,7 @@
 //! and everything so far is deliberately testable without either, or the tests
 //! would need a GPU to run.
 
+pub mod agent;
 pub mod approval;
 pub mod artifact;
 pub mod atomic;
@@ -101,6 +103,7 @@ pub mod watchdog;
 mod testutil;
 
 pub use binding::Binding;
+pub use agent::{Agent, Item};
 pub use artifact::{Artifact, Provenance};
 pub use btw::Btw;
 pub use budget::{Budget, Budgets, Spend};

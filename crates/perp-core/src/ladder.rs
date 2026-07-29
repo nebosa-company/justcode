@@ -67,7 +67,8 @@ impl Rung {
         match self {
             Rung::Native => "Use the tools you have been given.".into(),
             Rung::JsonSchema => {
-                "Reply with one JSON object: {\"calls\":[{\"tool\":\"read\",\"args\":{\"path\":\"…\"}}]}"
+                "Reply with one JSON object: {\"calls\":[{\"tool\":\"read\",\"args\":{\"path\":\"…\"}}]}
+                 When you are finished, reply with {\"calls\":[]} and put your answer in                  \"summary\"."
                     .into()
             }
             Rung::Prompted => format!(
@@ -243,8 +244,14 @@ pub fn parse_json_object(content: &str) -> Result<Vec<Call>> {
     let bad = |reason: String| Error::refused("constrained output", reason);
     let text = strip_fence(content);
     let parsed = json::parse(text)?;
+    // A well-formed object with no `calls` is the model saying it is finished
+    // and answering in prose. Refusing it cost four wasted turns and real money
+    // the first time this ran against DeepSeek: the model replied `{"answer":97}`
+    // — it *had* the answer — and the harness said "that is not a call" and made
+    // it try again. A model that emitted a JSON object understood the format; it
+    // just had nothing left to call.
     let Some(entries) = parsed.get("calls").and_then(Value::as_arr) else {
-        return Err(bad("the object has no `calls` array".into()));
+        return Ok(Vec::new());
     };
     let mut calls = Vec::new();
     for entry in entries {
@@ -484,6 +491,27 @@ mod tests {
         let calls = parse_json_object(content).expect("parse");
         assert_eq!(calls[0].tool, Tool::Glob);
         assert_eq!(calls[0].get("pattern"), Some("**/*.rs"));
+    }
+
+    #[test]
+    fn a_json_object_with_no_calls_is_a_finished_answer() {
+        // Found by running the loop against DeepSeek. The model replied
+        // `{"answer":97}` — it had the answer — and the harness said "that is
+        // not a call" and made it try again, four times, for real money. A
+        // model that emitted a JSON object understood the format; it just had
+        // nothing left to call.
+        assert!(parse_json_object(r#"{"answer":97}"#).expect("parse").is_empty());
+        assert!(parse_json_object(r#"{"calls":[]}"#).expect("parse").is_empty());
+
+        // And genuinely broken JSON is still a parse failure.
+        assert!(parse_json_object("{not json").is_err());
+    }
+
+    #[test]
+    fn the_constrained_rung_says_how_to_finish() {
+        // The instruction the previous test's failure was caused by not having.
+        let instructions = Rung::JsonSchema.instructions();
+        assert!(instructions.contains(r#"{"calls":[]}"#), "{instructions}");
     }
 
     #[test]

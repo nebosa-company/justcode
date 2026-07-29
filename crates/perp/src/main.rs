@@ -77,10 +77,16 @@ usage:
       whichever link answered, and any link that was tried first and failed.
 
   perp run [--cycle <n>] [--stage <b12|D>] [--root <dir>] [--dry-run]
+           [--requirement <id> [--brief <text>] [--local-only]]
       Drive the loop: take the write lock, run the project's gates one step at
       a time, journal an intent before each and an outcome after, and stop for
       one of exactly three reasons — the backlog is exhausted, the batch is
       blocked, or a budget parked it. Exits non-zero if it stopped blocked.
+
+      With --requirement, the loop asks a model instead of running gates: its
+      answer is parsed for tool calls through the degradation ladder, the calls
+      go through the permission classifier, and the results come back as data.
+      The id is mandatory — work that is not on the record is not built.
 
   perp phase [--phase <A-G>] [--cycle <n>] [--root <dir>]
       Measure the workspace and say whether the current phase's exit condition
@@ -676,6 +682,47 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
 
     let mut engine = Engine::open(&root).map_err(|e| e.to_string())?;
     let budgets = engine.budgets();
+
+    // `M-8`/`C-2`: with `--requirement`, the loop asks a model instead of
+    // running gates. The id is mandatory — the loop does not build work that is
+    // not on the record.
+    if let Some(requirement) = flag(args, "--requirement") {
+        let brief = flag(args, "--brief").unwrap_or("Do the work this requirement describes.");
+        let item = perp_core::agent::Item::new(
+            requirement,
+            flag(args, "--summary").unwrap_or(requirement),
+            brief,
+        )
+        .map_err(|e| e.to_string())?;
+
+        let links = Links::load(&binding.resolve("path.links").map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        let transport = Curl::new();
+        let mode = if args.contains(&"--local-only") { Mode::LocalOnly } else { Mode::Any };
+        let mut agent = perp_core::agent::Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            perp_core::agent::host_for(binding.root()),
+            vec![item],
+        );
+        if mode == Mode::LocalOnly {
+            agent = agent.local_only();
+        }
+
+        let report = engine.run(cycle, stage, &mut agent, 0).map_err(|e| e.to_string())?;
+        println!("{}", report.describe());
+        println!("spent {}", report.spend);
+        for turn in &agent.turns {
+            println!("  turn: {} rung, {} calls, via {}", turn.rung, turn.calls, turn.link);
+        }
+        return match &report.stop {
+            Some(perp_core::phase::Stop::BatchBlocked { why, .. }) => Err(format!("blocked: {why}")),
+            _ if report.failed > 0 => Err(format!("{} steps failed", report.failed)),
+            _ => Ok(()),
+        };
+    }
+
     if budgets.cycle.is_unlimited() && budgets.batch.is_unlimited() {
         // Not an error: an unattended run with no ceiling is a choice, and one
         // the operator should have made on purpose rather than by omission.

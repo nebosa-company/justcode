@@ -54,11 +54,21 @@ pub struct ChatRequest {
     pub messages: Vec<Message>,
     pub max_tokens: Option<i64>,
     pub stream: bool,
+    /// The tools to offer, already in the provider's shape. `None` for a plain
+    /// conversation — and for the rungs below native, which parse tool calls
+    /// out of the message text instead.
+    pub tools: Option<Value>,
 }
 
 impl ChatRequest {
+    /// Offer the harness's tools on the wire (`M-8`, native rung).
+    pub fn with_tools(mut self, tools: Value) -> ChatRequest {
+        self.tools = Some(tools);
+        self
+    }
+
     pub fn new(messages: Vec<Message>) -> ChatRequest {
-        ChatRequest { messages, max_tokens: None, stream: false }
+        ChatRequest { messages, max_tokens: None, stream: false, tools: None }
     }
 
     /// The JSON body. Stable field order, so a provider's prefix cache sees the
@@ -82,6 +92,14 @@ impl ChatRequest {
         ];
         if let Some(max) = self.max_tokens {
             fields.push(("max_tokens".to_string(), Value::int(max)));
+        }
+        // `M-8`'s top rung is only real if the tools are actually sent. Asking a
+        // model to "use the tools you have been given" without giving it any is
+        // how a run comes back with `[grep output from expected tool call]` in
+        // it — a fabricated answer that looks like work.
+        if let Some(tools) = &self.tools {
+            fields.push(("tools".to_string(), tools.clone()));
+            fields.push(("tool_choice".to_string(), Value::str("auto")));
         }
         json::to_string(&Value::Obj(fields))
     }
@@ -275,6 +293,12 @@ pub struct Attempt {
 #[derive(Debug, Clone)]
 pub struct Served {
     pub reply: Reply,
+    /// The response exactly as it arrived.
+    ///
+    /// Native tool calls live in a part of the response the `Reply` does not
+    /// model, so a caller that wants the top rung of `M-8` needs the bytes. Not
+    /// journalled — the `Reply` is what goes on the record.
+    pub raw: String,
     pub link: String,
     pub model: String,
     pub quantization: Option<String>,
@@ -560,6 +584,20 @@ impl<'a> Client<'a> {
         self.speak(link, request, Self::protocol(link))
     }
 
+    /// One call, keeping the raw response so a caller can read native tool
+    /// calls out of it (`M-8`).
+    pub fn chat_raw(&self, link: &Link, request: &ChatRequest) -> Result<(Reply, String)> {
+        let base = Self::base(link)?.trim_end_matches('/');
+        let url = format!("{base}/v1/chat/completions");
+        self.check_egress(&url)?;
+        let body =
+            crate::security::outbound(&request.to_json(&link.model), link, &self.redact).text;
+        let http = Self::authorise(link, Request::post_json(url, body));
+        let response = self.transport.send(&http)?;
+        let reply = Self::interpret(link, &response)?;
+        Ok((reply, response.body))
+    }
+
     /// One call, on a named protocol (`M-21`).
     pub fn speak(&self, link: &Link, request: &ChatRequest, protocol: Protocol) -> Result<Reply> {
         match protocol {
@@ -674,8 +712,8 @@ impl<'a> Client<'a> {
             };
 
             let started = std::time::Instant::now();
-            match self.chat(link, request) {
-                Ok(reply) => {
+            match self.chat_raw(link, request) {
+                Ok((reply, raw)) => {
                     return Ok(Served {
                         model: if reply.model.is_empty() {
                             link.model.clone()
@@ -683,6 +721,7 @@ impl<'a> Client<'a> {
                             reply.model.clone()
                         },
                         reply,
+                        raw,
                         link: link.name.clone(),
                         quantization: facts.quantization.clone(),
                         role: role.to_string(),
@@ -720,6 +759,25 @@ pub fn models_method() -> Method {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tools_array_reaches_the_wire() {
+        // Found by running the loop against DeepSeek. The system prompt said
+        // "use the tools you have been given" and the request gave it none, so
+        // the model invented the output: `[grep output from expected tool
+        // call]` and `**X**`. A fabricated answer, shaped like work.
+        let plain = ChatRequest::new(vec![Message::user("hi")]).to_json("small");
+        assert!(!plain.contains("\"tools\""), "a conversation offers none: {plain}");
+
+        let armed = ChatRequest::new(vec![Message::user("hi")])
+            .with_tools(crate::tool::wire_schemas())
+            .to_json("small");
+        assert!(armed.contains("\"tools\""), "{armed}");
+        assert!(armed.contains("\"tool_choice\":\"auto\""), "{armed}");
+        for tool in ["read", "grep", "patch", "shell"] {
+            assert!(armed.contains(&format!("\"name\":\"{tool}\"")), "missing {tool}: {armed}");
+        }
+    }
 
     #[test]
     fn the_two_protocols_differ_only_at_the_link_edge() {
