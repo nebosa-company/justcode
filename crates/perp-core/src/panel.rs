@@ -41,6 +41,48 @@ pub struct View {
     pub timeline: Vec<Entry>,
     pub chat: Vec<ChatLine>,
     pub artifacts: Vec<String>,
+    /// The approvals queue, and the diff each one is asking about (`I-3`).
+    pub approvals: Vec<Pending>,
+    /// The working tree's diff, read from git rather than stored.
+    pub diff: Option<String>,
+}
+
+/// One thing waiting on a person, with what it would change (`I-3`).
+///
+/// **Approving from the panel opens the diff first**, so the diff travels with
+/// the request rather than being fetched when the button is pressed. A button
+/// that could be pressed before the diff loaded is a button that gets pressed
+/// before the diff loaded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pending {
+    pub id: u64,
+    pub what: String,
+    pub why: String,
+    pub raised_at: i64,
+    /// What approving would let happen. `None` when the action changes no
+    /// files — a push, a tag — and the panel then says so rather than showing
+    /// an empty diff pane that reads as "no changes".
+    pub diff: Option<String>,
+}
+
+impl Pending {
+    /// Whether the panel may offer an approve button (`I-3`).
+    ///
+    /// Only with something to show. An approval offered next to a diff that
+    /// failed to load is the exact thing this requirement was written to
+    /// prevent — the operator confirms what they can see, and if they can see
+    /// nothing they should not be confirming.
+    pub fn is_reviewable(&self) -> bool {
+        self.diff.as_ref().is_some_and(|diff| !diff.trim().is_empty())
+    }
+
+    /// What the panel shows when it will not offer the button.
+    pub fn why_not_reviewable(&self) -> &'static str {
+        match &self.diff {
+            None => "this action changes no files — approve it where it was asked for",
+            Some(_) => "the diff could not be read, so there is nothing to approve against",
+        }
+    }
 }
 
 /// One row of the journal timeline (`I-3`).
@@ -105,7 +147,47 @@ impl View {
             });
         }
 
-        View { projection, metrics, snapshot, timeline, chat, artifacts }
+        View {
+            projection,
+            metrics,
+            snapshot,
+            timeline,
+            chat,
+            artifacts,
+            approvals: Vec::new(),
+            diff: None,
+        }
+    }
+
+    /// Attach the working tree's diff and the approvals queue (`I-3`).
+    ///
+    /// The diff is **read from git**, never stored in the journal — git already
+    /// keeps it, and a second copy is a second thing that can disagree. Same
+    /// decision as `C-7`'s evidence chain.
+    pub fn with_review(
+        mut self,
+        repo: &crate::git::Repo,
+        approvals: &Approvals,
+        now: i64,
+    ) -> View {
+        self.diff = repo.plumbing(&["diff", "--stat", "--", "."]).ok().filter(|d| !d.trim().is_empty());
+        let file_diff = repo.plumbing(&["diff", "--", "."]).ok().filter(|d| !d.trim().is_empty());
+
+        self.approvals = approvals
+            .pending(now)
+            .into_iter()
+            .map(|entry| Pending {
+                id: entry.request.id,
+                what: entry.request.what.clone(),
+                why: entry.request.why.clone(),
+                raised_at: entry.request.raised_at,
+                // An action that touches files gets the diff; one that does not
+                // gets `None` and says why, rather than an empty pane that
+                // reads as "nothing to see".
+                diff: touches_files(&entry.request.what).then(|| file_diff.clone()).flatten(),
+            })
+            .collect();
+        self
     }
 
     /// Gate failures, for the editor's **Problems** panel (`I-4`).
@@ -241,8 +323,54 @@ impl View {
                 ),
             ),
             ("artifacts", strings(&self.artifacts)),
+            (
+                "diff",
+                self.diff.clone().map_or(Value::Null, Value::str),
+            ),
+            (
+                "approvals_pending",
+                Value::Arr(
+                    self.approvals
+                        .iter()
+                        .map(|pending| {
+                            obj(vec![
+                                ("id", Value::int(as_i64_u64(pending.id))),
+                                ("what", Value::str(pending.what.clone())),
+                                ("why", Value::str(pending.why.clone())),
+                                ("raised_at", Value::int(pending.raised_at)),
+                                (
+                                    "diff",
+                                    pending.diff.clone().map_or(Value::Null, Value::str),
+                                ),
+                                ("reviewable", Value::Bool(pending.is_reviewable())),
+                                (
+                                    "why_not",
+                                    if pending.is_reviewable() {
+                                        Value::Null
+                                    } else {
+                                        Value::str(pending.why_not_reviewable())
+                                    },
+                                ),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
         ])
     }
+}
+
+/// Whether an action's effect is visible in a diff.
+///
+/// A push or a tag moves refs and changes no file, so showing the working
+/// tree's diff next to it would be showing something unrelated — which is worse
+/// than showing nothing, because it looks like the thing being approved.
+fn touches_files(what: &str) -> bool {
+    let lower = what.to_ascii_lowercase();
+    !(lower.starts_with("git push")
+        || lower.starts_with("git tag")
+        || lower.contains("publish")
+        || lower.contains("deploy"))
 }
 
 fn as_i64(n: usize) -> i64 {
@@ -309,6 +437,103 @@ impl Sidecar {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn approving_from_the_panel_needs_something_to_approve_against() {
+        // `I-3`: *approving from the panel opens the diff first*. The button is
+        // only offered when there is a diff behind it — one shown next to a
+        // pane that failed to load is exactly what this requirement was written
+        // to prevent. The operator confirms what they can see.
+        let reviewable = Pending {
+            id: 1,
+            what: "patch crates/perp-core/src/panel.rs".into(),
+            why: "outside the workspace".into(),
+            raised_at: T,
+            diff: Some("--- a/x
++++ b/x
+@@ -1 +1 @@
+-a
++b
+".into()),
+        };
+        assert!(reviewable.is_reviewable());
+
+        let unloaded = Pending { diff: Some("   ".into()), ..reviewable.clone() };
+        assert!(!unloaded.is_reviewable(), "a blank diff is not a diff");
+        assert!(unloaded.why_not_reviewable().contains("nothing to approve against"));
+
+        let no_files = Pending { diff: None, ..reviewable };
+        assert!(!no_files.is_reviewable());
+        assert!(no_files.why_not_reviewable().contains("changes no files"));
+    }
+
+    #[test]
+    fn an_action_that_changes_no_file_is_not_shown_a_diff() {
+        // A push or a tag moves refs. Showing the working tree's diff next to
+        // one would show something unrelated — worse than showing nothing,
+        // because it looks like the thing being approved.
+        assert!(!touches_files("git push origin main"));
+        assert!(!touches_files("git tag v0.3.0"));
+        assert!(!touches_files("publish the board to a gist"));
+        assert!(!touches_files("deploy to production"));
+
+        assert!(touches_files("patch src/main.rs"));
+        assert!(touches_files("write docs/notes.md"));
+    }
+
+    #[test]
+    fn the_diff_is_read_from_git_and_not_kept_in_the_journal() {
+        // Same decision as `C-7`'s evidence chain: git already keeps it, and a
+        // second copy is a second thing that can disagree.
+        let dir = crate::testutil::tmpdir("panel-diff");
+        let repo = crate::git::Repo::at(&dir);
+        // Not a repository, so there is no diff — and the answer is `None`
+        // rather than an empty string that would render as "no changes".
+        let view = View::of(&journal(), &Approvals::new(), Vec::new(), T)
+            .with_review(&repo, &Approvals::new(), T);
+        assert!(view.diff.is_none(), "{:?}", view.diff);
+        assert!(view.approvals.is_empty());
+
+        let parsed = crate::json::parse(&view.to_json()).expect("valid JSON");
+        assert_eq!(parsed.get("diff"), Some(&Value::Null), "unknown is null, not empty");
+        assert!(parsed.get("approvals_pending").is_some());
+    }
+
+    #[test]
+    fn a_pending_approval_reaches_the_panel_with_its_reason() {
+        let dir = crate::testutil::tmpdir("panel-approvals");
+        let repo = crate::git::Repo::at(&dir);
+        let mut queue = Approvals::new();
+        queue.raise(
+            crate::approval::Request {
+                id: 0,
+                what: "git push origin perp/c4/b25".into(),
+                why: "pushing puts work on a machine that is not this one".into(),
+                command: None,
+                diff: None,
+                requirement: Some("G-5".into()),
+                step: StepId::new(4, "b25", 1).expect("step"),
+                cycle: 4,
+                raised_at: T,
+            },
+        );
+
+        let view = View::of(&[], &queue, Vec::new(), T).with_review(&repo, &queue, T);
+        assert_eq!(view.approvals.len(), 1);
+        let pending = &view.approvals[0];
+        assert!(pending.why.contains("not this one"), "{}", pending.why);
+        // A push changes no file, so no diff and the panel says why rather than
+        // offering a button next to an empty pane.
+        assert!(!pending.is_reviewable());
+
+        let parsed = crate::json::parse(&view.to_json()).expect("valid JSON");
+        let queued = parsed
+            .get("approvals_pending")
+            .and_then(Value::as_arr)
+            .expect("array");
+        assert_eq!(queued[0].get("reviewable"), Some(&Value::Bool(false)));
+        assert!(queued[0].get("why_not").and_then(Value::as_str).is_some());
+    }
     use crate::chat::Turn;
     use crate::step::StepId;
 

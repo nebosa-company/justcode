@@ -10,24 +10,27 @@ in between cycles.
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 4, batch 21: **143 of 152 requirements are done**, 8 in progress, 1
+As of cycle 4, batch 25: **151 of 152 requirements are done**, 0 in progress, 1
 external-gated (`M-25`), 0 parked as conflicting. What exists is the spine
 (binding, steps, journal, projection), the gate runner and its evidence, the
 recovery and watchdog layer, the git harness, the verification machinery, the
 model router over a `curl` transport exercised against a live LM Studio, cost
 accounting replayed from the journal, the tool host and its permission
 classifier, **the loop driver**, and the chat surface with `/btw` — in
-[`crates/`](../crates/), 465 tests, at version 0.2.0.
+[`crates/`](../crates/), 511 tests, at version 0.2.0.
 
-**The harness runs a batch on its own.** `perp run` takes the write lock, walks
-steps, journals an intent before each and an outcome after, checks budgets at
-every boundary, and stops for one of exactly three named reasons. It has done
-this on this repository. What is still design: artifacts, the OS tool layer, the
-JustCode panel, and live control.
+**The harness runs a batch on its own, against a real model.** `perp run
+--requirement <id>` asks a link, parses tool calls through the degradation
+ladder, runs them through the permission classifier, and feeds the results back
+as data — journalled, costed, and stopped for one of exactly three named
+reasons. It has done this on this repository, on DeepSeek, for tenths of a cent.
 
-A real model has answered once, for an embedding. Status markers below say which
-requirement is where; a marker without a matching journal entry is not believed
-(Perpetum 0.7).
+Everything in this document is built except `M-25`, which is external-gated:
+inference on an LM Link peer is unreachable from outside LM Studio, measured in
+`c2/b10/s01` rather than assumed.
+
+Status markers below say which requirement is where; a marker without a matching
+journal entry is not believed (Perpetum 0.7).
 
 Perpetum describes *what* the loop does. This describes *what has to exist* for
 the loop to survive being left running for a week with nobody watching.
@@ -451,7 +454,7 @@ Speculative, and the reason this document lives in this repo.
 |---|---|
 | ✅ ~~`I-1`~~ | The engine is a Rust core with two front-ends: a CLI (`perp run`, `perp chat`, `perp status`, `perp approve`, `perp rewind`) and a JustCode panel. |
 | ✅ ~~`I-2`~~ | In JustCode the engine runs as a **sidecar process**, not in the Tauri main process. An agent loop must not be able to take the editor down with it, and must outlive the editor window. |
-| 🟡 `I-3` | The panel hosts chat, the approvals queue, the current diff, the artifact view and a journal timeline. Approving from the panel opens the diff first. |
+| ✅ ~~`I-3`~~ | The panel hosts chat, the approvals queue, the current diff, the artifact view and a journal timeline. Approving from the panel opens the diff first. |
 | ✅ ~~`I-4`~~ | Existing editor surfaces are reused where they fit: the Problems panel for gate failures, the terminal dock for gate transcripts, tabs for the files under edit. |
 | ✅ ~~`I-5`~~ | The panel is a view onto the journal, not a second source of truth. Closing the editor does not stop the loop; reopening re-attaches. |
 

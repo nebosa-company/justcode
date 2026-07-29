@@ -1879,3 +1879,42 @@ button.primary:hover {
 .perp-turn p { margin: 0.15rem 0 0; white-space: pre-wrap; }
 .perp-speaker { opacity: 0.6; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
 .perp-partial { opacity: 0.7; font-style: italic; font-size: 0.85em; }
+
+/* The approvals queue and the diff (`I-3`). The diff is above the button on
+   purpose: approving from the panel opens the diff first. */
+.perp-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.perp-what { font-weight: 600; }
+.perp-why { margin: 0; opacity: 0.8; }
+
+.perp-diff {
+  margin: 0;
+  padding: 0.5rem;
+  max-height: 22rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.perp-approve {
+  align-self: flex-start;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.perp-approve:hover { background: var(--hover, rgba(127, 127, 127, 0.15)); }

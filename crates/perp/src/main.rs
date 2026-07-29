@@ -1321,7 +1321,10 @@ fn cmd_panel(args: &[&str]) -> std::result::Result<(), String> {
 
     // Approvals live in a running engine's memory, so a panel reading the
     // journal alone reports none rather than guessing at some.
-    let view = View::of(&records, &Approvals::new(), artifacts, time::now());
+    // `I-3`: the diff travels with the view, so the panel cannot offer an
+    // approve button before it has something to show.
+    let view = View::of(&records, &Approvals::new(), artifacts, time::now())
+        .with_review(&Repo::at(binding.root()), &Approvals::new(), time::now());
     println!("{}", view.to_json());
     Ok(())
 }

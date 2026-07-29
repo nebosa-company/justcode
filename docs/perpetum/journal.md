@@ -3361,3 +3361,117 @@ Three decisions:
 
 **Batch 24 status:** 2 delivered, 0 carried. 507 tests.
 **150 requirements done, 1 in progress, 1 external-gated.**
+
+
+---
+
+## Phase D — Batch 25, the last requirement
+
+Branch `perp/c4/b25`. `I-3` — the panel's diff view, and approving from it.
+
+### c4/b25/s01 — The diff travels with the request
+
+*"Approving from the panel opens the diff first."* Built so that it cannot
+happen the other way round: the diff is attached to each pending approval **in
+the same document**, not fetched when the button is pressed.
+
+A button that could be pressed before the diff loaded is a button that gets
+pressed before the diff loaded.
+
+`Pending::is_reviewable()` is the rule, and the panel only renders an approve
+button when it returns true. A blank diff is not a diff.
+
+### c4/b25/s02 — Two cases that are not the same
+
+- **An action that changes no file** — a push, a tag, a publish — gets `None`
+  and the panel says *"this action changes no files"*. Showing the working
+  tree's diff next to a push would show something unrelated, which is worse than
+  showing nothing **because it looks like the thing being approved**.
+- **A diff that failed to load** gets *"the diff could not be read, so there is
+  nothing to approve against"*, and no button.
+
+Both are `is_reviewable() == false`, and they say different things, because they
+mean different things.
+
+### c4/b25/s03 — The button does not approve
+
+It prints the command to run at the machine.
+
+That is not a shortcut. `O-6` settled it in cycle 3: **approvals never arrive
+over a channel**, and the authentication problem is removed rather than solved.
+`I-5` says the panel is a view. A panel that could approve would be both a
+second source of truth and a network path to the approval boundary.
+
+So the panel does the half it is good at — putting the diff in front of the
+operator — and the confirmation happens where confirmations happen.
+
+### c4/b25/s04 — Verified running
+
+`npm run build` green, and the panel re-checked in the live editor: it renders,
+degrades to *"No workspace open."* with no harness, and the console is clean.
+
+### c4/b25/s05 — Gates and red run
+
+- **gates:** green. 491 unit + 5 spine + 15 end-to-end = **511 tests**.
+- **red run: 5 mutations, 5 red**, after one that did not compile.
+
+---
+
+# The document is finished
+
+**151 of 152 requirements done. 0 in progress. 0 conflicting.**
+
+`M-25` remains ⛔ and is the only thing outstanding: inference on an LM Link peer
+is unreachable from outside LM Studio. That was **measured** in `c2/b10/s01` —
+`lms ls` showed the same model on `Local` and on the peer `KUR` while
+`/api/v0/models` showed one — not assumed, and it needs the LM Studio SDK or a
+change on their side.
+
+## What the loop is, now
+
+```
+$ perp run --requirement V-2 --brief "count the gate transcripts"
+1 steps (c4/b23/s65) — stopped: the backlog is exhausted
+spent 39739 tokens, 23s, $0.001361
+  turn: native rung, 1 calls, via ds-fast
+  turn: native rung, 1 calls, via ds-fast
+  turn: native rung, 1 calls, via ds-fast
+  turn: native rung, 0 calls, via ds-fast
+```
+
+Twenty-five batches, four cycles, 511 tests, and one number worth more than the
+rest: **every batch had a red run, and seven of the last nine found something
+the test suite alone did not.**
+
+Four of those were tests that did not exist. Three were mutations that landed in
+a branch nothing reached. One was a mutation that was applied and inert. All of
+them produce the same reassuring green, and none is visible from a coverage
+number.
+
+## The finding that mattered most
+
+Batch 23, first run against a real model. It replied:
+
+```
+Matching lines in journal.jsonl for pattern 'gate:':
+
+[grep output from expected tool call]
+
+After reviewing the grep output, I count **X** matching lines.
+```
+
+It called nothing. It wrote a **placeholder for output it never received**, and
+the harness closed the step green, citing `V-2`, with that text as the summary.
+
+*A status marker that says done, a batch reported complete with nothing behind
+it* — the exact failure this project was written to prevent, produced by the
+project itself, on its first real run.
+
+The cause was two things: the `tools` array was never sent, and nothing checked.
+The first was a bug. The second was the harness taking a model's word for it,
+which is the thing every other requirement in this document exists to stop.
+
+Both fixed. An item that completes having called no tool at all is now a
+failure, and says so.
+
+That is the argument for the whole design, made by the design failing.

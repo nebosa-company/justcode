@@ -147,6 +147,8 @@ function render() {
   const view = state.view;
   if (state.tab === "timeline") renderTimeline(body, view);
   else if (state.tab === "chat") renderChat(body, view);
+  else if (state.tab === "approvals") renderApprovals(body, view);
+  else if (state.tab === "diff") renderDiff(body, view);
   else if (state.tab === "btw") renderBtw(body, view);
   else if (state.tab === "artifacts") renderArtifacts(body, view);
   host.append(body);
@@ -189,6 +191,8 @@ function renderTabs() {
   const entries = [
     ["timeline", `Timeline (${view.timeline.length})`],
     ["chat", `Chat (${view.chat.length})`],
+    ["approvals", `Approvals (${view.approvals_pending.length})`],
+    ["diff", "Diff"],
     ["btw", `/btw (${view.btw.length})`],
     ["artifacts", `Artifacts (${view.artifacts.length})`],
   ];
@@ -254,6 +258,58 @@ function renderChat(body, view) {
     list.append(turn);
   }
   body.append(list);
+}
+
+// `I-3`: approving from the panel opens the diff first. The button only exists
+// when there is a diff behind it — one offered next to a pane that failed to
+// load is exactly what the requirement was written to prevent. The operator
+// confirms what they can see, and if they can see nothing they should not be
+// confirming.
+function renderApprovals(body, view) {
+  if (!view.approvals_pending.length) {
+    body.append(el("p", "perp-empty", "Nothing waiting on a person."));
+    return;
+  }
+  for (const pending of view.approvals_pending) {
+    const card = el("div", "perp-approval");
+    card.append(el("div", "perp-what", pending.what));
+    card.append(el("p", "perp-why", pending.why));
+
+    if (pending.reviewable) {
+      const diff = el("pre", "perp-diff", pending.diff);
+      card.append(diff);
+      const approve = el("button", "perp-approve", `Approve #${pending.id}`);
+      approve.type = "button";
+      // Deliberately not wired to an action. Approvals never arrive over a
+      // channel (`O-6`), and the panel is a view (`I-5`) — this tells the
+      // operator the command to type, at the machine, with the diff in front
+      // of them.
+      approve.addEventListener("click", () => {
+        window.alert(
+          `Run this at the machine:
+
+  perp approve ${pending.id} --approve "<your name>"
+
+` +
+            "Approvals are never sent from a panel.",
+        );
+      });
+      card.append(approve);
+    } else {
+      card.append(el("p", "perp-empty", pending.why_not));
+    }
+    body.append(card);
+  }
+}
+
+function renderDiff(body, view) {
+  if (!view.diff) {
+    // Null, not empty: "nothing to show" and "no changes" are different, and a
+    // blank pane reads as the second.
+    body.append(el("p", "perp-empty", "No changes in the working tree."));
+    return;
+  }
+  body.append(el("pre", "perp-diff", view.diff));
 }
 
 function renderBtw(body, view) {
