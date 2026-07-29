@@ -1,14 +1,14 @@
 # Perpetum state
 
-Cycle: 4 · Stage: b20 · Updated: 2026-07-29
+Cycle: 4 · Stage: b21 · Updated: 2026-07-29
 
 Generated from the journal by `perp state`. The journal is the truth; if this file disagrees with it, this file is wrong.
 
 ## Position
 
-- Last step: `c4/b20/s53` — closed
+- Last step: `c4/b21/s57` — closed
 - Nothing in flight.
-- Steps: 78 done, 3 blocked
+- Steps: 82 done, 3 blocked
 
 ## Blocked
 
@@ -137,6 +137,10 @@ These survive a restart. A steer lands at the next step boundary; a requirement 
 | `c4/b20/s51` | done | gate build is green |
 | `c4/b20/s52` | done | gate test is green |
 | `c4/b20/s53` | done | stopped: the backlog is exhausted |
+| `c4/b21/s54` | done | gate lint is green |
+| `c4/b21/s55` | done | gate build is green |
+| `c4/b21/s56` | done | gate test is green |
+| `c4/b21/s57` | done | stopped: the backlog is exhausted |
 
 ## History
 
@@ -145,6 +149,6 @@ These survive a restart. A steer lands at the next step boundary; a requirement 
 | 1 | 17 | 1 | 13 | 11 | 0 | $0.0000 | 35m |
 | 2 | 18 | 0 | 18 | 0 | 0 | $0.0000 | 1h02m |
 | 3 | 31 | 0 | 24 | 1 | 0 | $0.0000 | 58m |
-| 4 | 15 | 2 | 10 | 1 | 0 | $0.0000 | 33m |
+| 4 | 19 | 2 | 13 | 1 | 0 | $0.0000 | 42m |
 
 Every figure counted from `journal.jsonl`. Elapsed is wall-clock between the first and last record of the cycle, which for an unattended run is mostly the machine waiting — not effort.
