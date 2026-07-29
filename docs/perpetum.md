@@ -10,17 +10,24 @@ in between cycles.
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 2, end of phase E: **64 of 152 requirements are done**, 4 in progress (one
-approval-gated, one external-gated), 3 parked as conflicting. What exists is the spine (binding,
-steps, journal, projection), the gate runner and its evidence, the recovery and
-watchdog layer, the git harness, the verification machinery, and an end-to-end
-suite that drives the real binary, the model router, and a `curl`-backed
-transport exercised against a live LM Studio, cost accounting replayed from the
-journal, and the local-server layer — in [`crates/`](../crates/), std-only,
-237 tests, at version 0.2.0. A real model has answered once, for an embedding. The tool host, the
-loop driver, chat and artifacts are still design.
-Status markers below say which is which; a marker without a matching journal
-entry is not believed (Perpetum 0.7).
+As of cycle 3, batch 13: **88 of 152 requirements are done**, 13 in progress, 1
+external-gated (`M-25`), 0 parked as conflicting. What exists is the spine
+(binding, steps, journal, projection), the gate runner and its evidence, the
+recovery and watchdog layer, the git harness, the verification machinery, the
+model router over a `curl` transport exercised against a live LM Studio, cost
+accounting replayed from the journal, the tool host and its permission
+classifier, **the loop driver**, and the chat surface with `/btw` — in
+[`crates/`](../crates/), std-only, 330 tests, at version 0.2.0.
+
+**The harness runs a batch on its own.** `perp run` takes the write lock, walks
+steps, journals an intent before each and an outcome after, checks budgets at
+every boundary, and stops for one of exactly three named reasons. It has done
+this on this repository. What is still design: artifacts, the OS tool layer, the
+JustCode panel, and live control.
+
+A real model has answered once, for an embedding. Status markers below say which
+requirement is where; a marker without a matching journal entry is not believed
+(Perpetum 0.7).
 
 Perpetum describes *what* the loop does. This describes *what has to exist* for
 the loop to survive being left running for a week with nobody watching.
@@ -385,13 +392,13 @@ decides whether a week of unattended running produced software or a fiction.
 
 | id | Requirement |
 |---|---|
-| `C-1` | One binary, two modes: conversation and loop. Same tools, same permission classifier, same journal. Chat is not a second application with its own rules. |
-| `C-2` | Work that comes out of a conversation becomes a requirement in the requirements source (`V-9`) before it is built. Chat does not create an untracked parallel backlog. |
-| `C-3` | Chat while the loop runs is read-only by default: it answers from the journal, the state file and read tools. A write from chat requires either a pause or a target outside the loop's current feature (`L-20`). |
-| `C-4` | Responses stream and are interruptible mid-generation; the interrupted partial is journalled, not discarded. |
-| `C-5` | The conversation is journalled in the same stream as the loop, interleaved by time. "Why did it do that in cycle 3" is answerable months later. |
-| `C-6` | Slash commands are engine-side, never model-interpreted: `/status` `/pause` `/resume` `/step` `/approve` `/reject` `/rewind` `/links` `/cost` `/board` `/gate` `/explain` `/btw`. An unknown slash command is an error, not a prompt. |
-| `C-7` | `/explain <id\|sha\|step>` renders the evidence chain for a decision: the requirement, the reality check, the diff, the gate transcripts, the verifier's verdict, and the link that wrote it. |
+| ✅ ~~`C-1`~~ | One binary, two modes: conversation and loop. Same tools, same permission classifier, same journal. Chat is not a second application with its own rules. |
+| 🟡 `C-2` | Work that comes out of a conversation becomes a requirement in the requirements source (`V-9`) before it is built. Chat does not create an untracked parallel backlog. |
+| ✅ ~~`C-3`~~ | Chat while the loop runs is read-only by default: it answers from the journal, the state file and read tools. A write from chat requires either a pause or a target outside the loop's current feature (`L-20`). |
+| 🟡 `C-4` | Responses stream and are interruptible mid-generation; the interrupted partial is journalled, not discarded. |
+| ✅ ~~`C-5`~~ | The conversation is journalled in the same stream as the loop, interleaved by time. "Why did it do that in cycle 3" is answerable months later. |
+| 🟡 `C-6` | Slash commands are engine-side, never model-interpreted: `/status` `/pause` `/resume` `/step` `/approve` `/reject` `/rewind` `/links` `/cost` `/board` `/gate` `/explain` `/btw`. An unknown slash command is an error, not a prompt. |
+| 🟡 `C-7` | `/explain <id\|sha\|step>` renders the evidence chain for a decision: the requirement, the reality check, the diff, the gate transcripts, the verifier's verdict, and the link that wrote it. |
 
 ### 8.2 `/btw` — the side channel
 
@@ -401,11 +408,11 @@ step in flight.
 
 | id | Requirement |
 |---|---|
-| `C-8` | `/btw <text>` is accepted at any time, acknowledged immediately, and never aborts the current step. |
-| `C-9` | Each `/btw` is classified into exactly one of: **steer** — applies to the current feature, injected at the next step boundary; **requirement** — filed to the requirements source with source `operator`; **constraint** — added to the policy for the rest of the cycle; **note** — journalled only. The classification is shown and is correctable with a follow-up. |
-| `C-10` | A `/btw` can never cross the approval boundary. It cannot approve a parked action, raise a budget, disable a gate, or reclassify a `never`. Those are explicit commands with their own confirmation. A casual aside must not be able to unlock the dangerous half of the harness. |
-| `C-11` | `/btw` is available from the CLI, the JustCode panel, and the reply path of the notification sink (`O-6`), and is queued when the engine is not running — the next cycle picks it up at Phase B. |
-| `C-12` | Queued and unclassified `/btw` items appear in `state.md`, so they survive a restart and are visible to whoever resumes the loop. |
+| ✅ ~~`C-8`~~ | `/btw <text>` is accepted at any time, acknowledged immediately, and never aborts the current step. |
+| ✅ ~~`C-9`~~ | Each `/btw` is classified into exactly one of: **steer** — applies to the current feature, injected at the next step boundary; **requirement** — filed to the requirements source with source `operator`; **constraint** — added to the policy for the rest of the cycle; **note** — journalled only. The classification is shown and is correctable with a follow-up. |
+| ✅ ~~`C-10`~~ | A `/btw` can never cross the approval boundary. It cannot approve a parked action, raise a budget, disable a gate, or reclassify a `never`. Those are explicit commands with their own confirmation. A casual aside must not be able to unlock the dangerous half of the harness. |
+| 🟡 `C-11` | `/btw` is available from the CLI, the JustCode panel, and the reply path of the notification sink (`O-6`), and is queued when the engine is not running — the next cycle picks it up at Phase B. |
+| ✅ ~~`C-12`~~ | Queued and unclassified `/btw` items appear in `state.md`, so they survive a restart and are visible to whoever resumes the loop. |
 
 ### 8.3 Artifacts
 

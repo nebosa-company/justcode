@@ -12,6 +12,9 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use perp_core::binding::Binding;
+use perp_core::btw;
+use perp_core::chat;
+use perp_core::command::{self, Chain, Command, Input, Subject};
 use perp_core::engine::{Engine, Gates};
 use perp_core::phase::{Machine, Measured, Phase};
 use perp_core::gate::{self, Gate};
@@ -77,6 +80,21 @@ usage:
       Measure the workspace and say whether the current phase's exit condition
       is met, and why not if it is not. Measured, never asserted.
 
+  perp chat [--local-only] [--root <dir>]
+      Conversation. Slash commands are resolved by the engine and never sent to
+      a model; an unknown one is an error, not a prompt. Both sides of the
+      conversation go in the loop's own journal. Read-only while the loop holds
+      the workspace.
+
+  perp btw <text> [--source <where>] [--root <dir>]
+      File an aside. Accepted at any time, classified as steer, requirement,
+      constraint or note, and never able to cross the approval boundary.
+      `perp btw \"<id> <class>\"` corrects a classification.
+
+  perp explain <id|step|sha> [--root <dir>]
+      Render the evidence chain: the steps that cited it, the gate transcripts,
+      the commit it was pinned to, and which link wrote it.
+
   perp cost [--root <dir>]
       Replay the journal and report what the loop spent, by link and by role.
       Local links show tokens and time and no money.
@@ -118,6 +136,9 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("cost") => cmd_cost(&args[1..]),
         Some("run") => cmd_run(&args[1..]),
         Some("phase") => cmd_phase(&args[1..]),
+        Some("chat") => cmd_chat(&args[1..]),
+        Some("btw") => cmd_btw(&args[1..]),
+        Some("explain") => cmd_explain(&args[1..]),
         Some(other) => Err(format!("unknown command `{other}` — try `perp help`")),
     }
 }
@@ -663,6 +684,181 @@ fn cmd_phase(args: &[&str]) -> std::result::Result<(), String> {
 /// The projection without its render time, for comparing a state file against
 /// the journal it claims to be a view of.
 fn without_timestamp(text: &str) -> String {
-    text.lines().filter(|line| !line.contains("Updated:")).collect::<Vec<_>>().join("
-")
+    text.lines().filter(|line| !line.contains("Updated:")).collect::<Vec<_>>().join("\n")
+}
+
+/// The evidence chain for one decision (`C-7`).
+fn cmd_explain(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let subject = positionals(args)
+        .first()
+        .copied()
+        .ok_or_else(|| "expected a requirement id, a step id, or a commit sha".to_string())?;
+    let subject = Subject::parse(subject).map_err(|e| e.to_string())?;
+
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+    let chain = Chain::build(&subject, &records);
+    print!("{}", chain.render());
+
+    // An empty chain is an answer, not a failure — but it is a non-zero one, so
+    // a script asking "is there evidence for this" gets a usable exit code.
+    if chain.is_empty() {
+        return Err("no evidence".into());
+    }
+    Ok(())
+}
+
+/// File an aside from the CLI (`C-8`, `C-11`).
+fn cmd_btw(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+
+    let text = positionals(args)
+        .first()
+        .copied()
+        .ok_or_else(|| "expected something to note".to_string())?;
+    let source = flag(args, "--source").unwrap_or("cli");
+    let mut queue = btw::Queue::replay(&records);
+    let step = next_step_for(&records, "btw");
+
+    // `perp btw "<id> <class>"` — the correction path (`C-9`).
+    if let Some((head, rest)) = text.split_once(char::is_whitespace) {
+        if let (Ok(id), Some(class)) = (head.parse::<u64>(), btw::Class::parse(rest)) {
+            let item = queue.reclassify(id, class).map_err(|e| e.to_string())?;
+            println!("#{} is now a {}: {}", item.id, item.class, item.class.effect());
+            return journal.append(&item.record(step)).map_err(|e| e.to_string());
+        }
+    }
+
+    let item = queue.accept(text, source, time::now(), None);
+    println!("{}", item.acknowledgement());
+    journal.append(&item.record(step)).map_err(|e| e.to_string())
+}
+
+/// Conversation (`C-1`). Reads lines: slash commands are resolved here and
+/// never sent to a model, everything else is a message.
+fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
+    use std::io::BufRead;
+
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let links = Links::load(&binding.resolve("path.links").map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let mode = if args.contains(&"--local-only") { Mode::LocalOnly } else { Mode::Any };
+
+    // `C-3`: if the loop holds the write lock, this session is read-only. The
+    // lock file on disk is the authority — not a flag, not an assumption.
+    let held = root_of(args).join("write.lock").exists();
+    let chat_mode = perp_core::lock::chat_mode(held, false);
+    if chat_mode == perp_core::lock::ChatMode::ReadOnly {
+        println!("the loop is writing — this session is read-only (`C-3`)");
+    }
+    println!("perp chat · {} slash commands, or just type. ctrl-d to leave.", command::NAMES.len());
+
+    let transport = Curl::new();
+    let mut client = Client::new(&transport);
+    let stdin = std::io::stdin();
+
+    for line in stdin.lock().lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let records = journal.read_all().map_err(|e| e.to_string())?;
+        let step = next_step_for(&records, "chat");
+
+        match command::parse(&line) {
+            // The load-bearing branch: an unknown slash command stops here and
+            // is never handed to a model as a prompt (`C-6`).
+            Err(e) => println!("{e}"),
+            Ok(Input::Command(command)) => {
+                if command.writes() && chat_mode == perp_core::lock::ChatMode::ReadOnly {
+                    println!("{command} writes, and the loop holds the workspace (`C-3`)");
+                    continue;
+                }
+                match run_command(&command, &binding, &journal, &records, step) {
+                    Ok(text) => println!("{text}"),
+                    Err(e) => println!("{e}"),
+                }
+            }
+            Ok(Input::Message(text)) => {
+                journal
+                    .append(&chat::Turn::operator(&text, time::now()).record(step.clone()))
+                    .map_err(|e| e.to_string())?;
+
+                let request = ChatRequest::new(vec![Message::user(text)]);
+                match client.call(&links, Role::Chat, &request, &AssumeHealthy, mode, time::now()) {
+                    Ok(served) => {
+                        println!("{}", served.reply.content);
+                        println!("[via {}]", served.provenance());
+                        let next = step.next();
+                        let turn =
+                            chat::Turn::assistant(&served.reply.content, time::now(), &served.link);
+                        journal.append(&turn.record(next.clone())).map_err(|e| e.to_string())?;
+                        journal
+                            .append(&served.to_record(next, time::now(), links.price(&served.link)))
+                            .map_err(|e| e.to_string())?;
+                    }
+                    Err(e) => println!("no link answered: {e}"),
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The commands that can be answered without a running engine. Read commands
+/// work while the loop runs; the rest say what they would need.
+fn run_command(
+    command: &Command,
+    binding: &Binding,
+    journal: &Journal,
+    records: &[Record],
+    step: StepId,
+) -> std::result::Result<String, String> {
+    match command {
+        Command::Explain { subject } => Ok(Chain::build(subject, records).render()),
+        Command::Status => Ok(render(&replay(records), time::now())),
+        Command::Cost => {
+            let total = Ledger::replay(records).total();
+            Ok(format!(
+                "{} calls · {} tokens · {:.6}",
+                total.calls,
+                total.usage.total(),
+                total.charge
+            ))
+        }
+        Command::Board => {
+            std::fs::read_to_string(binding.resolve("out.board").map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())
+        }
+        Command::Links => Ok(format!(
+            "links: {}",
+            binding.resolve("path.links").map_err(|e| e.to_string())?.display()
+        )),
+        Command::Btw { text } => {
+            let mut queue = btw::Queue::replay(records);
+            let item = queue.accept(text, "chat", time::now(), None);
+            let ack = item.acknowledgement();
+            journal.append(&item.record(step)).map_err(|e| e.to_string())?;
+            Ok(ack)
+        }
+        // Everything else moves the loop, and the loop driver owns it. Said
+        // plainly rather than half-implemented: a `/pause` that printed
+        // "paused" without pausing anything is worse than one that is absent.
+        other => Err(format!(
+            "{other} moves the loop, and this build answers it from `perp run` only \
+             — it is not yet wired to a running engine"
+        )),
+    }
+}
+
+/// The next step id for a conversational record. Chat shares the loop's stream
+/// (`C-5`), so it continues the sequence rather than starting its own.
+fn next_step_for(records: &[Record], stage: &str) -> StepId {
+    let cycle = records.last().map(|r| r.step.cycle).unwrap_or(1);
+    let seq = records.iter().map(|r| r.step.seq).max().unwrap_or(0) + 1;
+    StepId::new(cycle, stage, seq).unwrap_or(StepId { cycle, stage: stage.into(), seq })
 }

@@ -9,7 +9,7 @@ That was the binding working as designed, and the narrative needed its own path.
 Position, counts and blocked steps: read [`state.md`](state.md), which is
 generated. Reasoning, decisions and what comes next: here.
 
-Cycle: 3 · Phase: D · Batch: 12 — 2 of this cycle's five · Updated: 2026-07-29
+Cycle: 3 · Phase: D · Batch: 13 — 3 of this cycle's five · Updated: 2026-07-29
 
 Binding: [`binding.md`](binding.md) · Journal: [`journal.md`](journal.md) +
 `journal.jsonl` · Requirements: [`../perpetum.md`](../perpetum.md) ·
@@ -47,9 +47,17 @@ lock, walks steps, journals each, checks budgets at every boundary and stops for
 one of exactly three named reasons. It has run a batch on this repository —
 three gates, three steps, three transcripts, one terminal record.
 
-- Next: **batch 13 — chat, slash commands and `/btw`** (`C-1`–`C-12`). It is
-  also what unblocks the three requirements batch 12 carried: `M-8` needs a live
-  model call to drive the ladder, and `L-20`'s chat half needs a chat.
+**Batch 13 landed the way in.** `perp chat`, `perp btw`, `perp explain`. An
+unknown slash command is an error rather than a prompt, an aside can never cross
+the approval boundary, and the evidence chain for a decision is one command.
+
+Running it found two defects no unit test would have: the outcome record was
+dropping the requirement ids it was evidence for, and `perp run` was not pinning
+its transcripts to a commit while `perp gate` was. Both fixed, both now tested.
+
+- Next: **batch 14 — artifacts and the board** (`A-1`–`A-7`, `O-2`, `O-5`,
+  `O-7`), then **batch 15 — security enforcement** (`S-1`, `S-3`–`S-8`, `N-6`),
+  which closes cycle 3.
 
 Perpetum D also asks for end-to-end coverage to be extended over the five
 batches. It was: the CLI suite grew from 11 tests to 15, including a full
@@ -74,7 +82,7 @@ Carried, not done:
 
 - lint · exit 0 · clean
 - build · exit 0 · clean
-- tests · exit 0 · **317/317** — 297 unit, 5 spine integration, 15 end-to-end
+- tests · exit 0 · **350/350** — 330 unit, 5 spine integration, 15 end-to-end
 - ids · exit 0 · 152 defined across 29 documents, no strays
 - links · exit 0 · 2 links, 9 roles, every role has a local option
 

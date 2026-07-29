@@ -1766,3 +1766,152 @@ a shortcut:
 
 **Batch 12 status:** 6 of 9 delivered, 3 carried, 0 blocked. 317 tests.
 **The harness now runs a batch on its own.**
+
+
+---
+
+## Phase D — Batch 13, chat, slash commands and `/btw`
+
+Branch `perp/c3/b13`. Twelve requirements — the way in while the loop runs.
+
+### c3/b13/s01 — An unknown slash command is not a prompt
+
+`C-6` in one branch. `/deploy production` does not fall through to the model as
+text; it is a parse failure naming the thirteen commands that exist.
+
+The failure this prevents is not a typo. It is that **anything producing text
+becomes a path to an action** if unknown commands are forwarded: a pasted log, a
+model summarising a web page, a line of a diff. The command list is closed, and
+the error message is generated from the same list the parser uses, so a command
+cannot exist in one and not the other.
+
+Every command declares whether it `writes()`, which is what makes `C-3` cheap:
+`/status`, `/cost`, `/explain` and `/btw` stay available while the loop holds the
+workspace, and the rest wait for a pause.
+
+### c3/b13/s02 — `/btw` and the sharpest rule in the design
+
+`C-10`: **a `/btw` can never cross the approval boundary.**
+
+Being cheap and being powerful cannot both be true of the same channel. `/btw`
+exists to be the cheapest possible way to say something — an aside that costs a
+pause is an aside nobody makes — and that is exactly why it must not be able to
+approve, raise a budget, disable a gate or reclassify a `never`.
+
+So text reaching for the boundary is **still accepted and still journalled**, and
+comes back classified `note` with a sentence saying which explicit command to use
+instead. Not refused, not silently downgraded. The phrase table is deliberately
+over-broad: a false positive costs one explicit command, a false negative is a
+`/btw` that deployed to production.
+
+And a refused aside **cannot be reclassified**. Letting a follow-up promote it
+would be the same crossing in two messages.
+
+Classification (`C-9`) is engine-side and keyword-shaped rather than
+model-driven. A model classifier would be better at nuance and would also mean
+the classification was model-controlled — and one of the four classes changes
+policy for the rest of the cycle. Being shown and correctable is the mitigation
+the requirement already specifies.
+
+### c3/b13/s03 — Chat is not a second application
+
+`C-1`. Same binary, same tools, same classifier, same journal. The test for it is
+structural rather than behavioural: `tool::classify` has **no mode parameter**,
+so there is nowhere to say which half of the application is asking. Two
+permission models is how a project ends up with one nobody audited.
+
+`C-5` follows: both sides of the conversation go into `journal.jsonl`, interleaved
+with the loop's own steps. The summary is for scanning; the text goes in the
+detail verbatim, because a journal that only kept the summary would answer "what
+was said" with a paraphrase.
+
+`C-4`'s half that exists: an interrupted reply is journalled rather than
+discarded. The half a model produced before someone hit escape is evidence of
+what it was about to do — and when the answer was going wrong, it is the
+interesting half.
+
+### c3/b13/s04 — Two defects found by running it
+
+Both from reading real output rather than from a test.
+
+**1. `perp explain V-2` came back empty on a green gate.** The engine had just
+run three gates, journalled three transcripts, and cited `V-2` on each — and the
+evidence chain found nothing. Cause: `Session::begin_for` put the requirement ids
+on the **intent** record and `StepGuard::close_with` wrote the outcome without
+them. So the record holding the transcript did not say what it was evidence *of*.
+Fixed at the guard: the outcome carries what the intent declared. This is the
+kind of defect a unit test does not find, because both halves were individually
+correct.
+
+**2. `perp run` was not pinning transcripts to a commit.** `perp gate` did — the
+sha is right there in `cmd_gate` — and the engine's `Gates` did not. Same gate,
+same project, provenance from one entry point and none from the other. `G-6`
+fixed at the source: the sha is read once at the top of a run and reused, because
+a transcript pinned to a commit the tree has since moved past is worse than one
+with no sha at all.
+
+Both now have tests, and both went red in the red run.
+
+### c3/b13/s05 — Where the queue lives
+
+`C-12` was nearly built wrong. `Queue::render_for_state` existed, and nothing
+called it — a renderer with no caller is a requirement that looks done.
+
+The fix put the queue in the **projection**: `state::replay` rebuilds it from the
+journal like everything else, and `render` emits the section. A queue in a file
+of its own would be a second source of truth that could disagree with the record,
+which is the thing `L-4` exists to prevent.
+
+```
+## Waiting from `/btw`
+
+- #2 · **requirement** · 2026-07-29 · from cli — we should show the gate
+  transcript inline in the panel
+```
+
+### c3/b13/s06 — Gates and red run
+
+- **gates:** green — 330 unit + 5 spine + 15 end-to-end = **350 tests**.
+- **red run: 14 mutations, 14 red**, first time:
+
+  ```
+  command.rs  an unknown slash command becomes a prompt   an_unknown_slash_command_is_an_error   101 red
+  command.rs  every command counts as read-only           read_commands_stay_available           101 red
+  command.rs  nothing needs a person to confirm           discarding_and_approving_both_need     101 red
+  command.rs  the chain drops the transcripts             the_evidence_chain_is_assembled        101 red
+  command.rs  a claim with no transcript reads as fine    a_claim_with_no_transcript_is_called   101 red
+  btw.rs      the approval-boundary check is skipped      a_btw_can_never_cross_the_approval     101 red
+  btw.rs      a refused aside can be reclassified         a_refused_aside_cannot_be_reclassified 101 red
+  btw.rs      a steer is injected at every boundary       steers_are_taken_at_a_boundary_once    101 red
+  btw.rs      a restart launders the boundary refusal     the_queue_survives_a_restart           101 red
+  chat.rs     an interrupted reply is discarded           an_interrupted_reply_is_journalled     101 red
+  chat.rs     chat may write where the loop is working    chat_is_read_only_where_the_loop_works 101 red
+  chat.rs     an unfiled proposal is ready to build       a_conversation_does_not_get_a_backlog  101 red
+  session.rs  the outcome drops the requirement ids       the_outcome_carries_the_requirements   101 red
+  engine.rs   the transcript is not pinned to a commit    a_gate_transcript_is_pinned_to_commit  101 red
+  ```
+
+### c3/b13/s07 — What is carried
+
+Five of twelve are 🟡, and the reasons are all "the other end does not exist yet":
+
+- **`C-2`** — `Proposal::ready_to_build` refuses anything without a requirement
+  id, and nothing calls it, because no path yet builds work that came out of a
+  conversation. The rule is enforceable and unexercised.
+- **`C-4`** — the interrupt half is real; the *streaming* half is not. The `curl`
+  transport does not do server-sent events. That is `M-23`, already 🟡.
+- **`C-6`** — all thirteen parse, and the closed-list rule is fully enforced.
+  Six of them (`/pause` `/resume` `/step` `/rewind` `/approve` `/reject`) report
+  that they are not wired to a running engine rather than pretending. Their
+  behaviour is `O-3`/`O-4` and the approval queue's surface, batch 17.
+- **`C-7`** — the chain renders the requirement, the steps, the gate transcripts,
+  the commit and the link. It does **not** render the diff, the reality check or
+  the verifier's verdict, which the requirement also lists. Three of six is not
+  done.
+- **`C-11`** — the CLI path works. The panel is `I-*` (batch 18) and the
+  notification reply path is `O-6` (batch 17).
+
+**Batch 13 status:** 7 of 12 delivered, 5 carried, 0 blocked. 350 tests.
+
+**Cycle 3 so far:** 88 requirements done, 13 in progress, 0 conflicting, 1
+external-gated. Three batches delivered of five.

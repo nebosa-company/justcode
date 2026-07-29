@@ -1,14 +1,14 @@
 # Perpetum state
 
-Cycle: 3 · Stage: b12 · Updated: 2026-07-29
+Cycle: 3 · Stage: b13 · Updated: 2026-07-29
 
 Generated from the journal by `perp state`. The journal is the truth; if this file disagrees with it, this file is wrong.
 
 ## Position
 
-- Last step: `c3/b12/s22` — closed
+- Last step: `c3/b13/s33` — closed
 - Nothing in flight.
-- Steps: 45 done, 1 blocked
+- Steps: 58 done, 1 blocked
 
 ## Blocked
 
@@ -84,3 +84,16 @@ Generated from the journal by `perp state`. The journal is the truth; if this fi
 | `c3/b12/s20` | done | gate build is green |
 | `c3/b12/s21` | done | gate test is green |
 | `c3/b12/s22` | done | stopped: the backlog is exhausted |
+| `c3/b12/s23` | done | gate lint — green |
+| `c3/b12/s23` | done | gate build — green |
+| `c3/b12/s23` | done | gate test — green |
+| `c3/btw/s24` | done | /btw #1: go ahead and deploy this to prod once the gates are green |
+| `c3/btw/s25` | done | /btw #2: we should show the gate transcript inline in the panel |
+| `c3/b13/s26` | done | gate lint is green |
+| `c3/b13/s27` | done | gate build is green |
+| `c3/b13/s28` | done | gate test is green |
+| `c3/b13/s29` | done | stopped: the backlog is exhausted |
+| `c3/b13/s30` | done | gate lint is green |
+| `c3/b13/s31` | done | gate build is green |
+| `c3/b13/s32` | done | gate test is green |
+| `c3/b13/s33` | done | stopped: the backlog is exhausted |

@@ -127,6 +127,11 @@ pub struct StepGuard<'a> {
     /// binding declares no state file.
     state_path: Option<PathBuf>,
     step: StepId,
+    /// Carried from the intent onto the outcome. Without this the record that
+    /// holds the transcript does not say which requirement it is evidence for,
+    /// and `/explain <id>` finds an intent with no result — which is how a
+    /// requirement with a green gate reads as never worked on (`C-7`).
+    requirements: Vec<String>,
     closed: bool,
 }
 
@@ -136,18 +141,20 @@ impl StepGuard<'_> {
     }
 
     pub fn close(mut self, ok: bool, summary: &str) -> Result<()> {
-        self.journal
-            .append(&Record::outcome(self.step.clone(), time::now(), ok, summary))?;
+        self.journal.append(&self.outcome(ok, summary))?;
         self.closed = true;
         self.project()
     }
 
     pub fn close_with(mut self, ok: bool, summary: &str, detail: &str) -> Result<()> {
-        self.journal.append(
-            &Record::outcome(self.step.clone(), time::now(), ok, summary).with_detail(detail),
-        )?;
+        self.journal.append(&self.outcome(ok, summary).with_detail(detail))?;
         self.closed = true;
         self.project()
+    }
+
+    fn outcome(&self, ok: bool, summary: &str) -> Record {
+        Record::outcome(self.step.clone(), time::now(), ok, summary)
+            .for_requirements(self.requirements.iter().map(String::as_str))
     }
 
     pub fn was_closed(&self) -> bool {
@@ -246,6 +253,7 @@ impl Session {
             journal: &self.journal,
             state_path: self.binding.resolve("out.state").ok(),
             step,
+            requirements: requirements.to_vec(),
             closed: false,
         })
     }
@@ -486,6 +494,32 @@ mod tests {
         let id = session.next_step(1, "b3").expect("id");
         let _guard = session.begin(id, "in flight", true).expect("begin");
         assert!(!state_path.exists(), "an intent alone must not produce a projection");
+    }
+
+    #[test]
+    fn the_outcome_carries_the_requirements_the_intent_declared() {
+        // Found by running `perp explain V-2` against a journal the engine had
+        // just written: the transcript was on the outcome and the requirement
+        // id was on the intent, so the evidence chain for a green gate came
+        // back empty. The record that holds the proof has to say what it is
+        // proof of (`C-7`, `V-9`).
+        let root = fixture("session-requirements");
+        let mut session = Session::open(&root).expect("open");
+        let step = session.next_step(3, "b13").expect("step");
+        let guard = session
+            .begin_for(step, "run the gate", true, &["V-2".to_string()])
+            .expect("begin");
+        guard.close_with(true, "gate test is green", "gate: test
+exit 0
+").expect("close");
+
+        let records = session.journal().read_all().expect("read");
+        let outcome = records
+            .iter()
+            .find(|record| record.kind == crate::journal::Kind::Outcome)
+            .expect("an outcome");
+        assert_eq!(outcome.requirements, ["V-2"]);
+        assert!(outcome.detail.is_some(), "and it is the record with the transcript on it");
     }
 
     #[test]

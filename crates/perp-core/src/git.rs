@@ -188,7 +188,10 @@ impl Repo {
     }
 
     /// For read-only plumbing the classifier already treats as `Auto`.
-    fn run_unchecked(&self, args: &[&str]) -> Result<Run> {
+    /// Run without the classifier. `pub(crate)` so a test fixture elsewhere in
+    /// the crate can build a repository; every caller outside `git` goes
+    /// through [`Repo::run`], which classifies first.
+    pub(crate) fn run_unchecked(&self, args: &[&str]) -> Result<Run> {
         let quoted: Vec<String> = args
             .iter()
             .map(|arg| if arg.contains(' ') { format!("\"{arg}\"") } else { (*arg).to_string() })

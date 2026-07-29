@@ -329,6 +329,10 @@ pub struct Gates {
     target: PathBuf,
     owner: String,
     held: Option<Lock>,
+    /// The commit every transcript is pinned to (`G-6`). Read once, at the top
+    /// of the run: a transcript pinned to a sha the tree has since moved past
+    /// would be worse than one with no sha at all.
+    sha: Option<String>,
     pub results: Vec<gate::GateResult>,
 }
 
@@ -340,6 +344,10 @@ impl Gates {
             target: target.to_path_buf(),
             owner: Lock::this_process(time::now()),
             held: None,
+            // A repository that cannot answer is not an error — the gate still
+            // ran — and the transcript then says nothing rather than implying a
+            // commit it does not have.
+            sha: crate::git::Repo::at(binding.root()).head_sha().ok(),
             results: Vec::new(),
         })
     }
@@ -377,6 +385,10 @@ impl Work for Gates {
 
         match gate.run() {
             Ok(result) => {
+                let result = match &self.sha {
+                    Some(sha) => result.at_sha(sha),
+                    None => result,
+                };
                 let evidence = result.evidence();
                 let green = result.is_green();
                 let name = gate.name.clone();
@@ -451,6 +463,7 @@ mod tests {
              path.requirements = docs/perpetum.md\n\
              out.journal = docs/perpetum/journal.jsonl\n\
              out.state = docs/perpetum/state.md\n\
+             gate.check = cargo --version\n\
              ```\n",
         )
         .expect("binding");
@@ -666,6 +679,37 @@ mod tests {
 
         let first = records(&root).into_iter().next().expect("a record");
         assert!(first.summary.contains("abandoned write lock"), "{}", first.summary);
+    }
+
+    #[test]
+    fn a_gate_transcript_is_pinned_to_the_commit_it_ran_against() {
+        // `G-6`. Found by reading an evidence chain the engine produced:
+        // `perp gate` pinned its transcripts and `perp run` did not, so the
+        // same gate had provenance from one entry point and none from the
+        // other.
+        let root = workspace("engine-sha");
+        let binding = crate::Binding::load(&root).expect("binding");
+        let gates = Gates::from_binding(&binding, &root.join("target")).expect("gates");
+        // The fixture is not a repository, so there is no sha to pin to — and
+        // the honest answer is `None` rather than a placeholder.
+        assert!(gates.sha.is_none(), "no repository, no claim about a commit");
+
+        // Make the fixture a repository and there is one, read once at the top
+        // of the run and reused for every gate in it.
+        let repo = crate::git::Repo::at(&root);
+        for args in [
+            vec!["init", "-q", "-b", "perp/fixture"],
+            vec!["config", "user.email", "loop@perpetum.test"],
+            vec!["config", "user.name", "Perpetum test"],
+            vec!["config", "commit.gpgsign", "false"],
+        ] {
+            repo.run_unchecked(&args).expect("git");
+        }
+        repo.stage(&["docs/perpetum.md"]).expect("stage");
+        repo.commit(&crate::git::CommitMessage::new("Add the requirements")).expect("commit");
+
+        let pinned = Gates::from_binding(&binding, &root.join("target")).expect("gates");
+        assert!(pinned.sha.is_some(), "and here there is one");
     }
 
     #[test]

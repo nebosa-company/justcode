@@ -16,6 +16,9 @@
 //! | [`budget`] | `L-9`, `L-10` |
 //! | [`lock`] | `L-17`, `L-18`, `L-20` |
 //! | [`ladder`] | `M-8` |
+//! | [`chat`] | `C-1`–`C-5` |
+//! | [`command`] | `C-6`, `C-7` |
+//! | [`btw`] | `C-8`–`C-12` |
 //! | [`step`] | `L-22` |
 //! | [`journal`] | `L-3`, `N-8` |
 //! | [`state`] | `L-4`, `O-1`, `L-8` |
@@ -45,8 +48,11 @@
 pub mod approval;
 pub mod atomic;
 pub mod binding;
+pub mod btw;
 pub mod budget;
+pub mod chat;
 pub mod client;
+pub mod command;
 pub mod cost;
 pub mod engine;
 pub mod error;
@@ -75,8 +81,11 @@ pub mod watchdog;
 mod testutil;
 
 pub use binding::Binding;
+pub use btw::Btw;
 pub use budget::{Budget, Budgets, Spend};
 pub use engine::{Done, Engine, Gates, Task, Work};
+pub use chat::{Streaming, Turn};
+pub use command::{Chain, Command, Input};
 pub use error::{Error, Result};
 pub use gate::{Attempts, Gate, GateResult, Verdict};
 pub use journal::{Journal, Kind, Record};

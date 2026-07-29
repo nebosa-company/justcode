@@ -39,6 +39,10 @@ pub struct Projection {
     pub done: Vec<Done>,
     pub blocked: Vec<Blocked>,
     pub requirements_touched: Vec<String>,
+    /// Asides still waiting on something (`C-12`). In the projection rather
+    /// than in a file of their own, because a queue that lives outside the
+    /// journal is a queue that can disagree with it.
+    pub pending_btw: Vec<crate::btw::Btw>,
 }
 
 impl Projection {
@@ -49,7 +53,10 @@ impl Projection {
 
 /// Fold a journal into what the run believed.
 pub fn replay(records: &[Record]) -> Projection {
-    let mut projection = Projection::default();
+    let mut projection = Projection {
+        pending_btw: crate::btw::Queue::replay(records).pending().into_iter().cloned().collect(),
+        ..Projection::default()
+    };
     let mut open: Vec<(StepId, String)> = Vec::new();
 
     for record in records {
@@ -161,6 +168,26 @@ pub fn render(projection: &Projection, at: i64) -> String {
         out.push('\n');
     }
 
+    // `C-12`: whatever the operator said that nobody has acted on yet, above
+    // the counts, so someone resuming the loop reads it before the detail.
+    if !projection.pending_btw.is_empty() {
+        out.push_str("## Waiting from `/btw`\n\n");
+        for item in &projection.pending_btw {
+            out.push_str(&format!(
+                "- #{} · **{}** · {} · from {} — {}\n",
+                item.id,
+                item.class,
+                time::format_date(item.at),
+                item.source,
+                item.text
+            ));
+        }
+        out.push_str(
+            "\nThese survive a restart. A steer lands at the next step boundary; a requirement \
+             is filed at Phase B (`C-11`).\n\n",
+        );
+    }
+
     out.push_str("## Requirements touched\n\n");
     if projection.requirements_touched.is_empty() {
         out.push_str("*(none)*\n\n");
@@ -202,6 +229,41 @@ mod tests {
 
     fn step(text: &str) -> StepId {
         StepId::parse(text).expect("step id")
+    }
+
+    #[test]
+    fn a_waiting_aside_reaches_the_state_file() {
+        // `C-12`. The queue is not a separate file: it is replayed from the
+        // journal like everything else in the projection, so a restart cannot
+        // lose it and it cannot disagree with the record.
+        let mut queue = crate::btw::Queue::new();
+        queue.accept("we should show the transcript inline", "panel", 1_700_000_000, None);
+        queue.accept("just noting the lint gate is the slow one", "cli", 1_700_000_000, None);
+        let records: Vec<Record> =
+            queue.items().iter().map(|item| item.record(step("c3/b13/s09"))).collect();
+
+        let projection = replay(&records);
+        assert_eq!(projection.pending_btw.len(), 1, "a note is not waiting for anything");
+
+        let rendered = render(&projection, 1_700_000_000);
+        let section = rendered
+            .split("## Waiting from `/btw`")
+            .nth(1)
+            .expect("the section is there")
+            .split("\n## ")
+            .next()
+            .expect("and ends at the next heading");
+        assert!(section.contains("transcript inline"), "with the operator's own words:{section}");
+        assert!(section.contains("from panel"), "and where it came from:{section}");
+        // The note is elsewhere in the file — every `/btw` is a journal record
+        // and shows in the step table — but it is not *waiting* for anything.
+        assert!(!section.contains("slow one"), "and nothing that is not waiting:{section}");
+    }
+
+    #[test]
+    fn a_state_file_with_no_asides_carries_no_empty_heading() {
+        let rendered = render(&replay(&closed_pair("c1/b1/s01", true, "did a thing")), 100);
+        assert!(!rendered.contains("Waiting from"), "{rendered}");
     }
 
     fn closed_pair(id: &str, ok: bool, summary: &str) -> Vec<Record> {
