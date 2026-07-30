@@ -273,7 +273,7 @@ pub fn measure(engine: &Engine, batches_done: u32) -> Result<Measured> {
     let source = binding
         .resolve("path.requirements")
         .ok()
-        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|p| crate::layout::requirements_text(&p))
         .unwrap_or_default();
     let open = u32::try_from(backlog(&source, usize::MAX).len()).unwrap_or(u32::MAX);
 
@@ -378,7 +378,7 @@ impl Driver<'_> {
                             .binding()
                             .resolve("path.requirements")
                             .ok()
-                            .and_then(|p| std::fs::read_to_string(p).ok())
+                            .map(|p| crate::layout::requirements_text(&p))
                             .unwrap_or_default();
                         remaining(&source, &seen, cycle, 1).is_empty()
                     }
@@ -437,7 +437,7 @@ impl Driver<'_> {
             .binding()
             .resolve("path.requirements")
             .ok()
-            .and_then(|p| std::fs::read_to_string(p).ok())
+            .map(|p| crate::layout::requirements_text(&p))
             .unwrap_or_default();
         // Everything this cycle already attempted comes off the list first.
         let seen = engine.session().journal().read_all()?;

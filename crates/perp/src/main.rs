@@ -587,8 +587,14 @@ fn cmd_check(args: &[&str]) -> std::result::Result<(), String> {
 
     let binding = load(args).map_err(|e| e.to_string())?;
     let source_path = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
-    let source = std::fs::read_to_string(&source_path)
-        .map_err(|e| format!("{}: {e}", source_path.display()))?;
+    // A file or a directory of them: `requirements_text` joins whichever it is
+    // given. Reading the path straight meant a directory came back as
+    // "Access is denied", which is what a `read` on one says on Windows and is
+    // not a sentence about requirements.
+    let source = perp_core::layout::requirements_text(&source_path);
+    if source.trim().is_empty() {
+        return Err(format!("{}: no requirements found", source_path.display()));
+    }
 
     let mut documents = Vec::new();
     collect_markdown(&binding.root().join("docs"), &source_path, &mut documents)?;
@@ -1457,7 +1463,7 @@ fn cmd_panel(args: &[&str]) -> std::result::Result<(), String> {
     let source = binding
         .resolve("path.requirements")
         .ok()
-        .and_then(|path| std::fs::read_to_string(path).ok())
+        .map(|path| perp_core::layout::requirements_text(&path))
         .unwrap_or_default();
     let view = View::of(&records, &Approvals::new(), artifacts, time::now())
         .with_requirements(&source)
@@ -1595,10 +1601,9 @@ fn cmd_cycle(args: &[&str]) -> std::result::Result<(), String> {
         );
     }
 
-    let source = std::fs::read_to_string(
-        binding.resolve("path.requirements").map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
+    let source = perp_core::layout::requirements_text(
+        &binding.resolve("path.requirements").map_err(|e| e.to_string())?,
+    );
     let waiting = perp_core::cycle::backlog(&source, usize::MAX).len();
 
     println!("cycle {cycle}, from phase {from}");
