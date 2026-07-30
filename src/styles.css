@@ -2044,6 +2044,15 @@ body.perp-resizing {
   white-space: pre-wrap;
 }
 
+.perp-setup-problem {
+  margin-left: 0.4rem;
+  padding: 0 0.3rem;
+  border-radius: 3px;
+  background: var(--danger, #a3272f);
+  color: #fff;
+  font-size: 0.8em;
+}
+
 .perp-money-fraction {
   opacity: 0.55;
 }

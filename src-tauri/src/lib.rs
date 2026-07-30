@@ -826,29 +826,196 @@ fn perp_watch(app: tauri::AppHandle, root: String) {
 
     let generation = PERP_WATCH.fetch_add(1, Ordering::SeqCst) + 1;
     std::thread::spawn(move || {
-        let journal = std::path::Path::new(&root).join("docs/perpetum/journal.jsonl");
-        // `None` until the file exists, so a workspace that gains a journal
-        // mid-run reports its first record as a change rather than as the
+        let dir = std::path::Path::new(&root).join(".harness");
+        // Empty until the first tick, so a workspace that gains a `.harness` while
+        // the editor is open reports its arrival as a change rather than as the
         // baseline.
-        let mut seen: Option<(u64, std::time::SystemTime)> = None;
+        let mut seen: Vec<(String, u64, std::time::SystemTime)> = Vec::new();
+        let mut first = true;
         loop {
             if PERP_WATCH.load(Ordering::SeqCst) != generation {
                 return;
             }
-            let now = std::fs::metadata(&journal)
-                .ok()
-                .and_then(|meta| meta.modified().ok().map(|when| (meta.len(), when)));
-            if let Some(now) = now {
-                if seen != Some(now) {
-                    seen = Some(now);
-                    if app.emit("perp:changed", ()).is_err() {
-                        return;
-                    }
+            let now = harness_snapshot(&dir);
+            if now != seen {
+                let changed = changed_between(&seen, &now);
+                seen = now;
+                // The first tick only establishes the baseline. Reporting every
+                // file as changed the moment the panel opens would rebuild
+                // everything for nothing.
+                if !first && app.emit("perp:changed", changed).is_err() {
+                    return;
                 }
+                first = false;
             }
             std::thread::sleep(std::time::Duration::from_millis(PERP_WATCH_MS));
         }
     });
+}
+
+/// Every file under `.harness`, with its size and mtime.
+///
+/// Sorted, so two snapshots compare by value. A dozen `stat` calls twice a second
+/// is cheaper than being wrong about whether anything moved, and this directory
+/// never holds enough files for a cleverer answer to earn its code.
+///
+/// It used to watch `journal.jsonl` alone — and kept watching the pre-`.harness`
+/// path after everything moved, so live progress was dead for a day behind a
+/// fifteen-second backstop poll that hid it.
+fn harness_snapshot(dir: &std::path::Path) -> Vec<(String, u64, std::time::SystemTime)> {
+    let mut out = Vec::new();
+    walk_harness(dir, dir, &mut out);
+    out.sort();
+    out
+}
+
+fn walk_harness(
+    root: &std::path::Path,
+    dir: &std::path::Path,
+    out: &mut Vec<(String, u64, std::time::SystemTime)>,
+) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            walk_harness(root, &path, out);
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else { continue };
+        let Ok(when) = meta.modified() else { continue };
+        let relative = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        out.push((relative, meta.len(), when));
+    }
+}
+
+/// Which paths differ between two snapshots — added, removed or rewritten.
+///
+/// Named rather than a bare "something changed", because the front end does
+/// different work for each: a journal write refreshes the panel, a binding or
+/// links edit means the setup itself moved, and a requirements edit changes a menu.
+fn changed_between(
+    before: &[(String, u64, std::time::SystemTime)],
+    after: &[(String, u64, std::time::SystemTime)],
+) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for entry in after {
+        if before.iter().find(|old| old.0 == entry.0) != Some(entry) {
+            names.push(entry.0.clone());
+        }
+    }
+    for entry in before {
+        if !after.iter().any(|new| new.0 == entry.0) {
+            names.push(entry.0.clone());
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// What the Harness menu needs to know, in one call.
+///
+/// Three questions that would otherwise be three round trips every time a menu
+/// opens: whether this is a workspace at all, where `init` would put one if not,
+/// and which requirements files exist.
+#[tauri::command]
+fn harness_state(from: String) -> serde_json::Value {
+    let start = std::path::Path::new(&from);
+
+    let mut root: Option<std::path::PathBuf> = None;
+    let mut dir = Some(start);
+    while let Some(candidate) = dir {
+        if candidate.join(".harness/binding.md").is_file() {
+            root = Some(candidate.to_path_buf());
+            break;
+        }
+        dir = candidate.parent();
+    }
+
+    // Where `init` would go: the top of the repository if there is one, because a
+    // harness belongs beside the project rather than beside whichever file happens
+    // to be open.
+    let mut init_root = start.to_path_buf();
+    let mut dir = Some(start);
+    while let Some(candidate) = dir {
+        if candidate.join(".git").exists() {
+            init_root = candidate.to_path_buf();
+            break;
+        }
+        dir = candidate.parent();
+    }
+
+    let requirements = root
+        .as_ref()
+        .map(|found| {
+            let dir = found.join(".harness/requirements");
+            let mut names = Vec::new();
+            collect_requirements(&dir, &dir, &mut names);
+            names.sort();
+            names
+        })
+        .unwrap_or_default();
+
+    serde_json::json!({
+        "root": root.map(|path| path.to_string_lossy().replace('\\', "/")),
+        "initRoot": init_root.to_string_lossy().replace('\\', "/"),
+        "requirements": requirements,
+    })
+}
+
+fn collect_requirements(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_requirements(root, &path, out);
+        } else if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("md")) {
+            out.push(
+                path.strip_prefix(root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            );
+        }
+    }
+}
+
+/// Scaffold a workspace (`L-21`).
+///
+/// Its own command rather than an entry on `perp_run`'s list, for the same reason
+/// `perp_start` is: that list is reads. `init` writes — though it never
+/// overwrites, so a second run fills gaps and keeps what it finds.
+#[tauri::command]
+fn perp_init(root: String) -> Result<String, String> {
+    let program = std::env::var("PERP_BIN").unwrap_or_else(|_| "perp".to_string());
+    let mut command = std::process::Command::new(&program);
+    command.arg("init").arg("--root").arg(&root);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    match command.output() {
+        Ok(out) if out.status.success() => {
+            Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+        }
+        Ok(out) => Err(format!(
+            "perp init exited {}: {}",
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(format!("not-installed: the Perpetum harness ({program}) was not found."))
+        }
+        Err(e) => Err(format!("could not run {program}: {e}")),
+    }
 }
 
 /// Stop watching. Called when the panel is pointed at nothing.
@@ -1759,6 +1926,8 @@ pub fn run() {
             perp_run,
             perp_root,
             perp_start,
+            perp_init,
+            harness_state,
             perp_watch,
             perp_unwatch,
             startup_files,

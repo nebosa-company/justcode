@@ -27,17 +27,49 @@ let state = {
   timer: null,
   // What the last `/btw` was answered with, so sending gives a visible result.
   sent: null,
+  // What `perp bind` last complained about, if anything.
+  setupProblem: null,
   sending: false,
 };
 
 let unlisten = null;
 
+/** What the panel should do about a file that changed under `.harness`.
+ *
+ * The watcher names the paths rather than saying "something moved", because the
+ * work differs: a journal write is a new step to show, and a binding or links
+ * edit means the setup itself is different and worth re-validating before the
+ * next run trips over it.
+ */
+function reactTo(changed) {
+  const paths = Array.isArray(changed) ? changed : [];
+  const touched = (name) => paths.some((path) => path.endsWith(name));
+  return {
+    // No names at all still means re-read: an older harness emitted no payload,
+    // and refusing to refresh would be worse than refreshing once too often.
+    view: paths.length === 0 || touched("journal.jsonl") || touched("state.md") || touched(".html"),
+    setup: touched("binding.md") || touched("links.md"),
+    // A requirements file appearing or moving changes a menu, not a view. The
+    // Harness menu builds its Requirements submenu from a cached list, and adding
+    // a file in a subfolder left the menu showing yesterday's tree until the
+    // active tab happened to change.
+    structure:
+      touched("binding.md") ||
+      touched("links.md") ||
+      paths.some((path) => path.startsWith("requirements/")),
+  };
+}
+
 /** The watcher tells us when to re-read, rather than a timer guessing (`I-2`). */
 async function startListening() {
   if (unlisten) return;
   try {
-    unlisten = await listen("perp:changed", () => {
-      if (state.root) refresh();
+    unlisten = await listen("perp:changed", (event) => {
+      if (!state.root) return;
+      const what = reactTo(event.payload);
+      if (what.view) refresh();
+      if (what.setup) revalidate();
+      if (what.structure && onSetupChanged) onSetupChanged();
     });
   } catch {
     // No event bridge is survivable — the interval below still runs.
@@ -45,16 +77,43 @@ async function startListening() {
   }
 }
 
+/** Re-run `perp bind` after the binding or links changed.
+ *
+ * This is the command that answers "is the setup still good": it resolves every
+ * path and reports a link whose credential is unset. Running it on the edit means
+ * a typo is a line in the panel now, rather than a refusal an hour later when a
+ * cycle is started.
+ *
+ * The result is a warning, never a failure. Editing a binding is a thing people
+ * do in several saves, and a panel that turns red halfway through is a panel that
+ * cries wolf.
+ */
+async function revalidate() {
+  if (!state.root) return;
+  try {
+    await invoke("perp_run", { subcommand: "bind", args: [], root: state.root });
+    state.setupProblem = null;
+  } catch (error) {
+    state.setupProblem = `${error}`;
+  }
+  render();
+}
+
 let host = null;
 let onOpenArtifact = null;
 let onShowTranscript = null;
 let onProblems = null;
+let onSetupChanged = null;
 
 /** Wire the panel to the editor's own surfaces (`I-4`). */
-export function configure({ openArtifact, showTranscript, reportProblems } = {}) {
+export function configure({ openArtifact, showTranscript, reportProblems, setupChanged } = {}) {
   onOpenArtifact = openArtifact || null;
   onShowTranscript = showTranscript || null;
   onProblems = reportProblems || null;
+  // Called when the workspace's own files move — a binding, a links file, a
+  // requirements file. The panel does not own the menus, so it says so and lets
+  // the editor decide what to rebuild.
+  onSetupChanged = setupChanged || null;
 }
 
 export function mount(element) {
@@ -245,6 +304,14 @@ function renderHeader(view) {
     const label = el("span", "perp-root", name);
     label.title = state.root;
     header.append(label);
+  }
+
+  // What `perp bind` said the last time the binding or links changed. A warning
+  // beside the workspace it is about, not an error that stops anything.
+  if (state.setupProblem) {
+    const problem = el("span", "perp-setup-problem", "binding");
+    problem.title = state.setupProblem;
+    header.append(problem);
   }
 
   const counts = el("span", "perp-counts");

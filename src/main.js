@@ -162,6 +162,19 @@ let activeTabId = null;
 let nextTabId = 1;
 let untitledCount = 0;
 let fontSize = DEFAULT_FONT_SIZE;
+// Declared with the rest of the module state, not beside the panel code that
+// updates it: `buildMenus()` runs at top level and reads it, so a `let` further
+// down the file is in its dead zone when the menu bar is first built — and the
+// throw takes the whole window with it.
+/** What the Harness menu knows about the open file's project.
+ *
+ * Cached because `buildMenus()` is synchronous and asking the filesystem three
+ * questions while a menu is opening would either block it or arrive too late.
+ * Refreshed when the active tab changes and when the watcher says `.harness`
+ * moved, which are the only two ways any of it can become untrue.
+ */
+let harness = { root: null, initRoot: null, requirements: [] };
+
 let theme = "dark";
 let showToolbar = true;
 let showStatusbar = true;
@@ -492,6 +505,8 @@ function activateTab(id) {
   renderTabs();
   renderStatus();
   followPerpWorkspace();
+  // A different file may belong to a different project, or to none.
+  refreshHarnessState().then(() => createMenuBar(dom.menubar, buildMenus()));
   pane.view.focus();
 }
 
@@ -2687,7 +2702,18 @@ function buildMenus() {
     // lowercased key — `"H"` matched nothing at all. And `a`, not `h`: Help
     // already holds `h`, and Alt+H meaning Help is older than this app.
     mnemonic: "a",
-    items: [
+    // Init alone until there is a workspace. Offering Progress, Start and six
+    // views for a project that has no `.harness` is offering six ways to be told
+    // the same thing.
+    items: !harness.root
+      ? [
+          {
+            label: t("harness.init"),
+            icon: "brain",
+            run: initHarness,
+          },
+        ]
+      : [
       {
         label: t("harness.progress"),
         icon: "brain",
@@ -2702,6 +2728,24 @@ function buildMenus() {
         // one spends money and takes over the workspace, and a key that close to
         // the others would eventually be pressed by accident.
         run: startCycle,
+      },
+      { separator: true },
+      {
+        label: t("harness.requirements"),
+        icon: "file",
+        submenu: () =>
+          harness.requirements.length
+            ? requirementItems(harness.requirements)
+            : [{ label: t("harness.noRequirements"), enabled: () => false, run() {} }],
+      },
+      {
+        label: t("harness.settings"),
+        icon: "toolbar",
+        submenu: () => [
+          { label: t("harness.vision"), icon: "file", run: () => openHarnessFile("vision.md") },
+          { label: t("harness.binding"), icon: "file", run: () => openHarnessFile("binding.md") },
+          { label: t("harness.links"), icon: "link", run: () => openHarnessFile("links.md") },
+        ],
       },
       { separator: true },
       // Built from the panel's own table, so the menu cannot name a tab the
@@ -3329,6 +3373,14 @@ perp.configure({
     });
     renderStatus();
   },
+  // A binding, links or requirements file moved: re-read what the Harness menu
+  // shows and rebuild the bar. Cheap, and the alternative is a menu that is right
+  // only until someone adds a file.
+  setupChanged: async () => {
+    await refreshHarnessState();
+    createMenuBar(dom.menubar, buildMenus());
+  },
+
   openArtifact: async (relative) => {
     const root = await perpRoot();
     if (!root) return;
@@ -3343,6 +3395,96 @@ perp.configure({
 /** The workspace the panel reads. The folder of whatever file is open. */
 /** The workspace the panel is currently reading, to notice when it changes. */
 let perpAttachedRoot = null;
+
+
+async function refreshHarnessState() {
+  const path = activeTab()?.path;
+  const from = path ? path.replace(/[\/][^\/]*$/, "") : null;
+  if (!from) {
+    harness = { root: null, initRoot: null, requirements: [] };
+    return;
+  }
+  try {
+    const state = await invoke("harness_state", { from });
+    harness = {
+      root: state.root || null,
+      initRoot: state.initRoot || null,
+      requirements: Array.isArray(state.requirements) ? state.requirements : [],
+    };
+  } catch {
+    harness = { root: null, initRoot: null, requirements: [] };
+  }
+}
+
+/** Create a workspace where the open file's project is.
+ *
+ * Confirmed first, and it names the directory. `init` writes into a repository
+ * and the answer to "which one" is inferred from whatever file happens to be
+ * open, which is exactly the kind of guess worth showing before acting on.
+ */
+async function initHarness() {
+  await refreshHarnessState();
+  const where = harness.initRoot;
+  if (!where) {
+    await message(t("harness.noWorkspace"), { title: t("menu.harness") });
+    return;
+  }
+  const ok = await ask(t("harness.initConfirm", { path: where }), {
+    title: t("harness.initTitle"),
+    kind: "info",
+  });
+  if (!ok) return;
+  try {
+    const said = await invoke("perp_init", { root: where });
+    await refreshHarnessState();
+    createMenuBar(dom.menubar, buildMenus());
+    await message(said || t("harness.initDone"), { title: t("harness.initTitle") });
+  } catch (error) {
+    await message(`${error}`, { title: t("harness.initTitle"), kind: "error" });
+  }
+}
+
+/** Open one of the harness's own files, by its path inside `.harness`. */
+function openHarnessFile(relative) {
+  if (!harness.root) return;
+  openPath(`${harness.root}/.harness/${relative}`).then(renderStatus);
+}
+
+/** The Requirements submenu, mirroring the folder structure.
+ *
+ * A flat list of `editor/tabs.md` strings reads badly once there are more than a
+ * few, so a path with a directory in it becomes a nested submenu — the menu
+ * follows the folders rather than restating them in every label.
+ */
+function requirementItems(paths, prefix = "") {
+  const here = [];
+  const folders = new Map();
+  for (const path of paths) {
+    const cut = path.indexOf("/");
+    if (cut === -1) {
+      here.push(path);
+      continue;
+    }
+    const folder = path.slice(0, cut);
+    const rest = path.slice(cut + 1);
+    if (!folders.has(folder)) folders.set(folder, []);
+    folders.get(folder).push(rest);
+  }
+  const items = [...folders.entries()].map(([folder, inside]) => ({
+    label: folder,
+    icon: "folder",
+    submenu: () => requirementItems(inside, `${prefix}${folder}/`),
+  }));
+  for (const name of here) {
+    items.push({
+      label: name,
+      icon: "file",
+      hint: `.harness/requirements/${prefix}${name}`,
+      run: () => openHarnessFile(`requirements/${prefix}${name}`),
+    });
+  }
+  return items;
+}
 
 /** Re-point the panel when the active tab belongs to a different workspace.
  *
