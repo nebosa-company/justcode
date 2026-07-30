@@ -19,6 +19,13 @@ use crate::link::{Health, Link, Links, Mode, Role};
 use crate::net::{Method, Request, Response, Secret, Transport};
 use crate::probe::{Capabilities, ModelFacts, ProbeCache, ProbeKey};
 
+/// The Messages API version Anthropic is asked for.
+///
+/// Dated, and sent on every request: the API refuses one without it rather than
+/// choosing for you, which is the right call — a silently-changing wire format is
+/// worse than an error.
+pub const ANTHROPIC_VERSION: &str = "2023-06-01";
+
 /// Which wire protocol a link speaks (`M-21`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
@@ -426,21 +433,47 @@ impl<'a> Client<'a> {
         })
     }
 
+    /// Where to send a request: what the binding said, or the kind's own default.
+    ///
+    /// The default exists because these addresses are not a choice — there is one
+    /// `api.openai.com` — and a binding that must state the obvious is a binding
+    /// with one more thing to get wrong. A stated `base_url` still wins, which is
+    /// the case that matters: a gateway, a proxy, or Ollama on another port.
     fn base(link: &Link) -> Result<&str> {
-        link.base_url.as_deref().ok_or_else(|| {
-            Error::unbound(
-                format!("link.{}", link.name),
-                "has no base_url. An lmlink peer is reached through the local LM Studio server, \
-                 which is a separate link — see the open question in the requirements.",
-            )
-        })
+        link.base_url
+            .as_deref()
+            .or_else(|| link.kind.default_base_url())
+            .ok_or_else(|| {
+                Error::unbound(
+                    format!("link.{}", link.name),
+                    format!(
+                        "has no base_url and `{}` has no default. An lmlink peer is reached \
+                         through the local LM Studio server, which is a separate link, and \
+                         `claude-cli` is a program rather than an address.",
+                        link.kind.as_str()
+                    ),
+                )
+            })
     }
 
+    /// Attach the credential in whatever header this kind reads it from.
+    ///
+    /// Anthropic wants `x-api-key` with a bare value; everything else wants
+    /// `Authorization: Bearer`. Asked of the kind rather than branched on here, so
+    /// a kind added later cannot be given a header in one place and forgotten in
+    /// another.
     fn authorise(link: &Link, request: Request) -> Request {
-        match &link.auth_env {
-            Some(name) => request.bearer(Secret::from_env_var(name)),
-            None => request,
+        let Some(name) = &link.auth_env else { return request };
+        let secret = Secret::from_env_var(name);
+        let request = if link.kind.bearer_prefixed() {
+            request.bearer(secret)
+        } else {
+            request.auth_header(link.kind.auth_header(), secret)
+        };
+        if link.kind == crate::link::Kind::Anthropic {
+            return request.header("anthropic-version", ANTHROPIC_VERSION);
         }
+        request
     }
 
     /// What models this link actually offers (`M-7`).

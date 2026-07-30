@@ -111,6 +111,21 @@ impl Request {
         self
     }
 
+    /// A credential in a header of its own name, sent bare.
+    ///
+    /// Anthropic reads `x-api-key` with no scheme prefix. Still goes through
+    /// `auth` rather than `headers`, because that is the field the transport
+    /// passes by stdin and never by argv (`S-2`).
+    pub fn auth_header(mut self, name: &str, secret: Secret) -> Request {
+        self.auth = Some((name.to_string(), secret));
+        self
+    }
+
+    pub fn header(mut self, name: &str, value: &str) -> Request {
+        self.headers.push((name.to_string(), value.to_string()));
+        self
+    }
+
     pub fn with_deadline(mut self, connect: Duration, total: Duration) -> Request {
         self.connect_timeout = connect;
         self.max_time = total;

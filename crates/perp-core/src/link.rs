@@ -34,19 +34,90 @@ pub enum Kind {
     LmLink,
     DeepSeek,
     OpenAiCompat,
+    /// OpenAI proper, which is also what ChatGPT's API is.
+    OpenAi,
+    /// Anthropic's Messages API. The one provider here that is not
+    /// OpenAI-shaped: different path, different auth header, different body.
+    Anthropic,
+    /// The `claude` command, driven as a subprocess rather than over HTTP.
+    ClaudeCli,
+    /// xAI. OpenAI-compatible.
+    Grok,
+    /// Ollama's OpenAI-compatible endpoint, not its native `/api/generate`.
+    Ollama,
+    /// vLLM's OpenAI-compatible server.
+    VLlm,
 }
 
 impl Kind {
+    /// Where this kind lives, when the binding does not say.
+    ///
+    /// A default is worth having because these addresses are not a choice: there
+    /// is one `api.openai.com`, and Ollama is on 11434 unless somebody moved it.
+    /// A binding that names a `base_url` still wins — a local gateway or a proxy
+    /// is exactly the case where the default is wrong.
+    ///
+    /// `None` for the two that have no address: an `lmlink` peer is reached
+    /// through a separate link, and `claude-cli` is a program rather than a host.
+    pub fn default_base_url(self) -> Option<&'static str> {
+        match self {
+            Kind::LmStudio => Some("http://localhost:1234"),
+            Kind::DeepSeek => Some("https://api.deepseek.com"),
+            Kind::OpenAi => Some("https://api.openai.com"),
+            Kind::Anthropic => Some("https://api.anthropic.com"),
+            Kind::Grok => Some("https://api.x.ai"),
+            Kind::Ollama => Some("http://localhost:11434"),
+            Kind::VLlm => Some("http://localhost:8000"),
+            Kind::LmLink | Kind::ClaudeCli | Kind::OpenAiCompat => None,
+        }
+    }
+
+    /// The header a credential goes in, and any version header the API demands.
+    ///
+    /// Everything here is `Authorization: Bearer` except Anthropic, which wants
+    /// `x-api-key` and a dated `anthropic-version` — omit the latter and the API
+    /// refuses the request rather than picking a default.
+    pub fn auth_header(self) -> &'static str {
+        match self {
+            Kind::Anthropic => "x-api-key",
+            _ => "Authorization",
+        }
+    }
+
+    /// Whether the credential is sent as `Bearer <key>` or bare.
+    pub fn bearer_prefixed(self) -> bool {
+        !matches!(self, Kind::Anthropic)
+    }
+
+    /// Whether this kind speaks OpenAI's `/v1/chat/completions`.
+    ///
+    /// Six of the nine do, which is why adding most providers is a name and a
+    /// default rather than a new wire format.
+    pub fn is_openai_shaped(self) -> bool {
+        !matches!(self, Kind::Anthropic | Kind::ClaudeCli | Kind::LmLink)
+    }
+
+    /// Whether this kind is a program rather than an endpoint.
+    pub fn is_subprocess(self) -> bool {
+        matches!(self, Kind::ClaudeCli)
+    }
+
     pub fn parse(text: &str) -> Result<Kind> {
         match text {
             "lmstudio" => Ok(Kind::LmStudio),
             "lmlink" => Ok(Kind::LmLink),
             "deepseek" => Ok(Kind::DeepSeek),
             "openai-compat" => Ok(Kind::OpenAiCompat),
+            "openai" => Ok(Kind::OpenAi),
+            "anthropic" => Ok(Kind::Anthropic),
+            "claude-cli" => Ok(Kind::ClaudeCli),
+            "grok" => Ok(Kind::Grok),
+            "ollama" => Ok(Kind::Ollama),
+            "vllm" => Ok(Kind::VLlm),
             other => Err(Error::unbound(
                 "link kind",
                 format!(
-                    "`{other}` is not one of lmstudio, lmlink, deepseek, openai-compat"
+                    "`{other}` is not one of lmstudio, lmlink, deepseek, openai, anthropic,                      claude-cli, grok, ollama, vllm, openai-compat"
                 ),
             )),
         }
@@ -58,6 +129,12 @@ impl Kind {
             Kind::LmLink => "lmlink",
             Kind::DeepSeek => "deepseek",
             Kind::OpenAiCompat => "openai-compat",
+            Kind::OpenAi => "openai",
+            Kind::Anthropic => "anthropic",
+            Kind::ClaudeCli => "claude-cli",
+            Kind::Grok => "grok",
+            Kind::Ollama => "ollama",
+            Kind::VLlm => "vllm",
         }
     }
 
@@ -68,10 +145,25 @@ impl Kind {
     }
 
     /// The privacy class this kind can never be configured out of.
+    ///
+    /// `Some` only where the answer cannot be otherwise. Everything else is
+    /// `None` and the operator declares it, which is the conservative direction
+    /// on a boundary whose whole job is stopping data leaving (`M-4`).
     fn implied_privacy(self) -> Option<Privacy> {
         match self {
+            // Local by construction: neither has a hosted API to point at.
             Kind::LmStudio | Kind::LmLink => Some(Privacy::Local),
-            Kind::DeepSeek => Some(Privacy::Cloud),
+            // Somebody else's computer, always.
+            Kind::DeepSeek | Kind::OpenAi | Kind::Anthropic | Kind::Grok => Some(Privacy::Cloud),
+            // A program rather than an endpoint, and one that talks to Anthropic
+            // on its own account. `local-only` must not reach for it thinking it
+            // is a local model.
+            Kind::ClaudeCli => Some(Privacy::Cloud),
+            // Self-hosted, and usually on this machine — but the default base_url
+            // is only a default, and one pointed at a box across the internet
+            // would carry `Local` into a `local-only` run and leak. Declared
+            // rather than assumed.
+            Kind::Ollama | Kind::VLlm => None,
             // Could be a container on this machine or a proxy on the internet.
             Kind::OpenAiCompat => None,
         }
@@ -642,6 +734,78 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_kind_parses_back_from_the_name_it_prints() {
+        // The catalog and the parser are two lists that have to agree, and the
+        // failure is a binding that names a kind the harness prints but cannot
+        // read.
+        for name in [
+            "lmstudio", "lmlink", "deepseek", "openai-compat", "openai", "anthropic",
+            "claude-cli", "grok", "ollama", "vllm",
+        ] {
+            let kind = Kind::parse(name).expect(name);
+            assert_eq!(kind.as_str(), name, "round trip for {name}");
+        }
+        assert!(Kind::parse("chatgpt").is_err(), "a plausible name is still not one of them");
+    }
+
+    #[test]
+    fn a_hosted_kind_cannot_be_declared_local() {
+        // `M-4`. The direction that matters: a mistake here sends work to
+        // somebody else's computer in a run the operator asked to keep at home.
+        for kind in [Kind::OpenAi, Kind::Anthropic, Kind::Grok, Kind::DeepSeek, Kind::ClaudeCli] {
+            assert_eq!(
+                kind.implied_privacy(),
+                Some(Privacy::Cloud),
+                "{} is hosted",
+                kind.as_str()
+            );
+        }
+        for kind in [Kind::LmStudio, Kind::LmLink] {
+            assert_eq!(kind.implied_privacy(), Some(Privacy::Local), "{}", kind.as_str());
+        }
+        // Self-hosted but reachable over a network: the operator declares it,
+        // because the default base_url is only a default and one pointed across
+        // the internet would carry `Local` into a `local-only` run.
+        for kind in [Kind::Ollama, Kind::VLlm, Kind::OpenAiCompat] {
+            assert_eq!(kind.implied_privacy(), None, "{} is undetermined", kind.as_str());
+        }
+    }
+
+    #[test]
+    fn a_kind_with_one_obvious_address_carries_it() {
+        assert_eq!(Kind::OpenAi.default_base_url(), Some("https://api.openai.com"));
+        assert_eq!(Kind::Anthropic.default_base_url(), Some("https://api.anthropic.com"));
+        assert_eq!(Kind::Grok.default_base_url(), Some("https://api.x.ai"));
+        assert_eq!(Kind::Ollama.default_base_url(), Some("http://localhost:11434"));
+        assert_eq!(Kind::VLlm.default_base_url(), Some("http://localhost:8000"));
+        // Neither of these is an address: one is reached through another link, the
+        // other is a program.
+        assert_eq!(Kind::LmLink.default_base_url(), None);
+        assert_eq!(Kind::ClaudeCli.default_base_url(), None);
+    }
+
+    #[test]
+    fn only_anthropic_departs_from_bearer() {
+        assert_eq!(Kind::Anthropic.auth_header(), "x-api-key");
+        assert!(!Kind::Anthropic.bearer_prefixed());
+        for kind in [Kind::OpenAi, Kind::Grok, Kind::DeepSeek, Kind::Ollama, Kind::VLlm] {
+            assert_eq!(kind.auth_header(), "Authorization", "{}", kind.as_str());
+            assert!(kind.bearer_prefixed(), "{}", kind.as_str());
+        }
+    }
+
+    #[test]
+    fn the_openai_shaped_kinds_are_the_ones_that_need_no_new_wire_format() {
+        for kind in [Kind::OpenAi, Kind::Grok, Kind::Ollama, Kind::VLlm, Kind::DeepSeek, Kind::LmStudio] {
+            assert!(kind.is_openai_shaped(), "{}", kind.as_str());
+        }
+        assert!(!Kind::Anthropic.is_openai_shaped(), "a different body and path");
+        assert!(!Kind::ClaudeCli.is_openai_shaped(), "not HTTP at all");
+        assert!(Kind::ClaudeCli.is_subprocess());
+        assert!(!Kind::Anthropic.is_subprocess());
+    }
 
     #[test]
     fn a_credential_is_checked_when_the_project_is_bound() {
