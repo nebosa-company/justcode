@@ -239,15 +239,33 @@ export function renderMenuItems(container, items, close, parent = null) {
  * @param {Array<{label: string, mnemonic?: string, items: Array<object>}>} menus
  */
 export function createMenuBar(container, menus) {
-  // The bar is rebuilt on every language change. Clearing the container drops
-  // the old DOM, but its two document-level listeners would outlive it and keep
-  // the whole previous menu tree alive, so the last build is torn down first.
+  // A rebuild deletes whatever is open along with the rest of the bar. That is
+  // fine when the language changed, because the menu that changed it has closed
+  // by then — but the harness watcher calls this too, whenever a binding, links
+  // or requirements file is written, and it has no idea a menu is being read
+  // from at that moment. Held until the menu closes rather than dropped, so the
+  // bar still ends up current.
+  if (container.__isOpen?.()) {
+    container.__pending = menus;
+    return;
+  }
+
+  // Any rebuild supersedes one that was waiting, and a queued flush from the
+  // previous build may still be about to run. Without this, choosing a language
+  // from a menu that had a rebuild pending would put the bar back into the
+  // language it was just switched out of.
+  container.__pending = null;
+
+  // Clearing the container drops the old DOM, but its two document-level
+  // listeners would outlive it and keep the whole previous menu tree alive, so
+  // the last build is torn down first.
   container.__teardown?.();
   container.textContent = "";
   container.setAttribute("role", "menubar");
   let openIndex = -1;
   const titles = [];
   const dropdowns = [];
+  container.__isOpen = () => openIndex !== -1;
 
   function close() {
     if (openIndex === -1) return;
@@ -255,6 +273,25 @@ export function createMenuBar(container, menus) {
     titles[openIndex].setAttribute("aria-expanded", "false");
     dropdowns[openIndex].hidden = true;
     openIndex = -1;
+    flushPending();
+  }
+
+  /** Rebuild with whatever arrived while a menu was open — but not yet.
+   *
+   * `close` also runs on the way from one menu to the next, and when an item is
+   * clicked with its action still to come. Rebuilding then would delete the
+   * menu being opened, or the bar the action is about to use. Waiting for the
+   * current interaction to finish and checking again costs nothing and is
+   * correct in both cases.
+   */
+  function flushPending() {
+    if (!container.__pending) return;
+    queueMicrotask(() => {
+      if (openIndex !== -1 || !container.__pending) return;
+      const waiting = container.__pending;
+      container.__pending = null;
+      createMenuBar(container, waiting);
+    });
   }
 
   // Tracks whether the open menu was opened by a click rather than a hover, so

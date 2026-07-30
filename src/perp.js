@@ -101,8 +101,10 @@ async function revalidate() {
 
 let host = null;
 
-// The composer's own nodes, held across renders. [clearAbove] rebuilds them if
-// the panel is mounted somewhere else, so a stale reference cannot survive.
+// The two nodes held across renders — the scrolling body and the composer —
+// and the composer's own parts. [clearAbove] rebuilds them if the panel is
+// mounted somewhere else, so a stale reference cannot survive.
+let scroller = null;
 let composer = null;
 let parts = null;
 
@@ -216,8 +218,12 @@ function problemsOf(view) {
 }
 
 export function selectTab(name) {
+  const moved = state.tab !== name;
   state.tab = name;
   render();
+  // Keeping your place is about the tab you are reading. A different one opens
+  // at the top, which for a newest-first list is where it starts.
+  if (moved && scroller) scroller.scrollTop = 0;
 }
 
 function el(tag, className, text) {
@@ -241,24 +247,41 @@ export function inFlight() {
   return Boolean(state.view && state.view.position && state.view.position.in_flight);
 }
 
-/** Clear the region a render owns, and leave the composer where it is.
+/** Clear the region a render owns, and leave what holds state where it is.
  *
- * The composer is built once and kept as the panel's last child, because a text
- * field cannot survive being redrawn: removing a focused element blurs it, and
- * `replaceChildren` removed this one on every refresh. The watcher fires on each
- * journal write and the backstop poll every fifteen seconds, so a note being
- * typed during a run lost the cursor after a few seconds. Everything above it is
- * a projection and safe to rebuild; the input holds something only the person
- * typing has.
+ * Two nodes outlive a render. The composer, because a text field cannot survive
+ * being redrawn — removing a focused element blurs it, so a note being typed
+ * during a run lost the cursor and the half-typed text with it. And the body,
+ * because it is the scroll container: rebuilding it put someone reading an
+ * earlier step back at the top every time the journal grew.
+ *
+ * The header and the tabs are pure projections of the view and are rebuilt.
  */
 function clearAbove() {
-  if (composer && composer.parentNode === host) {
-    while (host.firstChild !== composer) host.removeChild(host.firstChild);
+  if (scroller && scroller.parentNode === host) {
+    while (host.firstChild !== scroller) host.removeChild(host.firstChild);
     return;
   }
   host.replaceChildren();
+  scroller = el("div", "perp-body");
   composer = buildComposer();
-  host.append(composer);
+  host.append(scroller, composer);
+}
+
+/** Refill the body, and leave the reader where they were.
+ *
+ * The timeline is newest first, so what arrives during a run is prepended and
+ * everything below it slides down by however much arrived. Restoring the old
+ * offset alone would still move the row being read, so the height the list grew
+ * by is added back. At the top the offset is zero and stays zero, which is where
+ * someone following a run wants to be.
+ */
+function fill(paint) {
+  const was = { top: scroller.scrollTop, height: scroller.scrollHeight };
+  const next = el("div");
+  paint(next);
+  scroller.replaceChildren(...next.childNodes);
+  scroller.scrollTop = was.top > 0 ? was.top + (scroller.scrollHeight - was.height) : 0;
 }
 
 function render() {
@@ -274,35 +297,36 @@ function render() {
 
   if (!host) return;
   clearAbove();
-  const add = (node) => host.insertBefore(node, composer);
+  const add = (node) => host.insertBefore(node, scroller);
 
   // Every early return still lands on [dressComposer], which is what hides it:
-  // there is nothing to leave a note on without a workspace behind it.
+  // there is nothing to leave a note on without a workspace behind it. The
+  // message goes in the body so there is one scroll container either way.
   if (!state.root) {
-    add(el("p", "perp-empty", t("panel.noWorkspace")));
+    fill((body) => body.append(el("p", "perp-empty", t("panel.noWorkspace"))));
   } else if (!state.installed) {
     // Absent, not broken. A blank panel reads as a bug.
-    add(el("p", "perp-empty", state.error));
+    fill((body) => body.append(el("p", "perp-empty", state.error)));
   } else if (state.error) {
-    add(el("p", "perp-error", state.error));
+    fill((body) => body.append(el("p", "perp-error", state.error)));
   } else if (!state.view) {
-    add(el("p", "perp-empty", t("panel.reading")));
+    fill((body) => body.append(el("p", "perp-empty", t("panel.reading"))));
   } else {
     add(renderHeader(state.view));
     add(renderTabs());
-
-    const body = el("div", "perp-body");
-    const view = state.view;
-    if (state.tab === "timeline") renderTimeline(body, view);
-    else if (state.tab === "chat") renderChat(body, view);
-    else if (state.tab === "approvals") renderApprovals(body, view);
-    else if (state.tab === "diff") renderDiff(body, view);
-    else if (state.tab === "btw") renderBtw(body, view);
-    else if (state.tab === "artifacts") renderArtifacts(body, view);
-    add(body);
+    fill((body) => paintTab(body, state.view));
   }
 
   dressComposer();
+}
+
+function paintTab(body, view) {
+  if (state.tab === "timeline") renderTimeline(body, view);
+  else if (state.tab === "chat") renderChat(body, view);
+  else if (state.tab === "approvals") renderApprovals(body, view);
+  else if (state.tab === "diff") renderDiff(body, view);
+  else if (state.tab === "btw") renderBtw(body, view);
+  else if (state.tab === "artifacts") renderArtifacts(body, view);
 }
 
 /** `$0.04` at full strength and the rest of the digits quiet.
