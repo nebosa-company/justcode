@@ -1788,6 +1788,30 @@ button.primary:hover {
   font-size: 0.85rem;
 }
 
+.cycle-fields {
+  display: flex;
+  gap: 1rem;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.cycle-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9em;
+}
+
+.cycle-field input {
+  width: 6rem;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
 #perp-resizer {
   flex: none;
   width: 5px;

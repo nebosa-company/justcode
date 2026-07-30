@@ -15,6 +15,7 @@ import {
   showLanguageDialog,
   showSymbolPicker,
   askSaveChanges,
+  askCycleSize,
   showAssociations,
   showNewFile,
   isOverlayOpen,
@@ -2634,6 +2635,14 @@ function buildMenus() {
         checked: () => Boolean(perpHost) && !perpHost.hidden,
         run: togglePerpPanel,
       },
+      {
+        label: t("harness.startItem"),
+        icon: "play",
+        // No accelerator. Every other item here shows or reads something; this
+        // one spends money and takes over the workspace, and a key that close to
+        // the others would eventually be pressed by accident.
+        run: startCycle,
+      },
       { separator: true },
       // Built from the panel's own table, so the menu cannot name a tab the
       // panel does not have or miss one it gains. Each opens the panel first:
@@ -3298,6 +3307,33 @@ async function perpRoot() {
   } catch {
     return null;
   }
+}
+
+/** Ask how much work to do, then hand it to the harness (`I-1`).
+ *
+ * The panel is opened first and left open: a run you started and cannot see is
+ * worse than one you did not start. The journal watcher does the rest — nothing
+ * here polls, and nothing waits for the cycle, which runs for minutes to an hour.
+ */
+async function startCycle() {
+  const root = await perpRoot();
+  if (!root) {
+    await message(t("harness.noWorkspace"), { title: t("menu.harness") });
+    return;
+  }
+  const size = await askCycleSize({ batches: 3, items: 5 });
+  if (!size) return;
+
+  try {
+    await invoke("perp_start", { batches: size.batches, items: size.items, root });
+  } catch (error) {
+    // A refusal is the interesting case: the harness holds a write lock, so a
+    // second cycle is exactly the mistake this reports rather than swallows.
+    await message(`${error}`, { title: t("menu.harness"), kind: "error" });
+    return;
+  }
+  await openPerpPanel();
+  perp.showTab("timeline");
 }
 
 /** Open the panel if it is shut, and leave it alone if it is not.

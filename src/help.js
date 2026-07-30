@@ -451,6 +451,95 @@ export function askSaveChanges(names) {
 }
 
 /**
+ * How much work to hand the harness. Resolves to `{batches, items}`, or `null`
+ * when dismissed — dismissing must not start a run, so cancel is the default
+ * every exit path falls back to.
+ *
+ * Numbers, not free text: the two values go straight into argv, and a spinner
+ * that cannot express nonsense is better than validation that explains it.
+ */
+export function askCycleSize(defaults) {
+  return new Promise((resolve) => {
+    let answer = null;
+    const body = openOverlay(t("harness.startTitle"), false, () => resolve(answer));
+
+    const explain = document.createElement("p");
+    explain.textContent = t("harness.startMessage");
+    body.append(explain);
+
+    const fields = document.createElement("div");
+    fields.className = "cycle-fields";
+    const spinner = (labelKey, value, max) => {
+      const wrap = document.createElement("label");
+      wrap.className = "cycle-field";
+      const text = document.createElement("span");
+      text.textContent = t(labelKey);
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "1";
+      input.max = String(max);
+      input.step = "1";
+      input.value = String(value);
+      wrap.append(text, input);
+      fields.append(wrap);
+      return input;
+    };
+    const batches = spinner("harness.batches", defaults.batches, 64);
+    const items = spinner("harness.items", defaults.items, 32);
+    body.append(fields);
+
+    // What the numbers mean, updated as they change: "3 x 5" is not a quantity
+    // of work until it is spelled out.
+    const total = document.createElement("p");
+    total.className = "muted";
+    const bounded = (input, fallback) => {
+      const value = Math.round(Number(input.value));
+      if (!Number.isFinite(value)) return fallback;
+      return Math.min(Math.max(value, 1), Number(input.max));
+    };
+    const describe = () => {
+      const b = bounded(batches, defaults.batches);
+      const i = bounded(items, defaults.items);
+      total.textContent = t("harness.startTotal", { n: b * i, b, i });
+    };
+    describe();
+    batches.addEventListener("input", describe);
+    items.addEventListener("input", describe);
+    body.append(total);
+
+    const buttons = document.createElement("div");
+    buttons.className = "dialog-buttons";
+    const start = document.createElement("button");
+    start.type = "button";
+    start.className = "dialog-button primary";
+    start.textContent = t("harness.start");
+    start.addEventListener("click", () => {
+      answer = { batches: bounded(batches, defaults.batches), items: bounded(items, defaults.items) };
+      closeOverlay();
+    });
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "dialog-button";
+    cancel.textContent = t("dialog.cancel");
+    cancel.addEventListener("click", () => closeOverlay());
+    buttons.append(start, cancel);
+    body.append(buttons);
+
+    // Enter starts, from either field — the whole dialog is two numbers.
+    for (const input of [batches, items]) {
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          start.click();
+        }
+      });
+    }
+    batches.focus();
+    batches.select();
+  });
+}
+
+/**
  * The New File chooser: a blank document, then every type that offers starting
  * content. Starred types sort to the top; both groups are alphabetical.
  *

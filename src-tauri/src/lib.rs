@@ -685,6 +685,94 @@ fn perp_run(subcommand: String, args: Vec<String>, root: String) -> Result<Strin
     }
 }
 
+/// Start an unattended cycle, and do not wait for it (`I-1`).
+///
+/// Deliberately **not** part of `perp_run`'s list. That list is reads, and its
+/// own comment says the panel reads and does not act; quietly adding `cycle` to
+/// it would have turned a read allowlist into a mixed one, where the next person
+/// to add an entry has no rule to follow. Starting a run is a different kind of
+/// thing and gets a different door.
+///
+/// Two properties matter more than the plumbing:
+///
+/// - **It is spawned, not awaited.** A cycle runs for minutes to an hour, and
+///   `output()` would block the UI for all of it. The panel needs nothing back:
+///   it watches the journal, so progress arrives the same way it does for a run
+///   started from a terminal.
+/// - **The numbers are bounded here, not trusted.** They arrive from a dialog
+///   and go into argv, so a nonsense count is refused rather than passed on.
+///
+/// Everything the harness refuses stays refused. This starts a cycle; it cannot
+/// approve one, and `git.push = approval` still means a person says yes.
+#[tauri::command]
+fn perp_start(batches: u32, items: u32, root: String) -> Result<String, String> {
+    if !(1..=64).contains(&batches) || !(1..=32).contains(&items) {
+        return Err(format!(
+            "{batches} batches x {items} items is outside what this can start (1-64 by 1-32)"
+        ));
+    }
+
+    // Beside the journal, truncated per start: this is the last run's console,
+    // not a history. The journal is the history.
+    let log_path = std::path::Path::new(&root).join("docs/perpetum/cycle.log");
+    let log = std::fs::File::create(&log_path)
+        .map_err(|e| format!("{}: {e}", log_path.display()))?;
+
+    let program = std::env::var("PERP_BIN").unwrap_or_else(|_| "perp".to_string());
+    let mut command = std::process::Command::new(&program);
+    command
+        .arg("cycle")
+        .arg("--batches")
+        .arg(batches.to_string())
+        .arg("--items")
+        .arg(items.to_string())
+        .arg("--root")
+        .arg(&root)
+        // To a file, not a pipe and not `null`.
+        //
+        // A pipe nobody reads eventually fills and stalls the cycle, so that was
+        // never an option — but `null` was worse. The first version of this
+        // discarded both streams, and when the harness refused to start (no
+        // credential for its link, `M-24`) the refusal went to the void: no
+        // process, no journal entry, no dialog, nothing. Silence that looks
+        // exactly like success is the one outcome worth engineering against.
+        .stdout(log.try_clone().map_err(|e| format!("{e}"))?)
+        .stderr(log);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(format!("not-installed: the Perpetum harness ({program}) was not found."));
+        }
+        Err(e) => return Err(format!("could not start {program}: {e}")),
+    };
+
+    // A spawn that worked only means a process started. Everything the harness
+    // refuses up front — no budget declared, a link whose credential is unset,
+    // another run holding the write lock — it refuses in the first moment, so a
+    // short look is enough to turn that into an answer instead of a silence. A
+    // cycle that is actually running is still going after this and is left alone.
+    std::thread::sleep(std::time::Duration::from_millis(1200));
+    match child.try_wait() {
+        Ok(Some(status)) if !status.success() => {
+            let said = std::fs::read_to_string(&log_path).unwrap_or_default();
+            let reason = said.trim().lines().last().unwrap_or("it said nothing").to_string();
+            Err(format!("the harness refused to start: {reason}"))
+        }
+        // Exited cleanly in a second: nothing to do, and saying so is better than
+        // implying a run is under way.
+        Ok(Some(_)) => Ok(format!("finished immediately — see {}", log_path.display())),
+        _ => Ok(format!("started {batches} x {items} as pid {}", child.id())),
+    }
+}
+
 /// The workspace a file belongs to: the nearest ancestor holding a binding.
 ///
 /// The panel used to take the folder of the open file and call it the root,
@@ -1670,6 +1758,7 @@ pub fn run() {
             reveal_in_file_manager,
             perp_run,
             perp_root,
+            perp_start,
             perp_watch,
             perp_unwatch,
             startup_files,
