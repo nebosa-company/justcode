@@ -66,6 +66,20 @@ pub const GITIGNORE_BODY: &str = "\
 control
 ";
 
+/// Where requirements live when a project keeps more than one file of them.
+///
+/// A single `perpetum.md` still works and is what a small project wants. A
+/// directory is for the case a big one reaches: one file per area, in folders
+/// that mean something, rather than a thousand-line table.
+pub const REQUIREMENTS: &str = ".harness/requirements";
+
+/// Files a person edits, as opposed to files the harness writes.
+///
+/// Named because the editor offers them as a menu and because `init` writes them:
+/// the two lists would drift if each kept its own.
+pub const VISION: &str = ".harness/vision.md";
+pub const LINKS: &str = ".harness/links.md";
+
 pub fn dir_in(root: &Path) -> PathBuf {
     root.join(DIR)
 }
@@ -91,6 +105,50 @@ pub fn ensure_gitignore(root: &Path) -> bool {
         return false;
     }
     std::fs::write(&path, GITIGNORE_BODY).is_ok()
+}
+
+/// Every requirements file, for a `path.requirements` that names either one file
+/// or a directory of them.
+///
+/// Sorted by path, so the order a batch is worked in is the order the files are
+/// laid out rather than whatever the filesystem felt like. Recursive, because the
+/// point of a directory is subdirectories.
+pub fn requirement_sources(resolved: &Path) -> Vec<PathBuf> {
+    if resolved.is_file() {
+        return vec![resolved.to_path_buf()];
+    }
+    if !resolved.is_dir() {
+        return Vec::new();
+    }
+    let mut found = Vec::new();
+    collect_markdown(resolved, &mut found);
+    found.sort();
+    found
+}
+
+fn collect_markdown(dir: &Path, into: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_markdown(&path, into);
+        } else if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("md")) {
+            into.push(path);
+        }
+    }
+}
+
+/// The text of every requirements file, joined.
+///
+/// Joined rather than parsed per file because every reader of this is line-based:
+/// a table row means the same thing whichever file it came from, and ids are
+/// unique across the project by `V-9` regardless.
+pub fn requirements_text(resolved: &Path) -> String {
+    requirement_sources(resolved)
+        .iter()
+        .filter_map(|path| std::fs::read_to_string(path).ok())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]

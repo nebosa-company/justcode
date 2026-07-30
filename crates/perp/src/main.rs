@@ -40,6 +40,12 @@ const USAGE: &str = "\
 perp — the Perpetum harness
 
 usage:
+  perp init [--root <dir>]
+      Create the files a workspace needs under `.harness/`: a binding that
+      resolves, a requirements directory, a vision and a links file with every
+      provider commented out. Never overwrites — a second run fills in what is
+      missing and says what it left alone.
+
   perp bind [--root <dir>]
       Load the binding, check every path it names, and print what resolved.
       Exits non-zero if the project is unbound or a path is missing.
@@ -183,6 +189,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
             println!("perp {VERSION}");
             Ok(())
         }
+        Some("init") => cmd_init(&args[1..]).map_err(|e| e.to_string()),
         Some("bind") => cmd_bind(&args[1..]).map_err(|e| e.to_string()),
         Some("record") => cmd_record(&args[1..]).map_err(|e| e.to_string()),
         Some("state") => cmd_state(&args[1..]).map_err(|e| e.to_string()),
@@ -244,6 +251,17 @@ fn load(args: &[&str]) -> Result<Binding> {
     let binding = Binding::load(&root)?;
     binding.verify()?;
     Ok(binding)
+}
+
+fn cmd_init(args: &[&str]) -> Result<()> {
+    let root = root_of(args);
+    for entry in perp_core::init::run(&root)? {
+        println!("  {}", entry.describe());
+    }
+    println!();
+    println!("Next: set `gate.test` in {}, then add requirements.", perp_core::layout::BINDING);
+    println!("It refuses to run until the gate is a real command, which is deliberate.");
+    Ok(())
 }
 
 fn cmd_bind(args: &[&str]) -> Result<()> {

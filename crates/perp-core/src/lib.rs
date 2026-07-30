@@ -77,6 +77,7 @@ pub mod error;
 pub mod gate;
 pub mod git;
 pub mod job;
+pub mod init;
 pub mod journal;
 pub mod layout;
 pub mod ladder;
