@@ -88,6 +88,32 @@ pub fn binding_in(root: &Path) -> PathBuf {
     root.join(BINDING)
 }
 
+/// The nearest workspace at or above `from`, or `None` if there is none.
+///
+/// A project is worked on from inside it — from `src/`, from a test directory,
+/// from wherever the file being edited lives — and the harness belongs to the
+/// project rather than to the directory the shell happens to be sitting in. The
+/// editor has always resolved it this way; the command line took whatever
+/// `--root` said or else the current directory, so `perp state` one level down
+/// reported no workspace while the panel beside it showed the run.
+///
+/// The nearest [`DIR`] wins, and it is the directory that is looked for rather
+/// than the binding inside it. A `.harness` without a binding is a broken
+/// workspace and gets said so; searching past it would silently run against
+/// whatever unrelated project happened to be further up, which is a worse answer
+/// than an error.
+pub fn enclosing(from: &Path) -> Option<PathBuf> {
+    let mut dir = Some(from);
+    // Bounded by the filesystem: `parent()` yields `None` at the root.
+    while let Some(candidate) = dir {
+        if candidate.join(DIR).is_dir() {
+            return Some(candidate.to_path_buf());
+        }
+        dir = candidate.parent();
+    }
+    None
+}
+
 /// Write the ignore file if it is not there.
 ///
 /// Idempotent and never overwriting: someone who edited it gets to keep their
@@ -154,6 +180,64 @@ pub fn requirements_text(resolved: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The reason this exists: a project is worked on from inside it.
+    #[test]
+    fn a_workspace_is_found_from_a_directory_below_it() {
+        let root = crate::testutil::tmpdir("enclosing-below");
+        std::fs::create_dir_all(root.join(DIR)).expect("harness");
+        let deep = root.join("src").join("inner");
+        std::fs::create_dir_all(&deep).expect("deep");
+
+        assert_eq!(enclosing(&deep).as_deref(), Some(root.as_path()));
+        assert_eq!(enclosing(&root).as_deref(), Some(root.as_path()));
+    }
+
+    /// Nothing above it is a workspace, so say so rather than climbing to the
+    /// filesystem root and answering with somebody else's project.
+    #[test]
+    fn no_workspace_above_is_none_rather_than_a_guess() {
+        let root = crate::testutil::tmpdir("enclosing-none");
+        let deep = root.join("a").join("b");
+        std::fs::create_dir_all(&deep).expect("deep");
+        assert_eq!(enclosing(&deep), None);
+    }
+
+    /// Nested workspaces: the near one is the one being worked in.
+    #[test]
+    fn the_nearest_workspace_wins() {
+        let outer = crate::testutil::tmpdir("enclosing-nested");
+        std::fs::create_dir_all(outer.join(DIR)).expect("outer harness");
+        let inner = outer.join("packages").join("thing");
+        std::fs::create_dir_all(inner.join(DIR)).expect("inner harness");
+
+        assert_eq!(enclosing(&inner).as_deref(), Some(inner.as_path()));
+    }
+
+    /// A `.harness` with nothing in it still stops the search. It is a broken
+    /// workspace and the binding error says so; walking past it would run the
+    /// loop against an unrelated project further up, silently.
+    #[test]
+    fn a_workspace_missing_its_binding_still_stops_the_search() {
+        let outer = crate::testutil::tmpdir("enclosing-broken");
+        std::fs::create_dir_all(outer.join(DIR)).expect("outer harness");
+        std::fs::write(binding_in(&outer), "# binding
+").expect("outer binding");
+        let inner = outer.join("half-made");
+        std::fs::create_dir_all(inner.join(DIR)).expect("inner harness, no binding");
+
+        assert_eq!(enclosing(&inner).as_deref(), Some(inner.as_path()));
+        assert!(!binding_in(&inner).exists(), "the inner one has no binding");
+    }
+
+    /// A file is not a directory: `.harness` as a regular file is not a
+    /// workspace and must not be mistaken for one.
+    #[test]
+    fn a_file_called_harness_is_not_a_workspace() {
+        let root = crate::testutil::tmpdir("enclosing-file");
+        std::fs::write(root.join(DIR), "not a directory").expect("file");
+        assert_eq!(enclosing(&root), None);
+    }
     use crate::testutil::tmpdir;
 
     #[test]

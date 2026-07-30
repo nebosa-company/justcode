@@ -224,8 +224,39 @@ fn flag<'a>(args: &[&'a str], name: &str) -> Option<&'a str> {
         .copied()
 }
 
+/// Where a command was pointed, taken literally: `--root`, or here.
+///
+/// What `init` wants, because there is no workspace to find yet and creating one
+/// in a parent that was never named would be a surprise. Everything else wants
+/// [`workspace_of`].
 fn root_of(args: &[&str]) -> PathBuf {
     flag(args, "--root").map_or_else(|| PathBuf::from("."), PathBuf::from)
+}
+
+/// The workspace a command should act on: `--root` if given, else the nearest
+/// one at or above the current directory.
+///
+/// An explicit `--root` is never second-guessed. Without one, this is the same
+/// search the editor does, so `perp state` from `src/` answers about the project
+/// the way the panel beside it does.
+///
+/// The current directory is returned as `.` when it is itself the workspace, so
+/// the ordinary case prints exactly what it printed before. Falling back to `.`
+/// when nothing is found keeps the error the same too: the binding is reported
+/// missing here, rather than a search failure being reported instead.
+fn workspace_of(args: &[&str]) -> PathBuf {
+    if let Some(given) = flag(args, "--root") {
+        return PathBuf::from(given);
+    }
+    let here = match std::env::current_dir() {
+        Ok(dir) => dir,
+        Err(_) => return PathBuf::from("."),
+    };
+    match perp_core::layout::enclosing(&here) {
+        Some(found) if found == here => PathBuf::from("."),
+        Some(found) => found,
+        None => PathBuf::from("."),
+    }
 }
 
 fn positionals<'a>(args: &[&'a str]) -> Vec<&'a str> {
@@ -247,7 +278,7 @@ fn positionals<'a>(args: &[&'a str]) -> Vec<&'a str> {
 }
 
 fn load(args: &[&str]) -> Result<Binding> {
-    let root = root_of(args);
+    let root = workspace_of(args);
     let binding = Binding::load(&root)?;
     binding.verify()?;
     Ok(binding)
@@ -617,7 +648,7 @@ fn cmd_resume(args: &[&str]) -> std::result::Result<(), String> {
         }
     }
 
-    let root = root_of(args);
+    let root = workspace_of(args);
     let session = Session::open(&root).map_err(|e| e.to_string())?;
     let decision = session.resume(&CannotTell).map_err(|e| e.to_string())?;
     let projection = session.projection().map_err(|e| e.to_string())?;
@@ -707,7 +738,7 @@ fn write_state(path: &Path, rendered: &str) -> Result<()> {
 /// `perp gate` and the engine does it, under a lock, with a budget, writing a
 /// terminal record that says which of `L-14`'s three reasons ended it.
 fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
-    let root = root_of(args);
+    let root = workspace_of(args);
     let binding = load(args).map_err(|e| e.to_string())?;
     let cycle: u32 = flag(args, "--cycle")
         .map(|text| text.parse().map_err(|_| format!("--cycle takes a number, not `{text}`")))
@@ -797,7 +828,7 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
 /// Say whether the current phase is over, from the workspace rather than from
 /// anyone's opinion of it (`L-2`).
 fn cmd_phase(args: &[&str]) -> std::result::Result<(), String> {
-    let root = root_of(args);
+    let root = workspace_of(args);
     let binding = load(args).map_err(|e| e.to_string())?;
     let cycle: u32 = flag(args, "--cycle")
         .map(|text| text.parse().map_err(|_| format!("--cycle takes a number, not `{text}`")))
@@ -927,7 +958,7 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
 
     // `C-3`: if the loop holds the write lock, this session is read-only. The
     // lock file on disk is the authority — not a flag, not an assumption.
-    let held = root_of(args).join("write.lock").exists();
+    let held = workspace_of(args).join("write.lock").exists();
     let chat_mode = perp_core::lock::chat_mode(held, false);
     if chat_mode == perp_core::lock::ChatMode::ReadOnly {
         println!("the loop is writing — this session is read-only (`C-3`)");
@@ -1232,7 +1263,7 @@ fn cmd_watch(args: &[&str]) -> std::result::Result<(), String> {
 /// Live control (`O-3`). Writes what the operator asked for; the engine reads
 /// it at the next step boundary and never mid-step.
 fn cmd_control(args: &[&str]) -> std::result::Result<(), String> {
-    let root = root_of(args);
+    let root = workspace_of(args);
     load(args).map_err(|e| e.to_string())?;
     let channel = Channel::at(&root);
 
@@ -1466,7 +1497,7 @@ fn cmd_schedule(args: &[&str]) -> std::result::Result<(), String> {
 /// allowance, a backlog it reads rather than invents, and a permission
 /// classifier it cannot argue with.
 fn cmd_cycle(args: &[&str]) -> std::result::Result<(), String> {
-    let root = root_of(args);
+    let root = workspace_of(args);
     let binding = load(args).map_err(|e| e.to_string())?;
 
     let cycle: u32 = flag(args, "--cycle")
