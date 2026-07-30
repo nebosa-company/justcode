@@ -518,7 +518,13 @@ function renderTimeline(body, view) {
     // sense of when it happened.
     if (entry.at) step.title = new Date(entry.at * 1000).toLocaleString();
     row.append(step);
-    row.append(el("span", "perp-summary", entry.summary));
+    const summary = el("span", "perp-summary", entry.summary);
+    // What a row can say about itself: for a model call, which link answered,
+    // how the prompt split between cached and fresh, and what it was for. The
+    // prompt is not among it and the tooltip says so — nothing journals one,
+    // and a tooltip that claimed otherwise would be making it up.
+    if (entry.detail) summary.title = entry.detail;
+    row.append(summary);
     if (entry.requirements.length) {
       const reqs = el("span", "perp-reqs", entry.requirements.join(" "));
       // What the ids mean. One line each, so a row citing three of them explains

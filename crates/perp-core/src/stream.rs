@@ -38,7 +38,11 @@ pub enum Event {
     /// The provider said it is finished.
     Done { finish_reason: Option<String> },
     /// Usage, which most providers send in the final chunk.
-    Usage { prompt: i64, completion: i64 },
+    /// `cached` is the part of `prompt` the provider says it had already,
+    /// which is priced at a fraction of the rest. Carried because a streamed
+    /// call costs the same as a buffered one and the ledger has to agree
+    /// (`M-11`): recording zero here charged every cache hit at miss price.
+    Usage { prompt: i64, completion: i64, cached: i64 },
 }
 
 /// Why a stream stopped.
@@ -96,8 +100,23 @@ pub fn parse_line(line: &str) -> Option<Event> {
     if let Some(usage) = parsed.get("usage") {
         let int = |name: &str| usage.get(name).and_then(Value::as_i64).unwrap_or_default();
         let (prompt, completion) = (int("prompt_tokens"), int("completion_tokens"));
+        // DeepSeek names it `prompt_cache_hit_tokens`; the OpenAI shape nests
+        // the same number under `prompt_tokens_details.cached_tokens`. Either
+        // is read, and neither being present is an honest zero.
+        let cached = {
+            let flat = int("prompt_cache_hit_tokens");
+            if flat > 0 {
+                flat
+            } else {
+                usage
+                    .get("prompt_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+                    .and_then(Value::as_i64)
+                    .unwrap_or_default()
+            }
+        };
         if prompt > 0 || completion > 0 {
-            return Some(Event::Usage { prompt, completion });
+            return Some(Event::Usage { prompt, completion, cached });
         }
     }
 
@@ -142,6 +161,8 @@ pub struct Streamed {
     pub stop: Stop,
     pub prompt_tokens: i64,
     pub completion_tokens: i64,
+    /// The part of the prompt the provider had already, priced at a fraction.
+    pub cached_tokens: i64,
     /// How long until the first token arrived. The number that says whether a
     /// link is slow or wedged, and they need different answers.
     pub first_token: Option<Duration>,
@@ -207,6 +228,7 @@ pub fn read(
         reasoning: String::new(),
         stop: Stop::Complete { finish_reason: None },
         prompt_tokens: 0,
+        cached_tokens: 0,
         completion_tokens: 0,
         first_token: None,
     };
@@ -238,9 +260,10 @@ pub fn read(
                 match &event {
                     Event::Delta(text) => out.content.push_str(text),
                     Event::Reasoning(text) => out.reasoning.push_str(text),
-                    Event::Usage { prompt, completion } => {
+                    Event::Usage { prompt, completion, cached } => {
                         out.prompt_tokens = *prompt;
                         out.completion_tokens = *completion;
+                        out.cached_tokens = *cached;
                     }
                     Event::Done { finish_reason } => {
                         out.stop = Stop::Complete { finish_reason: finish_reason.clone() };
@@ -311,10 +334,35 @@ mod tests {
         assert_eq!(parse_line(unframed), None, "the prefix is the framing");
     }
 
+
+    /// A streamed call has to price the same as a buffered one (`M-11`). The
+    /// cached half of a prompt costs a fraction of the rest, and this was being
+    /// dropped on the floor — so every hit was billed at miss price and the
+    /// chat ledger was wrong in the expensive direction, invisibly.
+    #[test]
+    fn a_streamed_usage_chunk_keeps_what_the_provider_had_cached() {
+        let deepseek = r#"data: {"choices":[],"usage":{"prompt_tokens":2200,"completion_tokens":40,"prompt_cache_hit_tokens":2100,"prompt_cache_miss_tokens":100}}"#;
+        assert_eq!(
+            parse_line(deepseek),
+            Some(Event::Usage { prompt: 2200, completion: 40, cached: 2100 })
+        );
+
+        // The OpenAI shape nests the same number one level down.
+        let openai = r#"data: {"choices":[],"usage":{"prompt_tokens":900,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":768}}}"#;
+        assert_eq!(
+            parse_line(openai),
+            Some(Event::Usage { prompt: 900, completion: 10, cached: 768 })
+        );
+
+        // Neither present is an honest zero rather than a guess.
+        let plain = r#"data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3}}"#;
+        assert_eq!(parse_line(plain), Some(Event::Usage { prompt: 12, completion: 3, cached: 0 }));
+    }
+
     #[test]
     fn usage_arrives_in_its_own_chunk() {
         let line = r#"data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3}}"#;
-        assert_eq!(parse_line(line), Some(Event::Usage { prompt: 12, completion: 3 }));
+        assert_eq!(parse_line(line), Some(Event::Usage { prompt: 12, completion: 3, cached: 0 }));
     }
 
     #[test]
@@ -359,6 +407,7 @@ mod tests {
             reasoning: String::new(),
             stop: Stop::Silent { after: Duration::from_secs(20) },
             prompt_tokens: 0,
+            cached_tokens: 0,
             completion_tokens: 0,
             first_token: None,
         };

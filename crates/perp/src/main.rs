@@ -1038,8 +1038,13 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
                     requirements: requirements.as_deref(),
                     projection: Some(&projection),
                 };
+                // Two system messages, not one. The first is byte-identical
+                // between turns and is what a provider's cache can charge a
+                // fiftieth for; the second carries the position, which moves
+                // every turn because a turn itself appends to the journal.
                 let request = ChatRequest::new(vec![
-                    Message::system(context.render()),
+                    Message::system(context.stable()),
+                    Message::system(context.volatile()),
                     Message::user(text),
                 ]);
                 let link = match links.resolve(Role::Chat, &AssumeHealthy, mode) {
@@ -1093,11 +1098,16 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
                             // tokens arrived a few at a time would make every
                             // cost report quietly wrong in the direction that
                             // flatters it.
+                            // The cached half of the prompt is priced at a
+                            // fraction of the rest, so passing zero here
+                            // charged every hit at miss price and made the
+                            // chat ledger wrong in the expensive direction.
+                            let cached = streamed.cached_tokens;
                             let usage = perp_core::cost::Usage::from_reply(
                                 streamed.prompt_tokens,
                                 streamed.completion_tokens,
-                                0,
-                                0,
+                                cached,
+                                (streamed.prompt_tokens - cached).max(0),
                             );
                             let price = links.price(&link.name);
                             let entry = perp_core::cost::Entry {

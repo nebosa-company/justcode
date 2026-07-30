@@ -101,6 +101,59 @@ pub struct Entry {
     /// A gate transcript, when the step has one. The panel shows these in the
     /// **terminal dock** rather than inventing a viewer (`I-4`).
     pub transcript: Option<String>,
+    /// What a row can say about itself when asked, shown as a tooltip.
+    ///
+    /// For a model call that is the accounting — which link and model answered,
+    /// how the prompt split between cached and fresh, how long the first token
+    /// took, what it cost — and what the call was for. Not the prompt itself:
+    /// prompts are not journalled, and a tooltip claiming to be one would be
+    /// inventing it. `M-11` records what a call cost, not what it said.
+    pub detail: Option<String>,
+}
+
+
+/// The accounting for every model call in one step, and how to say it.
+#[derive(Debug, Default, Clone)]
+struct CallDetail {
+    link: String,
+    model: String,
+    cached: i64,
+    fresh: i64,
+    output: i64,
+    latency_ms: i64,
+}
+
+impl CallDetail {
+    /// One line per fact, because this is read hovering rather than studied.
+    fn describe(&self, about: Option<&String>) -> String {
+        let mut out = String::new();
+        if let Some(said) = about {
+            // Long intents exist; a tooltip that fills the window is not read.
+            let said = if said.chars().count() > 300 {
+                let cut: String = said.chars().take(300).collect();
+                format!("{cut}…")
+            } else {
+                said.clone()
+            };
+            out.push_str(&said);
+            out.push_str("\n\n");
+        }
+        out.push_str(&format!("{} · {}\n", self.link, self.model));
+        out.push_str(&format!(
+            "in {} tokens ({} cached, {} fresh)\n",
+            self.cached + self.fresh,
+            self.cached,
+            self.fresh
+        ));
+        out.push_str(&format!("out {} tokens\n", self.output));
+        if self.latency_ms > 0 {
+            out.push_str(&format!("slowest first token {} ms\n", self.latency_ms));
+        }
+        // Said rather than left to be inferred from a tooltip that names
+        // everything else: someone reasonably expects the prompt here.
+        out.push_str("\nthe prompt itself is not journalled");
+        out
+    }
 }
 
 /// One side of the conversation, pulled back out of the shared stream (`C-5`).
@@ -136,11 +189,47 @@ impl View {
         // going badly. The count and the charge stay; the repetition goes.
         let mut calls: std::collections::HashMap<String, (usize, f64)> =
             std::collections::HashMap::new();
+        // What a row can say about itself when asked. Totals rather than the
+        // last call's numbers: a step with twenty calls in it spent all of
+        // them, and showing only the twentieth would be a smaller true number
+        // presented as the whole.
+        let mut ledger: std::collections::HashMap<String, CallDetail> =
+            std::collections::HashMap::new();
+        // What the call was for. The prompt is not journalled — `M-11` records
+        // what a call cost, not what it said — so this is the nearest thing
+        // that is on the record: the step's own intent, or for a conversation
+        // the question that was asked just before it.
+        let mut about: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        let mut last_question: Option<String> = None;
         for record in records {
+            if let Some(line) = chat_line(record) {
+                if line.speaker == "operator" {
+                    last_question = Some(line.text.clone());
+                }
+                continue;
+            }
+            if record.kind == Kind::Intent {
+                about.entry(record.step.to_string()).or_insert_with(|| record.summary.clone());
+            }
             if let Some(entry) = crate::cost::from_record(record) {
                 let seen = calls.entry(record.step.to_string()).or_insert((0, 0.0));
                 seen.0 += 1;
                 seen.1 += entry.charge;
+
+                let held = ledger.entry(record.step.to_string()).or_default();
+                held.link = entry.link.clone();
+                held.model = entry.model.clone();
+                held.cached += entry.usage.cache_hit_tokens;
+                held.fresh += entry.usage.cache_miss_tokens;
+                held.output += entry.usage.output_tokens;
+                held.latency_ms = held.latency_ms.max(entry.latency_ms);
+
+                if let Some(question) = &last_question {
+                    about
+                        .entry(record.step.to_string())
+                        .or_insert_with(|| format!("asked: {question}"));
+                }
             }
         }
         let mut summarised: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -179,6 +268,7 @@ impl View {
                     continue;
                 }
                 let (count, charge) = calls.get(&step).copied().unwrap_or((1, 0.0));
+                let key = step.clone();
                 timeline.push(Entry {
                     step,
                     at: record.at,
@@ -190,6 +280,7 @@ impl View {
                     ok: None,
                     requirements: record.requirements.clone(),
                     transcript: None,
+                    detail: ledger.get(&key).map(|held| held.describe(about.get(&key))),
                 });
                 continue;
             }
@@ -215,6 +306,7 @@ impl View {
                     .detail
                     .clone()
                     .filter(|detail| detail.starts_with("gate:")),
+                detail: None,
             });
         }
 
@@ -376,6 +468,13 @@ impl View {
                                     entry.ok.map_or(Value::Null, Value::Bool),
                                 ),
                                 ("requirements", strings(&entry.requirements)),
+                                (
+                                    "detail",
+                                    entry
+                                        .detail
+                                        .clone()
+                                        .map_or(Value::Null, Value::Str),
+                                ),
                                 (
                                     "transcript",
                                     entry

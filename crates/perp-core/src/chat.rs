@@ -410,7 +410,17 @@ pub struct Context<'a> {
 const CONTEXT_BUDGET: usize = 12_000;
 
 impl Context<'_> {
-    pub fn render(&self) -> String {
+    /// The half that does not change between turns: what the project is and
+    /// what it has been asked for.
+    ///
+    /// Kept apart from [`Self::volatile`] because a provider's prefix cache only
+    /// pays when the prefix is byte-identical, and the position moves every
+    /// turn — a chat turn appends two records, so the step counts differ by the
+    /// time the next question is asked. Rendered as one string they were one
+    /// system message, the prefix changed every time, and every call paid full
+    /// price. Measured on ten turns of a real workspace: `cache_hit` zero on
+    /// every one of them, against a prefix of some two thousand tokens.
+    pub fn stable(&self) -> String {
         let mut out = String::new();
         out.push_str(
             "You are answering questions about a software project driven by the Perpetum \
@@ -432,6 +442,15 @@ requirement is worse here than admitting the workspace does not tell you.\n",
             out.push('\n');
         }
 
+        out
+    }
+
+    /// The half that moves: where the work has got to.
+    ///
+    /// A separate system message, after the stable one, so what it says is
+    /// current without spoiling the prefix in front of it.
+    pub fn volatile(&self) -> String {
+        let mut out = String::new();
         if let Some(projection) = self.projection {
             out.push_str("\n## Where the work is\n\n");
             let cycle = projection.cycle.unwrap_or(1);
@@ -488,7 +507,7 @@ mod context_tests {
             requirements: Some("| T-2 | `truncate(text, limit)` shortens text. |"),
             projection: None,
         };
-        let rendered = context.render();
+        let rendered = format!("{}{}", context.stable(), context.volatile());
         assert!(rendered.contains("truncate(text, limit)"), "{rendered}");
         assert!(rendered.contains("A toolkit"), "{rendered}");
         // The instruction not to invent an answer is the point of the whole
@@ -500,7 +519,7 @@ mod context_tests {
     fn what_is_dropped_is_declared() {
         let long = "x".repeat(CONTEXT_BUDGET + 500);
         let context = Context { vision: None, requirements: Some(&long), projection: None };
-        let rendered = context.render();
+        let rendered = format!("{}{}", context.stable(), context.volatile());
         assert!(rendered.contains("more characters, not shown"), "silent truncation");
         assert!(rendered.len() < long.len(), "and it actually got shorter");
     }
@@ -510,14 +529,14 @@ mod context_tests {
         // Cutting mid-character would panic on the slice.
         let text = "e\u{0301}".repeat(CONTEXT_BUDGET);
         let context = Context { vision: None, requirements: Some(&text), projection: None };
-        let rendered = context.render();
+        let rendered = format!("{}{}", context.stable(), context.volatile());
         assert!(rendered.contains("not shown"), "it was cut");
     }
 
     #[test]
     fn an_empty_workspace_still_renders_the_instruction() {
         let context = Context { vision: None, requirements: None, projection: None };
-        let rendered = context.render();
+        let rendered = format!("{}{}", context.stable(), context.volatile());
         assert!(rendered.contains("Perpetum"), "{rendered}");
     }
 }
