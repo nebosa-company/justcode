@@ -71,6 +71,10 @@ import {
   containsNode as terminalContains,
   selectedText as terminalSelectedText,
   copySelection as copyTerminalSelection,
+  paste as pasteIntoTerminal,
+  clear as clearTerminal,
+  selectAll as selectAllInTerminal,
+  isLive as terminalIsLive,
   focusActive as focusActiveTerminal,
 } from "./terminal.js";
 import { iconMarkup } from "./icons.js";
@@ -3102,6 +3106,7 @@ window.addEventListener(
 window.addEventListener("contextmenu", (event) => {
   const inEditor = panes.some((pane) => pane.editorEl.contains(event.target));
   if (inEditor) editorContextMenu(event);
+  else if (terminalContains(event.target)) terminalContextMenu(event);
   else event.preventDefault();
 });
 
@@ -3373,6 +3378,58 @@ async function perpRoot() {
   } catch {
     return null;
   }
+}
+
+/** The terminal's own context menu.
+ *
+ * A terminal's right-click needs different verbs from an editor's: there is no
+ * undo, cut would be meaningless, and Ctrl+C is the interrupt rather than the
+ * copy — which is exactly why copy and paste have to be reachable by mouse here.
+ */
+function terminalContextMenu(event) {
+  event.preventDefault();
+  showContextMenu(event.clientX, event.clientY, [
+    {
+      label: t("edit.copy"),
+      icon: "copy",
+      accel: "Ctrl+Shift+C",
+      enabled: () => terminalSelectedText() !== "",
+      run: () => copyTerminalSelection(),
+    },
+    {
+      label: t("edit.paste"),
+      icon: "paste",
+      accel: "Ctrl+Shift+V",
+      enabled: terminalIsLive,
+      run: async () => {
+        const text = await clipboardReadText();
+        if (text) await pasteIntoTerminal(text);
+        focusActiveTerminal();
+      },
+    },
+    { separator: true },
+    {
+      label: t("edit.selectAll"),
+      icon: "selectAll",
+      run: () => selectAllInTerminal(),
+    },
+    {
+      label: t("terminal.clear"),
+      icon: "deleteLine",
+      run: () => {
+        clearTerminal();
+        focusActiveTerminal();
+      },
+    },
+    { separator: true },
+    {
+      label: t("view.terminal"),
+      icon: "terminal",
+      // Closing the dock from inside it: the one thing you cannot do with the
+      // keyboard while focus is in a shell that owns every chord.
+      run: () => toggleTerminals(),
+    },
+  ]);
 }
 
 /** Re-read the active tab's file from disk, into the same tab.

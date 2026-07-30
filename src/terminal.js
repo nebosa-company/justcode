@@ -319,6 +319,45 @@ export async function copySelection() {
   return await copyText(text);
 }
 
+/** Send text to the active terminal as if it had been typed.
+ *
+ * Straight to the pty rather than through xterm's own input handling, which is
+ * the same path `onData` uses — a paste is keystrokes as far as the shell is
+ * concerned.
+ *
+ * Newlines are left alone. Trimming a trailing one would be second-guessing what
+ * was copied, and a shell that receives a command without its newline simply
+ * waits, which is recoverable; one that receives an extra newline has already run
+ * something, which is not.
+ */
+export async function paste(text) {
+  if (!text) return false;
+  const record = terminals.get(activeId);
+  if (!record || record.exited) return false;
+  await invoke("terminal_write", { id: activeId, data: text });
+  return true;
+}
+
+/** Clear the active terminal's screen and scrollback. */
+export function clear() {
+  terminals.get(activeId)?.term.clear();
+  return true;
+}
+
+/** Select everything in the active terminal, so it can be copied. */
+export function selectAll() {
+  const term = terminals.get(activeId)?.term;
+  if (!term) return false;
+  term.selectAll();
+  return true;
+}
+
+/** Whether the active terminal has a live shell behind it. */
+export function isLive() {
+  const record = terminals.get(activeId);
+  return Boolean(record) && !record.exited;
+}
+
 export function focusActive() {
   terminals.get(activeId)?.term.focus();
 }

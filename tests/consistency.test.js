@@ -105,13 +105,25 @@ test("every menu item's enabled, checked and submenu is a function", () => {
   // and `enabled: someFlag` fail the same way and read as harmless.
   const offenders = [];
   for (const { name, text } of sources()) {
-    // Function declarations and function-valued consts, to vouch for a value
-    // written as a bare identifier.
+    // Names this file can vouch for: declared as a function, assigned one, or
+    // imported.
+    //
+    // Imports are taken on trust — the check cannot follow one into another
+    // module, so an imported *constant* used as `enabled` would slip through.
+    // That is the honest limit of reading text, and it costs less than refusing
+    // every imported predicate would: the bugs this exists for are
+    // `enabled: canCopy()`, `enabled: true` and `enabled: someLocalFlag`, and all
+    // three are still caught.
+    const imported = [...text.matchAll(/import\s*\{([^}]*)\}\s*from/g)]
+      .flatMap((match) => match[1].split(","))
+      .map((part) => part.split(/\s+as\s+/).pop().trim())
+      .filter(Boolean);
     const functions = new Set([
       ...[...text.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]),
       ...[...text.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|function)/g)].map(
         (m) => m[1],
       ),
+      ...imported,
     ]);
 
     for (const match of text.matchAll(/\b(enabled|checked|submenu):\s*([^,\n]*)/g)) {

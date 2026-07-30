@@ -103,6 +103,7 @@ export const EN = {
   "view.bionicReading": "Bionic Reading",
   "view.problems": "Problems",
   "file.recentOpen": "already open",
+  "terminal.clear": "Clear Terminal",
   "file.reopen": "Reopen from Disk",
   "palette.title": "Commands",
   "palette.placeholder": "Type to search every command…",
