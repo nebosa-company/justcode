@@ -650,6 +650,12 @@ fn perp_run(subcommand: String, args: Vec<String>, root: String) -> Result<Strin
     // and `btw::classify` then applies `C-10` so even that cannot reach the
     // approval boundary. Sending a note is not acting on the loop — the loop
     // decides whether to pick it up.
+    //
+    // `chat` is deliberately *not* here, and not because it is dangerous — a
+    // turn runs no tools and takes no lock. It waits on a model for seconds,
+    // and everything on this list returns in milliseconds because it reads a
+    // file. Blocking here blocks the window. It gets its own door, for the same
+    // reason `cycle` does.
     const ALLOWED: &[&str] =
         &["panel", "state", "cost", "explain", "check", "links", "version", "btw"];
     if !ALLOWED.contains(&subcommand.as_str()) {
@@ -1036,6 +1042,66 @@ fn perp_init(root: String) -> Result<String, String> {
         }
         Err(e) => Err(format!("could not run {program}: {e}")),
     }
+}
+
+/// One conversation turn, asked and answered (`C-1`–`C-5`).
+///
+/// Its own door rather than an entry in [`perp_run`]'s list, and `async` rather
+/// than a plain command, for one reason: this waits on a model. Everything on
+/// that list reads a file and returns in milliseconds, and a synchronous command
+/// runs on the main thread — so a chat turn there would freeze the window for
+/// however long the model took to think. The blocking wait happens on the
+/// runtime's own pool, and the window keeps drawing.
+///
+/// It is `perp chat --once` and not a second implementation of a turn. Both
+/// sides go in the loop's journal, the call is priced (`M-11`), and while the
+/// loop holds the write lock the session is read-only (`C-3`) — none of which
+/// the editor should be reimplementing or, worse, quietly skipping.
+///
+/// The reply comes back on stdout, but the panel does not need it: both turns
+/// are in the journal by then, and the watcher redraws from there. It is
+/// returned anyway so a failure has something to say.
+#[tauri::command]
+async fn perp_chat(message: String, root: String) -> Result<String, String> {
+    let text = message.trim().to_string();
+    if text.is_empty() {
+        return Err("nothing to say".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let program = std::env::var("PERP_BIN").unwrap_or_else(|_| "perp".to_string());
+        let mut command = std::process::Command::new(&program);
+        command.arg("chat").arg("--once").arg(&text).arg("--root").arg(&root);
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        match command.output() {
+            Ok(out) if out.status.success() => {
+                Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+            }
+            Ok(out) => {
+                let said = String::from_utf8_lossy(&out.stderr);
+                let said = said.trim();
+                // Its own words where it has any: `M-24` and a missing link both
+                // say exactly what is wrong, and "exited 1" says nothing.
+                if said.is_empty() {
+                    Err(format!("perp chat exited {}", out.status.code().unwrap_or(-1)))
+                } else {
+                    Err(said.to_string())
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Err(format!("not-installed: the Perpetum harness ({program}) was not found."))
+            }
+            Err(e) => Err(format!("could not run {program}: {e}")),
+        }
+    })
+    .await
+    .map_err(|e| format!("chat did not finish: {e}"))?
 }
 
 /// Stop watching. Called when the panel is pointed at nothing.
@@ -1947,6 +2013,7 @@ pub fn run() {
             perp_root,
             perp_start,
             perp_init,
+            perp_chat,
             harness_state,
             perp_watch,
             perp_unwatch,

@@ -30,6 +30,13 @@ let state = {
   // What `perp bind` last complained about, if anything.
   setupProblem: null,
   sending: false,
+  // A chat turn in flight. The question is held here so it can be shown the
+  // moment it is asked: it reaches the journal only when the turn is written,
+  // and a chat window that shows nothing until the answer arrives feels broken
+  // rather than busy.
+  asking: false,
+  asked: null,
+  askError: null,
 };
 
 let unlisten = null;
@@ -105,7 +112,6 @@ let host = null;
 // and the composer's own parts. [clearAbove] rebuilds them if the panel is
 // mounted somewhere else, so a stale reference cannot survive.
 let scroller = null;
-let composer = null;
 let parts = null;
 
 let onOpenArtifact = null;
@@ -221,9 +227,11 @@ export function selectTab(name) {
   const moved = state.tab !== name;
   state.tab = name;
   render();
+  if (!moved || !scroller) return;
   // Keeping your place is about the tab you are reading. A different one opens
-  // at the top, which for a newest-first list is where it starts.
-  if (moved && scroller) scroller.scrollTop = 0;
+  // where its newest entry is — the top for the lists that read newest first,
+  // and the bottom for the conversation, which reads the other way.
+  scroller.scrollTop = name === "chat" ? scroller.scrollHeight : 0;
 }
 
 function el(tag, className, text) {
@@ -249,11 +257,11 @@ export function inFlight() {
 
 /** Clear the region a render owns, and leave what holds state where it is.
  *
- * Two nodes outlive a render. The composer, because a text field cannot survive
- * being redrawn — removing a focused element blurs it, so a note being typed
- * during a run lost the cursor and the half-typed text with it. And the body,
- * because it is the scroll container: rebuilding it put someone reading an
- * earlier step back at the top every time the journal grew.
+ * The composers outlive a render, because a text field cannot survive being
+ * redrawn — removing a focused element blurs it, so a message being typed
+ * during a run lost the cursor and the half-typed text with it. So does the
+ * body, because it is the scroll container: rebuilding it put someone reading
+ * an earlier step back at the top every time the journal grew.
  *
  * The header and the tabs are pure projections of the view and are rebuilt.
  */
@@ -264,8 +272,8 @@ function clearAbove() {
   }
   host.replaceChildren();
   scroller = el("div", "perp-body");
-  composer = buildComposer();
-  host.append(scroller, composer);
+  parts = { btw: buildComposer("btw"), chat: buildComposer("chat") };
+  host.append(scroller, parts.btw.foot, parts.chat.foot);
 }
 
 /** Refill the body, and leave the reader where they were.
@@ -278,9 +286,21 @@ function clearAbove() {
  */
 function fill(paint) {
   const was = { top: scroller.scrollTop, height: scroller.scrollHeight };
+  // Within a hair of the bottom counts as at the bottom: a fractional scroll
+  // height is normal and would otherwise stop a conversation following itself.
+  const wasAtEnd = was.height - scroller.clientHeight - was.top < 4;
   const next = el("div");
   paint(next);
   scroller.replaceChildren(...next.childNodes);
+
+  // The conversation is the one list that reads oldest first, so what arrives
+  // lands at the bottom and following it means staying there. Everywhere else
+  // the newest is at the top, and what is wanted is to keep the row being read
+  // from sliding down as entries are prepended above it.
+  if (state.tab === "chat") {
+    scroller.scrollTop = wasAtEnd ? scroller.scrollHeight : was.top;
+    return;
+  }
   scroller.scrollTop = was.top > 0 ? was.top + (scroller.scrollHeight - was.height) : 0;
 }
 
@@ -545,13 +565,50 @@ async function send(text) {
   await refresh();
 }
 
-/** The composer, built once for the life of the mount.
+/** Ask the model one question, and wait for the answer (`C-1`–`C-5`).
  *
- * Its nodes are kept in [parts] and written to by [dressComposer], rather than
+ * The question is shown before the call rather than after it. A turn takes as
+ * long as a model takes to think, and the journal has nothing to show for that
+ * time — so without this the box would empty, nothing would appear, and the
+ * only honest reading of the screen would be that the message was lost.
+ *
+ * Nothing is invented while waiting: what is drawn is the text just typed and a
+ * marker saying an answer is outstanding. When the turn lands, both sides are
+ * in the journal and [refresh] replaces the optimistic pair with the real ones.
+ */
+async function ask(text) {
+  const question = text.trim();
+  if (!question || state.asking) return;
+  state.asking = true;
+  state.asked = question;
+  state.askError = null;
+  render();
+  try {
+    await invoke("perp_chat", { message: question, root: state.root });
+  } catch (error) {
+    // The harness's own words: an unset credential (`M-24`) or a link that
+    // could not be resolved both say exactly what is wrong.
+    state.askError = `${error}`.replace(/^perp:\s*/, "");
+  } finally {
+    state.asking = false;
+    state.asked = null;
+  }
+  await refresh();
+}
+
+/** A composer, built once for the life of the mount.
+ *
+ * One per tab that has one, because the two do different things with what is
+ * typed: `/btw` files an aside the loop may pick up, and `chat` asks a model and
+ * waits for an answer. Sharing a box would mean a question typed on one tab
+ * could be filed as an aside by switching to the other, which is a way to send
+ * the wrong thing to the wrong place by accident.
+ *
+ * Their nodes are kept in [parts] and written to by [dressComposer] rather than
  * being made again each render. See [clearAbove] for why.
  */
-function buildComposer() {
-  const foot = el("div", "perp-foot");
+function buildComposer(kind) {
+  const foot = el("div", `perp-foot perp-foot-${kind}`);
   const form = el("form", "perp-composer");
   const input = el("input", "perp-input");
   input.type = "text";
@@ -560,12 +617,11 @@ function buildComposer() {
   form.append(input, button);
 
   // What the harness said back, verbatim. A note that was reclassified or
-  // refused says so here rather than looking like it was accepted.
+  // refused says so here rather than looking like it was accepted; a chat that
+  // could not reach a link says why here rather than silently doing nothing.
   const sent = el("p", "perp-sent");
 
-  // The boundary, stated where someone might expect more of it. This is not a
-  // way to steer a run: `/btw` is the only thing that can arrive from outside,
-  // and it cannot approve, pause or redirect.
+  // The boundary, stated where someone might expect more of it.
   const note = el("p", "perp-note");
   foot.append(form, sent, note);
 
@@ -573,44 +629,63 @@ function buildComposer() {
     event.preventDefault();
     const text = input.value;
     input.value = "";
-    await send(text);
-    // Clicking Send leaves focus on the button. The next note usually follows
-    // the first, so put the cursor back in the field either way.
+    if (kind === "chat") await ask(text);
+    else await send(text);
+    // Clicking Send leaves focus on the button, and the next message usually
+    // follows the first, so put the cursor back in the field either way.
     input.focus();
   });
 
-  parts = { input, button, sent, note };
-  return foot;
+  return { foot, input, button, sent, note };
 }
 
-/** Put the current state onto the composer without rebuilding it. */
+/** Put the current state onto the composers without rebuilding them. */
 function dressComposer() {
-  if (!composer || !parts) return;
-  // On the `/btw` tab, because that is what the box makes. It sat under Chat,
-  // where it read as a way to talk to the loop — and it is not one: it files an
-  // aside, which lands in this list. The conversation above it is written by
-  // `perp chat` elsewhere and can only be read here.
-  composer.hidden = !(state.root && state.installed && !state.error && state.view && state.tab === "btw");
+  if (!parts) return;
+  const usable = Boolean(state.root && state.installed && !state.error && state.view);
+
+  // `/btw` files an aside; the conversation tab talks to a model. Each box sits
+  // under the list it adds to.
+  parts.btw.foot.hidden = !(usable && state.tab === "btw");
+  parts.chat.foot.hidden = !(usable && state.tab === "chat");
 
   // Read from `t()` on every pass, not once at build time: the panel is redrawn
   // when the interface language changes, and these are the only strings in it
   // that outlive a render.
-  parts.input.placeholder = t("panel.notePlaceholder");
-  parts.button.textContent = state.sending ? t("panel.sending") : t("panel.send");
-  parts.button.disabled = state.sending;
-  parts.note.textContent = t("panel.btwLimit");
-  parts.sent.textContent = state.sent || "";
-  parts.sent.hidden = !state.sent;
+  parts.btw.input.placeholder = t("panel.notePlaceholder");
+  parts.btw.button.textContent = state.sending ? t("panel.sending") : t("panel.send");
+  parts.btw.button.disabled = state.sending;
+  parts.btw.note.textContent = t("panel.btwLimit");
+  parts.btw.sent.textContent = state.sent || "";
+  parts.btw.sent.hidden = !state.sent;
 
-  // The field stays live while a note is in flight — `send` already refuses a
-  // second one, and disabling a focused input blurs it, which is the bug this
-  // whole arrangement exists to avoid.
+  parts.chat.input.placeholder = t("panel.askPlaceholder");
+  parts.chat.button.textContent = state.asking ? t("panel.asking") : t("panel.send");
+  parts.chat.button.disabled = state.asking;
+  parts.chat.note.textContent = t("panel.chatLimit");
+  parts.chat.sent.textContent = state.askError || "";
+  parts.chat.sent.hidden = !state.askError;
+
+  // Both fields stay live while something is in flight — [send] and [ask]
+  // already refuse a second one, and disabling a focused input blurs it, which
+  // is the bug this whole arrangement exists to avoid.
 }
 
 // Read-only. The composer used to be drawn here and now belongs to `/btw`; see
 // [dressComposer] for why.
+/** Who said it, in the reader's language.
+ *
+ * The journal stores a speaker as an identifier, and an identifier is not a
+ * label. Unknown ones are shown as they are rather than swallowed: a speaker
+ * this build has no word for is still worth seeing.
+ */
+function speakerLabel(speaker) {
+  const known = { operator: "panel.speakerOperator", assistant: "panel.speakerAssistant" };
+  return known[speaker] ? t(known[speaker]) : speaker;
+}
+
 function renderChat(body, view) {
-  if (!view.chat.length) {
+  if (!view.chat.length && !state.asked) {
     body.append(
       el("p", "perp-empty", t("panel.emptyChat")),
     );
@@ -619,7 +694,7 @@ function renderChat(body, view) {
   const list = el("div", "perp-chat");
   for (const line of view.chat) {
     const turn = el("div", `perp-turn ${line.speaker}`);
-    turn.append(el("span", "perp-speaker", line.speaker));
+    turn.append(el("span", "perp-speaker", speakerLabel(line.speaker)));
     turn.append(el("p", null, line.text));
     if (line.partial) {
       // The half a model produced before someone stopped it. Kept, and
@@ -629,6 +704,38 @@ function renderChat(body, view) {
     }
     list.append(turn);
   }
+
+  // The question just asked, and a marker that an answer is outstanding. Held
+  // in memory rather than read from the journal because it is not in the
+  // journal yet — see [ask]. Both are replaced by the real records the moment
+  // the turn lands, so nothing here can disagree with the journal for longer
+  // than the call takes.
+  if (state.asked) {
+    // Only until the journal has it. `perp chat` writes the operator's turn as
+    // soon as it is asked and long before the model answers, and the watcher
+    // brings it back within the same second — so drawing the held copy as well
+    // showed the question twice, once from memory and once from the record.
+    const last = view.chat[view.chat.length - 1];
+    const journalled = last && last.speaker === "operator" && last.text === state.asked;
+    if (!journalled) {
+      const mine = el("div", "perp-turn operator pending");
+      mine.append(el("span", "perp-speaker", speakerLabel("operator")));
+      mine.append(el("p", null, state.asked));
+      list.append(mine);
+    }
+
+    const waiting = el("div", "perp-turn assistant pending");
+    waiting.append(el("span", "perp-speaker", speakerLabel("assistant")));
+    const dots = el("p", "perp-typing");
+    // Three of them, animated in CSS, so the wait reads as work rather than as
+    // nothing happening. `prefers-reduced-motion` stops the animation and
+    // leaves the text.
+    dots.append(el("span", "perp-dot"), el("span", "perp-dot"), el("span", "perp-dot"));
+    dots.append(el("span", "perp-typing-said", t("panel.chatThinking")));
+    waiting.append(dots);
+    list.append(waiting);
+  }
+
   body.append(list);
 }
 

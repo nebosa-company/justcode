@@ -98,11 +98,14 @@ usage:
       Measure the workspace and say whether the current phase's exit condition
       is met, and why not if it is not. Measured, never asserted.
 
-  perp chat [--local-only] [--root <dir>]
+  perp chat [--once <text>] [--local-only] [--root <dir>]
       Conversation. Slash commands are resolved by the engine and never sent to
       a model; an unknown one is an error, not a prompt. Both sides of the
       conversation go in the loop's own journal. Read-only while the loop holds
       the workspace.
+
+      With --once, answers one message and exits, for a caller that is not a
+      terminal. The same turn either way: journalled, streamed, priced.
 
   perp btw <text> [--source <where>] [--root <dir>]
       File an aside. Accepted at any time, classified as steer, requirement,
@@ -956,6 +959,14 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
         .map_err(|e| e.to_string())?;
     let mode = if args.contains(&"--local-only") { Mode::LocalOnly } else { Mode::Any };
 
+    // One message and out, for a caller that is not a terminal — the editor's
+    // panel, most of it. Deliberately the *same* loop rather than a second
+    // implementation beside it: a chat turn journals both sides, streams, is
+    // read-only while the loop writes and records what it spent, and a shorter
+    // path that skipped any of those would be a second set of rules nobody
+    // audited. It differs in where the line comes from and nothing else.
+    let once = flag(args, "--once");
+
     // `C-3`: if the loop holds the write lock, this session is read-only. The
     // lock file on disk is the authority — not a flag, not an assumption.
     let held = workspace_of(args).join("write.lock").exists();
@@ -963,13 +974,23 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
     if chat_mode == perp_core::lock::ChatMode::ReadOnly {
         println!("the loop is writing — this session is read-only (`C-3`)");
     }
-    println!("perp chat · {} slash commands, or just type. ctrl-d to leave.", command::NAMES.len());
+    if once.is_none() {
+        println!(
+            "perp chat · {} slash commands, or just type. ctrl-d to leave.",
+            command::NAMES.len()
+        );
+    }
 
     let transport = Curl::new();
     let mut client = Client::new(&transport);
     let stdin = std::io::stdin();
 
-    for line in stdin.lock().lines() {
+    let lines: Box<dyn Iterator<Item = std::io::Result<String>>> = match once {
+        Some(text) => Box::new(std::iter::once(Ok(text.to_string()))),
+        None => Box::new(stdin.lock().lines()),
+    };
+
+    for line in lines {
         let line = line.map_err(|e| e.to_string())?;
         if line.trim().is_empty() {
             continue;

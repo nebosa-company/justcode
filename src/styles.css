@@ -2186,6 +2186,50 @@ body.perp-resizing {
 .perp-speaker { opacity: 0.6; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
 .perp-partial { opacity: 0.7; font-style: italic; font-size: 0.85em; }
 
+/* A turn reads as a turn: the two sides are told apart by which edge they sit
+   against and a rule down that edge, rather than by colour alone. */
+.perp-turn {
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+}
+
+.perp-turn.operator { border-left-color: var(--accent, #4a8fe0); }
+
+/* Said but not yet journalled — the question in flight and the answer being
+   waited for. Dimmed, because it is the only thing on this tab that is not
+   read back from the record. */
+.perp-turn.pending { opacity: 0.75; }
+
+.perp-typing {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.perp-typing-said { opacity: 0.7; font-size: 0.85em; font-style: italic; }
+
+.perp-dot {
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: perp-typing 1.2s ease-in-out infinite;
+}
+
+.perp-dot:nth-child(2) { animation-delay: 0.15s; }
+.perp-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes perp-typing {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30% { opacity: 0.9; transform: translateY(-0.15rem); }
+}
+
+/* The wait must still read as a wait without motion. */
+@media (prefers-reduced-motion: reduce) {
+  .perp-dot { animation: none; opacity: 0.5; }
+}
+
 /* The approvals queue and the diff (`I-3`). The diff is above the button on
    purpose: approving from the panel opens the diff first. */
 .perp-approval {
