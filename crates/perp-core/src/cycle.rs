@@ -8,7 +8,7 @@
 //!
 //! ## The backlog is the requirements source
 //!
-//! Not a separate list. A requirement is work if it is in `docs/perpetum.md`
+//! Not a separate list. A requirement is work if it is in `.harness/perpetum.md`
 //! without a done marker, and it stops being work when the marker changes.
 //! There is deliberately no second place to look: `C-2` already says a
 //! conversation does not get its own backlog, and the same reasoning applies to
@@ -255,7 +255,7 @@ pub fn measure(engine: &Engine, batches_done: u32) -> Result<Measured> {
         binding.resolve("path.batches").map(|p| p.exists()).unwrap_or(false).into(),
         0,
         batches_done,
-        binding.root().join("docs/perpetum/release-notes.md").exists(),
+        binding.root().join(".harness/release-notes.md").exists(),
         gates_green_at_sha,
         u32::from(projection.open_step.is_some()),
         true,
@@ -620,13 +620,13 @@ mod tests {
     #[allow(clippy::expect_used)]
     fn bound(text: &str) -> (std::path::PathBuf, crate::Binding) {
         let dir = crate::testutil::tmpdir("cycle-branch");
-        std::fs::create_dir_all(dir.join("docs/perpetum")).expect("dirs");
-        std::fs::write(dir.join("docs/perpetum.md"), "# requirements
+        std::fs::create_dir_all(dir.join(".harness")).expect("dirs");
+        std::fs::write(dir.join(".harness/perpetum.md"), "# requirements
 ").expect("reqs");
         std::fs::write(
-            dir.join("docs/perpetum/binding.md"),
+            dir.join(".harness/binding.md"),
             format!("```perp-binding
-path.requirements = docs/perpetum.md
+path.requirements = .harness/perpetum.md
 {text}```
 "),
         )
@@ -688,23 +688,23 @@ path.requirements = docs/perpetum.md
         // A three-batch run landed all three batches and still ended with a
         // modified journal and an unstaged board, because phase E ran after the
         // last batch and nothing committed what it wrote.
-        let (dir, binding) = bound("out.journal = docs/perpetum/journal.jsonl
-out.state = docs/perpetum/state.md
+        let (dir, binding) = bound("out.journal = .harness/journal.jsonl
+out.state = .harness/state.md
 ");
 
         // Nothing written yet: nothing to name.
         assert!(evidence_paths(&dir, &binding).is_empty());
 
-        std::fs::write(dir.join("docs/perpetum/journal.jsonl"), "{}
+        std::fs::write(dir.join(".harness/journal.jsonl"), "{}
 ").expect("journal");
         std::fs::create_dir_all(crate::artifact::dir_in(&dir)).expect("artifacts");
         std::fs::write(crate::artifact::Kind::Board.path_in(&dir), "<p>").expect("board");
 
         let paths = evidence_paths(&dir, &binding);
-        assert!(paths.contains(&"docs/perpetum/journal.jsonl".to_string()), "{paths:?}");
+        assert!(paths.contains(&".harness/journal.jsonl".to_string()), "{paths:?}");
         assert!(paths.contains(&crate::artifact::DIR.to_string()), "{paths:?}");
         assert!(
-            !paths.contains(&"docs/perpetum/state.md".to_string()),
+            !paths.contains(&".harness/state.md".to_string()),
             "a path the binding names but nothing has written is not staged: {paths:?}"
         );
     }
@@ -727,7 +727,8 @@ out.state = docs/perpetum/state.md
         ] {
             repo.run_unchecked(&args).expect("git");
         }
-        repo.stage(&["docs"]).expect("stage");
+        // The harness lives in `.harness` now, so that is what the seed commit has.
+        repo.stage(&[".harness"]).expect("stage");
         // Seeded through plumbing: `commit` refuses `main` outright (`G-1`),
         // which is the rule under test further down. This stands for a
         // repository that already existed before the loop ever saw it.

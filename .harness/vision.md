@@ -2,7 +2,7 @@
 
 ## What this is
 
-A harness that runs the [Perpetum](../../../perpetum.md) loop unattended against
+A harness that runs the [Perpetum](../../perpetum.md) loop unattended against
 models the operator controls: LM Studio locally, LM Link on their own rigs, and
 the DeepSeek API when cloud is allowed. It keeps a repository moving — gather,
 prioritise, build, gate, release-to-the-approval-boundary, clean up, repeat —

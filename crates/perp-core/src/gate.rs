@@ -316,9 +316,9 @@ mod tests {
     }
 
     fn binding_with(root: &Path, block: &str) -> Binding {
-        std::fs::create_dir_all(root.join("docs/perpetum")).expect("dirs");
+        std::fs::create_dir_all(root.join(".harness")).expect("dirs");
         std::fs::write(
-            root.join("docs/perpetum/binding.md"),
+            root.join(".harness/binding.md"),
             format!("```perp-binding\n{block}\n```\n"),
         )
         .expect("write");
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn a_binding_with_no_gates_is_an_error_not_an_empty_pass() {
         let root = tmpdir("gate-none");
-        let binding = binding_with(&root, "path.requirements = docs/perpetum.md");
+        let binding = binding_with(&root, "path.requirements = .harness/perpetum.md");
         let err = Gate::from_binding(&binding).expect_err("must refuse");
         assert!(format!("{err}").contains("nothing to be green"), "{err}");
     }
@@ -514,8 +514,8 @@ mod tests {
     #[test]
     fn evidence_lands_beside_the_journal() {
         assert_eq!(
-            evidence_dir(Path::new("docs/perpetum/journal.jsonl")),
-            PathBuf::from("docs/perpetum/gates")
+            evidence_dir(Path::new(".harness/journal.jsonl")),
+            PathBuf::from(".harness/gates")
         );
     }
 }

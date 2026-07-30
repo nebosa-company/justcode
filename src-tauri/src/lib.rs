@@ -714,7 +714,7 @@ fn perp_start(batches: u32, items: u32, root: String) -> Result<String, String> 
 
     // Beside the journal, truncated per start: this is the last run's console,
     // not a history. The journal is the history.
-    let log_path = std::path::Path::new(&root).join("docs/perpetum/cycle.log");
+    let log_path = std::path::Path::new(&root).join(".harness/cycle.log");
     let log = std::fs::File::create(&log_path)
         .map_err(|e| format!("{}: {e}", log_path.display()))?;
 
@@ -788,7 +788,7 @@ fn perp_root(from: String) -> Option<String> {
     let mut dir = std::path::Path::new(&from);
     // Bounded by the filesystem: `parent()` yields `None` at the root.
     loop {
-        if dir.join("docs/perpetum/binding.md").is_file() {
+        if dir.join(".harness/binding.md").is_file() {
             return Some(dir.to_string_lossy().replace('\\', "/"));
         }
         dir = dir.parent()?;

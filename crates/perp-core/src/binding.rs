@@ -18,7 +18,7 @@ use crate::error::{Error, Result};
 pub const FENCE: &str = "perp-binding";
 
 /// Where the binding lives, relative to the repository root.
-pub const DEFAULT_PATH: &str = "docs/perpetum/binding.md";
+pub const DEFAULT_PATH: &str = crate::layout::BINDING;
 
 #[derive(Debug, Clone)]
 pub struct Binding {
@@ -173,7 +173,7 @@ mod tests {
     }
 
     fn bound(root: &Path) -> Binding {
-        write(root, "docs/perpetum.md", "# requirements");
+        write(root, ".harness/perpetum.md", "# requirements");
         write(
             root,
             DEFAULT_PATH,
@@ -182,8 +182,8 @@ mod tests {
              ```perp-binding\n\
              # a comment, and a blank line, both ignored\n\
              \n\
-             path.requirements = docs/perpetum.md\n\
-             out.journal       = docs/perpetum/journal.jsonl\n\
+             path.requirements = .harness/perpetum.md\n\
+             out.journal       = .harness/journal.jsonl\n\
              gate.test         = cargo test --workspace\n\
              ```\n\
              \n\
@@ -196,7 +196,7 @@ mod tests {
     fn reads_keys_out_of_the_fenced_block_only() {
         let root = tmpdir("binding-read");
         let binding = bound(&root);
-        assert_eq!(binding.get("path.requirements").expect("key"), "docs/perpetum.md");
+        assert_eq!(binding.get("path.requirements").expect("key"), ".harness/perpetum.md");
         assert_eq!(binding.get("gate.test").expect("key"), "cargo test --workspace");
         assert_eq!(binding.entries().count(), 3);
     }
@@ -207,7 +207,7 @@ mod tests {
         let binding = bound(&root);
         assert_eq!(
             binding.resolve("path.requirements").expect("resolve"),
-            root.join("docs/perpetum.md")
+            root.join(".harness/perpetum.md")
         );
     }
 
@@ -232,7 +232,7 @@ mod tests {
         write(
             &root,
             DEFAULT_PATH,
-            "```perp-binding\npath.vision = docs/initiation/vision.md\n```\n",
+            "```perp-binding\npath.vision = .harness/vision.md\n```\n",
         );
         let binding = Binding::load(&root).expect("load");
         let err = binding.verify().expect_err("must refuse");

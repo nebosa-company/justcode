@@ -5,7 +5,7 @@
 //! surface can cite, an append-only journal, and a state file that is a
 //! projection of that journal rather than a second source of truth.
 //!
-//! Requirements are defined in `docs/perpetum.md` and only cited here. The
+//! Requirements are defined in `.harness/perpetum.md` and only cited here. The
 //! modules name the ones they implement:
 //!
 //! | Module | Requirements |
@@ -78,6 +78,7 @@ pub mod gate;
 pub mod git;
 pub mod job;
 pub mod journal;
+pub mod layout;
 pub mod ladder;
 pub mod json;
 pub mod link;

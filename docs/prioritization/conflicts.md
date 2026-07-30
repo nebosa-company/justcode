@@ -86,8 +86,8 @@ artifacts) is either outside the repo or ignored by it. The loop never commits
 its own noise."*
 
 **Contradicts the current architecture**, specifically
-[`binding.md`](../perpetum/binding.md), which declares
-`out.journal = docs/perpetum/journal.jsonl` — inside the repository — and every
+[`binding.md`](../../.harness/binding.md), which declares
+`out.journal = .harness/journal.jsonl` — inside the repository — and every
 batch so far has committed it.
 
 Found by implementing batch 4, not by reading. This is the kind of conflict

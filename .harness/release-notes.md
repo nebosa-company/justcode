@@ -1,7 +1,7 @@
 # perp — release notes
 
 The harness versions independently of JustCode. The editor's own release
-process is unchanged and documented in [`../RELEASING.md`](../RELEASING.md).
+process is unchanged and documented in [`../RELEASING.md`](../docs/RELEASING.md).
 
 ---
 
@@ -114,7 +114,7 @@ responses and a real socket, which is not the same thing.
 
 ## 0.1.0 — 2026-07-28 · *unreleased, and deliberately so*
 
-The first cycle of [Perpetum](../../../perpetum.md) run against the harness that
+The first cycle of [Perpetum](../../perpetum.md) run against the harness that
 will eventually run Perpetum. Five batches, 38 requirements, 128 tests.
 
 **Nothing is published.** Tagging, pushing and merging to `main` are
@@ -172,7 +172,7 @@ none to feed.
 
 ### Accessibility, localisation, price book
 
-Marked N/A in [`nfrs.md`](../initiation/nfrs.md) with reasons: the harness is a
+Marked N/A in [`nfrs.md`](nfrs.md) with reasons: the harness is a
 CLI with no user interface yet, ships no user-facing strings beyond English
 help text, and nothing is sold.
 

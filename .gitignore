@@ -19,7 +19,7 @@ src-tauri/target/
 src-tauri/gen/
 
 # The harness workspace builds into its own target/ (crates/ is a separate
-# cargo workspace from src-tauri/, deliberately — see docs/perpetum/binding.md).
+# cargo workspace from src-tauri/, deliberately — see .harness/binding.md).
 crates/target/
 
 # Bundles produced by scripts/pack.mjs
@@ -60,7 +60,3 @@ crates/target/
 # `npm test` builds here rather than in `target`, so a running `tauri dev`
 # cannot turn the test run red by holding the lock on it.
 src-tauri/target-test/
-
-# The last cycle's console, written by Harness > Start. The journal is the
-# history; this is only there so a refusal to start is not silent.
-docs/perpetum/cycle.log

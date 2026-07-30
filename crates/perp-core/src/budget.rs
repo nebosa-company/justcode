@@ -350,7 +350,7 @@ mod tests {
         let entries = vec![
             ("budget.cycle.money".to_string(), "2.50".to_string()),
             ("budget.batch.tokens".to_string(), "250000".to_string()),
-            ("path.requirements".to_string(), "docs/perpetum.md".to_string()),
+            ("path.requirements".to_string(), ".harness/perpetum.md".to_string()),
         ];
         let budgets = from_entries(&entries).expect("parse");
         assert_eq!(budgets.cycle.money, Some(2.50));

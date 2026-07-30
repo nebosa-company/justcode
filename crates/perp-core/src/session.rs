@@ -196,6 +196,10 @@ impl Session {
     pub fn open(root: &Path) -> Result<Session> {
         let binding = Binding::load(root)?;
         binding.verify()?;
+        // The harness owns `.harness/`, so it keeps the rule about its own scratch
+        // there rather than asking the project to carry it. Written only when
+        // absent, and a failure is not worth stopping a run for.
+        crate::layout::ensure_gitignore(root);
         let journal = Journal::at(binding.resolve("out.journal")?);
         let records = journal.read_all()?;
         let next_seq = records.iter().map(|r| r.step.seq).max().unwrap_or(0) + 1;
@@ -328,14 +332,14 @@ mod tests {
 
     fn fixture(tag: &str) -> PathBuf {
         let root = tmpdir(tag);
-        std::fs::create_dir_all(root.join("docs/perpetum")).expect("dirs");
-        std::fs::write(root.join("docs/perpetum.md"), "# requirements\n").expect("reqs");
+        std::fs::create_dir_all(root.join(".harness")).expect("dirs");
+        std::fs::write(root.join(".harness/perpetum.md"), "# requirements\n").expect("reqs");
         std::fs::write(
-            root.join("docs/perpetum/binding.md"),
+            root.join(".harness/binding.md"),
             "```perp-binding\n\
-             path.requirements = docs/perpetum.md\n\
-             out.journal       = docs/perpetum/journal.jsonl\n\
-             out.state         = docs/perpetum/state.md\n\
+             path.requirements = .harness/perpetum.md\n\
+             out.journal       = .harness/journal.jsonl\n\
+             out.state         = .harness/state.md\n\
              ```\n",
         )
         .expect("binding");
@@ -454,7 +458,7 @@ mod tests {
     #[test]
     fn a_step_with_no_recorded_idempotence_is_treated_as_unsafe() {
         let root = fixture("session-legacy");
-        let journal = Journal::at(root.join("docs/perpetum/journal.jsonl"));
+        let journal = Journal::at(root.join(".harness/journal.jsonl"));
         // An intent written by something that never heard of the flag.
         journal
             .append(&Record::intent(step("c1/b3/s01"), 10, "from an older writer"))
@@ -472,7 +476,7 @@ mod tests {
         // `L-4`: the projection is rewritten after each outcome, not at the end
         // of a run that might never reach its end.
         let root = fixture("session-project");
-        let state_path = root.join("docs/perpetum/state.md");
+        let state_path = root.join(".harness/state.md");
         let mut session = Session::open(&root).expect("open");
 
         let first = session.next_step(1, "b3").expect("id");
@@ -496,7 +500,7 @@ mod tests {
     fn an_open_step_is_not_yet_in_the_state_file() {
         // The projection follows the journal; it never runs ahead of it.
         let root = fixture("session-project-open");
-        let state_path = root.join("docs/perpetum/state.md");
+        let state_path = root.join(".harness/state.md");
         let mut session = Session::open(&root).expect("open");
         let id = session.next_step(1, "b3").expect("id");
         let _guard = session.begin(id, "in flight", true).expect("begin");

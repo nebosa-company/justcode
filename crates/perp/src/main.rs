@@ -108,7 +108,7 @@ usage:
       the commit it was pinned to, and which link wrote it.
 
   perp artifact [<kind>|all] [--root <dir>]
-      Render artifacts from the journal into docs/perpetum/artifacts/. One
+      Render artifacts from the journal into .harness/artifacts/. One
       stable file per kind, self-contained, no server and no build step. A
       render that fails is a warning: artifacts are never on the critical path.
 
@@ -249,6 +249,14 @@ fn load(args: &[&str]) -> Result<Binding> {
 fn cmd_bind(args: &[&str]) -> Result<()> {
     let binding = load(args)?;
     println!("bound: {}", binding.source().display());
+
+    // `bind` is the command for setting a workspace up, so this is where the
+    // harness's own ignore file appears — and it says so rather than writing into
+    // someone's repository quietly. A run does it too, so a workspace that was
+    // never bound by hand still gets one.
+    if perp_core::layout::ensure_gitignore(binding.root()) {
+        println!("wrote: {}", perp_core::layout::GITIGNORE);
+    }
     for (key, value) in binding.entries() {
         if key.starts_with("path.") || key.starts_with("out.") {
             let resolved = binding.root().join(value);
@@ -1088,7 +1096,7 @@ fn run_command(
         }
         Command::Board => {
             // The artifact path is the authority. `out.board` named
-            // `docs/perpetum/progress-board.md`, which nothing has ever
+            // `.harness/progress-board.md`, which nothing has ever
             // written — this command read a file that did not exist while the
             // board sat in the artifacts directory beside it.
             let path = perp_core::artifact::Kind::Board.path_in(binding.root());

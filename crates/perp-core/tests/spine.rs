@@ -19,15 +19,15 @@ use perp_core::step::StepId;
 fn fixture(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("perp-it-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join("docs/perpetum")).expect("create fixture");
-    std::fs::write(dir.join("docs/perpetum.md"), "# requirements\n").expect("requirements");
+    std::fs::create_dir_all(dir.join(".harness")).expect("create fixture");
+    std::fs::write(dir.join(".harness/perpetum.md"), "# requirements\n").expect("requirements");
     std::fs::write(
-        dir.join("docs/perpetum/binding.md"),
+        dir.join(".harness/binding.md"),
         "# Binding\n\n\
          ```perp-binding\n\
-         path.requirements = docs/perpetum.md\n\
-         out.journal       = docs/perpetum/journal.jsonl\n\
-         out.state         = docs/perpetum/state.md\n\
+         path.requirements = .harness/perpetum.md\n\
+         out.journal       = .harness/journal.jsonl\n\
+         out.state         = .harness/state.md\n\
          ```\n",
     )
     .expect("binding");
@@ -122,7 +122,7 @@ fn an_unbound_project_refuses_to_run() {
 #[test]
 fn a_binding_naming_a_missing_input_stops_the_loop() {
     let root = fixture("missing-input");
-    std::fs::remove_file(root.join("docs/perpetum.md")).expect("remove the requirements file");
+    std::fs::remove_file(root.join(".harness/perpetum.md")).expect("remove the requirements file");
 
     let binding = Binding::load(&root).expect("the binding itself still parses");
     let err = binding.verify().expect_err("but verification must fail");

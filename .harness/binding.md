@@ -1,6 +1,6 @@
 # Perpetum binding — JustCode / `perp` harness
 
-Maps every path and command [Perpetum](../../../perpetum.md) names to what this
+Maps every path and command [Perpetum](../../perpetum.md) names to what this
 repository actually uses (Perpetum 0.1). If a path is not answered here, the
 loop stops and asks rather than guessing.
 
@@ -22,19 +22,19 @@ every gate in this cycle is a real command with a real transcript in
 
 | Perpetum names | This repo uses | Notes |
 |---|---|---|
-| Vision | [`docs/initiation/vision.md`](../initiation/vision.md) | |
-| NFRs | [`docs/initiation/nfrs.md`](../initiation/nfrs.md) | |
-| Requirements source | [`docs/perpetum.md`](../perpetum.md) | **The only place ids are minted** (Perpetum 0.8, `V-9`) |
+| Vision | [`.harness/vision.md`](vision.md) | |
+| NFRs | [`.harness/nfrs.md`](nfrs.md) | |
+| Requirements source | [`.harness/perpetum.md`](../perpetum.md) | **The only place ids are minted** (Perpetum 0.8, `V-9`) |
 | Per-source inputs | `docs/requirements/<source>/` | one folder per Phase B source |
 | Source-trust weights | `docs/requirements/weights.md` | |
 | Impact weights | `docs/prioritization/weights.md` | separate file, separate meaning |
 | Batches | `docs/prioritization/batches.md` | |
 | Conflicts | `docs/prioritization/conflicts.md` | |
-| State | [`docs/perpetum/state.md`](state.md) | **generated** — `perp run` rewrites it after every step (`L-4`) |
-| Cycle notes | [`docs/perpetum/cycle-notes.md`](cycle-notes.md) | hand-written narrative; not read by the engine |
-| Journal | [`docs/perpetum/journal.md`](journal.md) | steps + gate transcripts; the truth for cycle 1 |
-| Progress board | `docs/perpetum/progress-board.md` | rewritten at every feature's step 7 |
-| Release notes | `docs/perpetum/release-notes.md` | the harness's own, separate from the editor's |
+| State | [`.harness/state.md`](state.md) | **generated** — `perp run` rewrites it after every step (`L-4`) |
+| Cycle notes | [`.harness/cycle-notes.md`](cycle-notes.md) | hand-written narrative; not read by the engine |
+| Journal | [`.harness/journal.md`](journal.md) | steps + gate transcripts; the truth for cycle 1 |
+| Progress board | `.harness/progress-board.md` | rewritten at every feature's step 7 |
+| Release notes | `.harness/release-notes.md` | the harness's own, separate from the editor's |
 | Deploy runbook | `docs/maintain/deploy.md` | created in Phase E if absent |
 
 ## The machine-readable binding
@@ -47,17 +47,17 @@ a separate config file would be a second place for these paths to be wrong.
 **written** by the engine; only their parent directory must exist.
 
 ```perp-binding
-path.requirements = docs/perpetum.md
-path.vision       = docs/initiation/vision.md
-path.nfrs         = docs/initiation/nfrs.md
+path.requirements = .harness/perpetum.md
+path.vision       = .harness/vision.md
+path.nfrs         = .harness/nfrs.md
 path.batches      = docs/prioritization/batches.md
 path.conflicts    = docs/prioritization/conflicts.md
 path.weights.source = docs/requirements/weights.md
 path.weights.impact = docs/prioritization/weights.md
-path.links          = docs/perpetum/links.md
+path.links          = .harness/links.md
 
-out.journal = docs/perpetum/journal.jsonl
-out.state   = docs/perpetum/state.md
+out.journal = .harness/journal.jsonl
+out.state   = .harness/state.md
 
 gate.cwd     = crates
 gate.timeout = 900
@@ -94,7 +94,7 @@ of the bootstrap.
 
 ## Where new requirements may be written
 
-**Yes — new ids are appended to `docs/perpetum.md`**, in the section table that
+**Yes — new ids are appended to `.harness/perpetum.md`**, in the section table that
 owns their prefix. Prefixes are fixed: `L` loop, `M` model links, `T` tools,
 `G` git, `X` OS, `V` verification, `C` chat, `A` artifacts, `O` observability,
 `I` JustCode integration, `S` security, `N` non-functional.
@@ -140,7 +140,7 @@ skipped**, and the batch is blocked with that as the reason.
 
 ## Status markers
 
-Written in `docs/perpetum.md` next to the requirement id:
+Written in `.harness/perpetum.md` next to the requirement id:
 
 | Marker | Meaning |
 |---|---|
@@ -180,11 +180,11 @@ reconcile step in C.1 checks markers against the code, not against each other.
 ## Release ritual
 
 The harness versions independently of the editor. JustCode's own release
-process is unchanged and documented in [`RELEASING.md`](../RELEASING.md).
+process is unchanged and documented in [`RELEASING.md`](../docs/RELEASING.md).
 
 1. Version lives in `crates/perp-core/Cargo.toml` and `crates/perp/Cargo.toml`
    and must agree. Starts at `0.1.0`.
-2. Release notes are appended to `docs/perpetum/release-notes.md`, with API
+2. Release notes are appended to `.harness/release-notes.md`, with API
    breaking changes called out explicitly.
 3. No tag, no push, no GitHub release for the harness until it is shipped with
    the editor — that is an approval decision, not a loop decision.

@@ -1,6 +1,6 @@
 # Non-functional requirements — engineering standard
 
-The product-readiness standard the [Perpetum](../../../perpetum.md) loop holds
+The product-readiness standard the [Perpetum](../../perpetum.md) loop holds
 every batch to. Generic; a project may mark a section N/A with a reason. This
 project's N/A list is at the bottom.
 

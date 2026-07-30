@@ -207,7 +207,7 @@ impl Engine {
             budgets,
             concurrency: Concurrency::default(),
             root: root.to_path_buf(),
-            channel: crate::control::Channel::at(root),
+            channel: crate::control::Channel::at(&crate::layout::dir_in(root)),
             worktrees: None,
             now: time::now,
         })
@@ -266,7 +266,10 @@ impl Engine {
         let started = (self.now)();
         let owner = Lock::this_process(started);
         let first = self.session.next_step(cycle, stage)?;
-        let mut lock = Lock::write_lock(&self.root, &owner, &first, started)?;
+        // Under `.harness/`, not at the top of the repository: a lock file loose
+        // in someone's project root is litter, and it is the harness's business.
+        let mut lock =
+            Lock::write_lock(&crate::layout::dir_in(&self.root), &owner, &first, started)?;
         let took_over = lock.broke().map(|h| h.describe());
 
         // A lock taken from a dead process is journalled before any work, so
@@ -626,14 +629,14 @@ mod tests {
     #[allow(clippy::expect_used)]
     fn workspace(tag: &str) -> PathBuf {
         let dir = tmpdir(tag);
-        std::fs::create_dir_all(dir.join("docs/perpetum")).expect("dirs");
-        std::fs::write(dir.join("docs/perpetum.md"), "# requirements\n").expect("requirements");
+        std::fs::create_dir_all(dir.join(".harness")).expect("dirs");
+        std::fs::write(dir.join(".harness/perpetum.md"), "# requirements\n").expect("requirements");
         std::fs::write(
-            dir.join("docs/perpetum/binding.md"),
+            dir.join(".harness/binding.md"),
             "```perp-binding\n\
-             path.requirements = docs/perpetum.md\n\
-             out.journal = docs/perpetum/journal.jsonl\n\
-             out.state = docs/perpetum/state.md\n\
+             path.requirements = .harness/perpetum.md\n\
+             out.journal = .harness/journal.jsonl\n\
+             out.state = .harness/state.md\n\
              gate.check = cargo --version\n\
              ```\n",
         )
@@ -643,7 +646,7 @@ mod tests {
 
     #[allow(clippy::expect_used)]
     fn records(root: &Path) -> Vec<crate::Record> {
-        Journal::at(root.join("docs/perpetum/journal.jsonl")).read_all().expect("read")
+        Journal::at(root.join(".harness/journal.jsonl")).read_all().expect("read")
     }
 
     fn tasks(n: u32) -> Vec<(Task, Done)> {
@@ -780,7 +783,7 @@ mod tests {
     fn a_second_run_is_locked_out_while_the_first_holds_the_workspace() {
         let root = workspace("engine-lock");
         let held = Lock::write_lock(
-            &root,
+            &crate::layout::dir_in(&root),
             "perp-other",
             &StepId::new(3, "b12", 1).expect("step"),
             time::now(),
@@ -814,7 +817,7 @@ mod tests {
             Fixed::new(vec![(Task::new("a"), Done::Blocked { why: "nope".into() })]);
         engine.run(3, "b12", &mut work, 0).expect("run");
 
-        Lock::write_lock(&root, "perp-next", &StepId::new(3, "b12", 9).expect("step"), time::now())
+        Lock::write_lock(&crate::layout::dir_in(&root), "perp-next", &StepId::new(3, "b12", 9).expect("step"), time::now())
             .expect("the workspace is not wedged after a blocked batch");
     }
 
@@ -836,7 +839,7 @@ mod tests {
     fn taking_over_a_dead_lock_is_journalled_before_any_work() {
         let root = workspace("engine-takeover");
         let dead = Lock::write_lock(
-            &root,
+            &crate::layout::dir_in(&root),
             "perp-dead",
             &StepId::new(3, "b12", 1).expect("step"),
             time::now() - crate::lock::DEFAULT_TTL_SECONDS - 10,
@@ -915,7 +918,7 @@ mod tests {
         ] {
             repo.run_unchecked(&args).expect("git");
         }
-        repo.stage(&["docs/perpetum.md"]).expect("stage");
+        repo.stage(&[".harness/perpetum.md"]).expect("stage");
         repo.commit(&crate::git::CommitMessage::new("Add the requirements")).expect("commit");
 
         let pinned = Gates::from_binding(&binding, &root.join("target")).expect("gates");
@@ -928,7 +931,7 @@ mod tests {
         // processes, often on separate days, and a control file works when
         // only one of them is alive.
         let root = workspace("engine-pause");
-        crate::control::Channel::at(&root)
+        crate::control::Channel::at(&crate::layout::dir_in(&root))
             .ask(&crate::control::Control::Pause)
             .expect("ask");
 
@@ -945,7 +948,7 @@ mod tests {
     #[test]
     fn a_single_step_runs_exactly_one_and_then_pauses() {
         let root = workspace("engine-single-step");
-        let channel = crate::control::Channel::at(&root);
+        let channel = crate::control::Channel::at(&crate::layout::dir_in(&root));
         channel.ask(&crate::control::Control::Step).expect("ask");
 
         let mut engine = Engine::open(&root).expect("open");
@@ -963,7 +966,7 @@ mod tests {
     #[test]
     fn an_abort_writes_a_human_stop_rather_than_a_park() {
         let root = workspace("engine-abort");
-        crate::control::Channel::at(&root)
+        crate::control::Channel::at(&crate::layout::dir_in(&root))
             .ask(&crate::control::Control::Abort { who: "the operator".into() })
             .expect("ask");
 
@@ -979,7 +982,7 @@ mod tests {
     #[test]
     fn an_injection_applies_once_and_is_on_the_report() {
         let root = workspace("engine-inject");
-        let channel = crate::control::Channel::at(&root);
+        let channel = crate::control::Channel::at(&crate::layout::dir_in(&root));
         channel
             .ask(&crate::control::Control::Inject { text: "prefer the other helper".into() })
             .expect("ask");
@@ -1026,7 +1029,7 @@ mod tests {
         let mut engine = Engine::open(&root).expect("open");
         let report = engine.run(4, "b20", &mut Fixed::new(tasks(2)), 0).expect("run");
 
-        let board = root.join("docs/perpetum/artifacts/board.html");
+        let board = root.join(".harness/artifacts/board.html");
         assert!(board.is_file(), "no board at {}", board.display());
         let html = std::fs::read_to_string(&board).expect("read");
         assert!(html.contains("Progress board"), "{}", &html[..200.min(html.len())]);

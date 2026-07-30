@@ -101,10 +101,10 @@ impl Kind {
 ///
 /// The path used to be spelled out in five places, and `out.board` in the
 /// binding named a sixth that nothing wrote — `/board` resolved
-/// `docs/perpetum/progress-board.md` while the engine wrote
-/// `docs/perpetum/artifacts/board.html`, so the command read a file that had
+/// `.harness/progress-board.md` while the engine wrote
+/// `.harness/artifacts/board.html`, so the command read a file that had
 /// never existed. The artifact path is the authority; the binding key is gone.
-pub const DIR: &str = "docs/perpetum/artifacts";
+pub const DIR: &str = crate::layout::ARTIFACTS;
 
 /// The artifacts directory inside a workspace.
 pub fn dir_in(root: &Path) -> PathBuf {
@@ -590,8 +590,8 @@ mod tests {
     #[test]
     fn one_place_says_where_an_artifact_lives() {
         // `/board` resolved `out.board`, which every binding set to
-        // `docs/perpetum/progress-board.md`, while the engine wrote
-        // `docs/perpetum/artifacts/board.html`. The command read a file that had
+        // `.harness/progress-board.md`, while the engine wrote
+        // `.harness/artifacts/board.html`. The command read a file that had
         // never existed, and the path was spelled out in five other places
         // besides. The artifact path is the authority and this is it.
         let root = std::path::Path::new("/w");

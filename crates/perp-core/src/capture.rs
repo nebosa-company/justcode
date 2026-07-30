@@ -286,16 +286,16 @@ mod tests {
     fn evidence_lives_beside_the_journal_and_not_inside_it() {
         // A PNG in a JSONL record would be a megabyte of base64 in a file meant
         // to be read with `tail`.
-        let dir = Capture::dir(Path::new("docs/perpetum/journal.jsonl"));
+        let dir = Capture::dir(Path::new(".harness/journal.jsonl"));
         assert!(dir.ends_with("evidence"), "{}", dir.display());
-        assert!(dir.starts_with("docs/perpetum"), "{}", dir.display());
+        assert!(dir.starts_with(".harness"), "{}", dir.display());
     }
 
     #[test]
     fn a_capture_carries_the_claim_it_is_evidence_of() {
         // `A-6`. A screenshot with no claim attached is a picture.
         let capture = Capture {
-            path: PathBuf::from("docs/perpetum/evidence/c4-b24-s01.png"),
+            path: PathBuf::from(".harness/evidence/c4-b24-s01.png"),
             step: "c4/b24/s01".into(),
             claim: "the panel shows three blocked steps".into(),
             bytes: 40_512,
@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn the_capture_command_names_the_file_it_writes() {
-        let command = capture_command(Path::new("docs/perpetum/evidence/x.png"))
+        let command = capture_command(Path::new(".harness/evidence/x.png"))
             .expect("a command on every supported platform");
         assert!(command.contains("evidence/x.png"), "{command}");
         if cfg!(target_os = "macos") {

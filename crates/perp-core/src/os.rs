@@ -547,7 +547,7 @@ mod tests {
         };
         assert!(auto("http://localhost:1420/"));
         assert!(auto("http://127.0.0.1:5173/index.html"));
-        assert!(auto("docs/perpetum/artifacts/board.html"));
+        assert!(auto(".harness/artifacts/board.html"));
 
         assert!(!auto("https://example.com/"), "the internet is asked (`X-7`)");
         assert!(!auto("mailto:someone@example.com"), "a mail draft is not a file");
@@ -618,7 +618,7 @@ mod tests {
     fn the_toolchain_list_comes_from_the_binding() {
         let names = Toolchain::names_from_entries(&[
             ("toolchain".to_string(), "cargo, git , node".to_string()),
-            ("path.requirements".to_string(), "docs/perpetum.md".to_string()),
+            ("path.requirements".to_string(), ".harness/perpetum.md".to_string()),
         ]);
         assert_eq!(names, ["cargo", "git", "node"]);
     }

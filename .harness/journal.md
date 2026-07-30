@@ -20,12 +20,12 @@ Operator: Claude Code session (Opus 5), per [`binding.md`](binding.md).
 ### c1/A/s02 — Write the vision
 - **intent:** produce `vision.md` including a "will never be" list, without
   which C.2 cannot detect a conflict.
-- **outcome:** [`../initiation/vision.md`](../initiation/vision.md) written with
+- **outcome:** [`../initiation/vision.md`](vision.md) written with
   10 never-clauses.
 
 ### c1/A/s03 — Write the NFRs
 - **intent:** the engineering standard the loop holds batches to.
-- **outcome:** [`../initiation/nfrs.md`](../initiation/nfrs.md) written, 10
+- **outcome:** [`../initiation/nfrs.md`](nfrs.md) written, 10
   sections + 3 marked N/A with reasons.
 
 ### c1/A/s04 — Fix the requirements-source link
@@ -589,7 +589,7 @@ Ordered so the irreversible steps come last. Version **0.1.0**.
   shape and the step-id format.
 
 ### c1/E/s02 — Localisation and accessibility
-- **outcome:** both **N/A**, per [`nfrs.md`](../initiation/nfrs.md): a CLI with
+- **outcome:** both **N/A**, per [`nfrs.md`](nfrs.md): a CLI with
   no interface and no user-facing strings beyond English help text. Recorded
   rather than skipped, because "not applicable" and "not done" look identical
   in a report that omits them.

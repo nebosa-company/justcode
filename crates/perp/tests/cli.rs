@@ -57,16 +57,16 @@ fn run(root: &Path, args: &[&str]) -> Output {
 fn fixture(tag: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("perp-cli-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join("docs/perpetum")).expect("dirs");
-    std::fs::write(root.join("docs/perpetum.md"), "# requirements\n\n| `L-3` | the journal |\n")
+    std::fs::create_dir_all(root.join(".harness")).expect("dirs");
+    std::fs::write(root.join(".harness/perpetum.md"), "# requirements\n\n| `L-3` | the journal |\n")
         .expect("requirements");
     std::fs::write(
-        root.join("docs/perpetum/binding.md"),
+        root.join(".harness/binding.md"),
         "# Binding\n\n\
          ```perp-binding\n\
-         path.requirements = docs/perpetum.md\n\
-         out.journal       = docs/perpetum/journal.jsonl\n\
-         out.state         = docs/perpetum/state.md\n\
+         path.requirements = .harness/perpetum.md\n\
+         out.journal       = .harness/journal.jsonl\n\
+         out.state         = .harness/state.md\n\
          ```\n",
     )
     .expect("binding");
@@ -99,7 +99,7 @@ fn bind_lists_what_resolved_and_what_is_still_to_be_written() {
 #[test]
 fn a_binding_naming_a_missing_input_fails_the_command_not_just_the_check() {
     let root = fixture("missing-input");
-    std::fs::remove_file(root.join("docs/perpetum.md")).expect("remove");
+    std::fs::remove_file(root.join(".harness/perpetum.md")).expect("remove");
     let out = run(&root, &["bind"]);
     assert!(!out.ok());
     assert!(out.says("path.requirements"), "names the key: {}", out.stderr);
@@ -151,7 +151,7 @@ fn a_failed_outcome_carries_its_verbatim_detail_all_the_way_to_the_state_file() 
     .ok());
 
     assert!(run(&root, &["state"]).ok());
-    let written = std::fs::read_to_string(root.join("docs/perpetum/state.md")).expect("state file");
+    let written = std::fs::read_to_string(root.join(".harness/state.md")).expect("state file");
     assert!(written.contains("mismatched types"), "{written}");
     assert!(written.contains("0 done, 1 blocked"), "{written}");
 }
@@ -187,6 +187,9 @@ fn resume_parks_a_step_that_died_between_intent_and_outcome() {
 #[test]
 fn check_ids_fails_when_a_document_invents_a_requirement() {
     let root = fixture("stray-id");
+    // `docs/` is the project's own, and the fixture stopped creating it when the
+    // harness moved out of it — which is the point of the move.
+    std::fs::create_dir_all(root.join("docs")).expect("docs");
     std::fs::write(root.join("docs/plan.md"), "Batch 1: `L-3`, then `L-99`.\n").expect("write");
 
     let out = run(&root, &["check", "ids"]);
@@ -202,17 +205,17 @@ fn check_ids_fails_when_a_document_invents_a_requirement() {
 fn with_links(tag: &str, block: &str) -> PathBuf {
     let root = fixture(tag);
     std::fs::write(
-        root.join("docs/perpetum/links.md"),
+        root.join(".harness/links.md"),
         format!("# Links\n\n```perp-links\n{block}\n```\n"),
     )
     .expect("links");
-    let binding = root.join("docs/perpetum/binding.md");
+    let binding = root.join(".harness/binding.md");
     let text = std::fs::read_to_string(&binding).expect("read binding");
     std::fs::write(
         &binding,
         text.replace(
             "out.journal",
-            "path.links       = docs/perpetum/links.md\nout.journal",
+            "path.links       = .harness/links.md\nout.journal",
         ),
     )
     .expect("rebind");

@@ -523,7 +523,7 @@ function renderArtifacts(body, view) {
     const open = el("button", "perp-link", name);
     open.type = "button";
     open.addEventListener("click", () => {
-      if (onOpenArtifact) onOpenArtifact(`docs/perpetum/artifacts/${name}`);
+      if (onOpenArtifact) onOpenArtifact(`.harness/artifacts/${name}`);
     });
     row.append(open);
     list.append(row);
