@@ -586,8 +586,11 @@ function buildComposer() {
 /** Put the current state onto the composer without rebuilding it. */
 function dressComposer() {
   if (!composer || !parts) return;
-  // Only on the chat tab, and only with a workspace to leave a note on.
-  composer.hidden = !(state.root && state.installed && !state.error && state.view && state.tab === "chat");
+  // On the `/btw` tab, because that is what the box makes. It sat under Chat,
+  // where it read as a way to talk to the loop — and it is not one: it files an
+  // aside, which lands in this list. The conversation above it is written by
+  // `perp chat` elsewhere and can only be read here.
+  composer.hidden = !(state.root && state.installed && !state.error && state.view && state.tab === "btw");
 
   // Read from `t()` on every pass, not once at build time: the panel is redrawn
   // when the interface language changes, and these are the only strings in it
@@ -604,8 +607,8 @@ function dressComposer() {
   // whole arrangement exists to avoid.
 }
 
-// The composer is not drawn here: it lives below the scrolling body and outside
-// what a render replaces, so [dressComposer] is what shows it on this tab.
+// Read-only. The composer used to be drawn here and now belongs to `/btw`; see
+// [dressComposer] for why.
 function renderChat(body, view) {
   if (!view.chat.length) {
     body.append(
