@@ -28,6 +28,9 @@ export function renderMenuItems(container, items, close, parent = null) {
   // order — Tab is for moving *past* a menu, arrows are for moving *within*
   // one, per the standard menu keyboard pattern.
   const itemEls = [];
+  // One set per menu: the same letter may mean different things in File and in
+  // Edit, which is how every menu bar has always worked.
+  const claimed = new Set();
   const enabledItems = () => itemEls.filter((el) => !el.disabled);
   const focusEnabledAt = (index) => {
     const list = enabledItems();
@@ -73,9 +76,32 @@ export function renderMenuItems(container, items, close, parent = null) {
       button.append(spacer);
     }
 
+    // Every item gets a letter, so every item is reachable from the keyboard —
+    // which is what "a shortcut for everything" actually needs.
+    //
+    // Assigned rather than declared: seventeen items had no accelerator, and
+    // inventing seventeen global chords would burn muscle-memory space on
+    // "Sort Case-Sensitive" and collide with something eventually. A letter
+    // within an open menu costs nothing and covers items added later for free.
+    //
+    // First unused letter of the label, so it is stable while the label is —
+    // and skipped entirely once the alphabet in this menu runs out, rather than
+    // silently giving two items the same key.
+    const letter = claimMnemonic(item.label, claimed);
     const label = document.createElement("span");
     label.className = "menu-label";
-    label.textContent = item.label;
+    if (letter === -1) {
+      label.textContent = item.label;
+    } else {
+      const mark = document.createElement("u");
+      mark.textContent = item.label[letter];
+      label.append(
+        document.createTextNode(item.label.slice(0, letter)),
+        mark,
+        document.createTextNode(item.label.slice(letter + 1)),
+      );
+      button.dataset.mnemonic = item.label[letter].toLowerCase();
+    }
     button.append(label);
 
     const accelerator = document.createElement("span");
@@ -324,6 +350,36 @@ export function createMenuBar(container, menus) {
       focused.focus();
       return;
     }
+    // A bare letter activates the item in the open menu that claimed it.
+    //
+    // Here rather than on the dropdown, because clicking a menu title leaves
+    // focus on the title — a sibling of the dropdown — so a listener on the
+    // container never sees the keypress. This handler is the only one that sees
+    // it either way.
+    //
+    // Plain keypress only: Ctrl and Alt belong to the accelerators, and a letter
+    // typed with no menu open belongs to the editor.
+    if (
+      openIndex !== -1 &&
+      event.key.length === 1 &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      /[a-z0-9]/i.test(event.key)
+    ) {
+      const wanted = event.key.toLowerCase();
+      const items = [...dropdowns[openIndex].querySelectorAll(".menu-item")];
+      const match = items.find(
+        (element) => !element.disabled && element.dataset.mnemonic === wanted,
+      );
+      if (match) {
+        event.preventDefault();
+        event.stopPropagation();
+        match.click();
+        return;
+      }
+    }
+
     // Alt+<mnemonic> opens the matching top-level menu from anywhere, not
     // just while the bar already has focus — mirrors Windows' menu-bar
     // access keys. Plain Alt only: Ctrl+Alt is AltGr on many layouts, and
@@ -375,6 +431,33 @@ export function closeContextMenu() {
  * Shows a context menu at viewport coordinates `x`/`y`, nudged back inside the
  * window if it would otherwise hang off the bottom or the side.
  */
+/** The index of the letter this item should underline, or -1 for none.
+ *
+ * First character not already claimed in this menu, preferring the start of a
+ * word — `Save As…` takes `S` then `A` rather than `S` then `v`, which is what
+ * anyone scanning the menu would guess.
+ *
+ * Returns -1 rather than doubling up when everything is taken: two items
+ * answering the same key is worse than one item having no key.
+ */
+function claimMnemonic(label, claimed) {
+  const text = String(label ?? "");
+  const starts = [];
+  const rest = [];
+  for (let index = 0; index < text.length; index += 1) {
+    if (!/[a-z0-9]/i.test(text[index])) continue;
+    const atWordStart = index === 0 || !/[a-z0-9]/i.test(text[index - 1]);
+    (atWordStart ? starts : rest).push(index);
+  }
+  for (const index of [...starts, ...rest]) {
+    const key = text[index].toLowerCase();
+    if (claimed.has(key)) continue;
+    claimed.add(key);
+    return index;
+  }
+  return -1;
+}
+
 /** Put a submenu flyout beside its item, in viewport coordinates.
  *
  * The flyout is `position: fixed` rather than absolute, because a dropdown tall
