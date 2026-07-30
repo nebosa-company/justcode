@@ -16,6 +16,7 @@ import {
   showSymbolPicker,
   askSaveChanges,
   askCycleSize,
+  showCommandPalette,
   showAssociations,
   showNewFile,
   isOverlayOpen,
@@ -2601,6 +2602,12 @@ function buildMenus() {
       { separator: true },
       { label: t("view.language"), icon: "globe", run: chooseAppLanguage },
       { separator: true },
+      {
+        label: t("view.commandPalette"),
+        icon: "search",
+        accel: "Ctrl+Shift+P",
+        run: openCommandPalette,
+      },
       { label: t("view.problems"), icon: "warning", accel: "F8", run: showProblems },
       {
         label: t("view.nextProblem"),
@@ -2825,6 +2832,11 @@ window.addEventListener(
     //
     // H for Harness. P collided with print and paste in muscle memory and named
     // the old panel rather than what the menu is now called.
+    if (ctrl && event.shiftKey && event.key.toLowerCase() === "p") {
+      event.preventDefault();
+      openCommandPalette();
+      return;
+    }
     if (ctrl && event.altKey && event.key.toLowerCase() === "h") {
       event.preventDefault();
       togglePerpPanel();
@@ -3307,6 +3319,59 @@ async function perpRoot() {
   } catch {
     return null;
   }
+}
+
+/** Every runnable menu item, flattened, with the path that names it.
+ *
+ * Read from `buildMenus()` each time rather than kept in a list of its own: two
+ * registries would drift, and the menus are already the place every command is
+ * declared with its label, its icon, its accelerator and its enabled predicate.
+ *
+ * Submenus are walked by calling them, which is how the menus themselves get
+ * their contents — so Recent Files brings its files, and the Harness views bring
+ * theirs.
+ */
+function allCommands() {
+  const found = [];
+  const walk = (items, path) => {
+    for (const item of items) {
+      if (!item || item.separator) continue;
+      if (item.submenu) {
+        try {
+          walk(item.submenu(), [...path, item.label]);
+        } catch {
+          // A submenu that cannot build its contents is not worth losing the
+          // rest of the palette over.
+        }
+        continue;
+      }
+      if (typeof item.run !== "function") continue;
+      // Disabled is left out rather than shown greyed: a palette offering Save
+      // with no file open has to explain itself.
+      if (item.enabled && !item.enabled()) continue;
+      found.push({
+        label: item.label,
+        path,
+        accel: item.accel,
+        run: item.run,
+      });
+    }
+  };
+  for (const menu of buildMenus()) walk(menu.items, [menu.label]);
+  return found;
+}
+
+function openCommandPalette() {
+  showCommandPalette(allCommands(), (command) => {
+    try {
+      const result = command.run();
+      if (result && typeof result.catch === "function") {
+        result.catch((error) => console.error("Command failed:", error));
+      }
+    } catch (error) {
+      console.error("Command failed:", error);
+    }
+  });
 }
 
 /** Ask how much work to do, then hand it to the harness (`I-1`).

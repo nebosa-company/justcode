@@ -618,7 +618,8 @@ button.primary:hover {
 .menu-dropdown,
 .menu-flyout,
 .perp-body,
-.perp-diff {
+.perp-diff,
+.palette-list {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
@@ -628,7 +629,8 @@ button.primary:hover {
 .menu-dropdown::-webkit-scrollbar,
 .menu-flyout::-webkit-scrollbar,
 .perp-body::-webkit-scrollbar,
-.perp-diff::-webkit-scrollbar {
+.perp-diff::-webkit-scrollbar,
+.palette-list::-webkit-scrollbar {
   width: 12px;
   height: 12px;
 }
@@ -638,7 +640,8 @@ button.primary:hover {
 .menu-dropdown::-webkit-scrollbar-track,
 .menu-flyout::-webkit-scrollbar-track,
 .perp-body::-webkit-scrollbar-track,
-.perp-diff::-webkit-scrollbar-track {
+.perp-diff::-webkit-scrollbar-track,
+.palette-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -647,7 +650,8 @@ button.primary:hover {
 .menu-dropdown::-webkit-scrollbar-thumb,
 .menu-flyout::-webkit-scrollbar-thumb,
 .perp-body::-webkit-scrollbar-thumb,
-.perp-diff::-webkit-scrollbar-thumb {
+.perp-diff::-webkit-scrollbar-thumb,
+.palette-list::-webkit-scrollbar-thumb {
   background-color: var(--border);
   background-clip: padding-box;
   border: 3px solid transparent;
@@ -659,7 +663,8 @@ button.primary:hover {
 .menu-dropdown::-webkit-scrollbar-thumb:hover,
 .menu-flyout::-webkit-scrollbar-thumb:hover,
 .perp-body::-webkit-scrollbar-thumb:hover,
-.perp-diff::-webkit-scrollbar-thumb:hover {
+.perp-diff::-webkit-scrollbar-thumb:hover,
+.palette-list::-webkit-scrollbar-thumb:hover {
   background-color: var(--fg-dim);
   background-clip: padding-box;
 }
@@ -1810,6 +1815,60 @@ button.primary:hover {
   background: var(--bg);
   color: var(--fg);
   font-size: 0.85rem;
+}
+
+.palette-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.palette-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.palette-row.active {
+  background: var(--hover);
+}
+
+/* The label first and at full strength; where it lives and what it is bound to
+   are there to disambiguate, not to be read. */
+.palette-label {
+  flex: 0 0 auto;
+}
+
+.palette-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.55;
+  font-size: 0.85em;
+}
+
+.palette-accel {
+  flex: 0 0 auto;
+  opacity: 0.55;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
 }
 
 .cycle-fields {

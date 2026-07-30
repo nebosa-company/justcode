@@ -540,6 +540,126 @@ export function askCycleSize(defaults) {
 }
 
 /**
+ * Every command, searchable. `Ctrl+Shift+P`.
+ *
+ * The list comes from the menus rather than from a registry of its own, so a
+ * command cannot exist in one and be missing from the other, and a new menu item
+ * is in here the moment it is added. The menu path travels with each entry
+ * because "Open" and "Open…" mean different things under File and under Harness.
+ *
+ * Disabled commands are left out. A palette that offers Save with no file open
+ * is a palette that has to explain itself.
+ */
+export function showCommandPalette(commands, onRun) {
+  let chosen = null;
+  const body = openOverlay(t("palette.title"), true, () => {
+    // Run after the overlay has closed, so a command that opens a dialog of its
+    // own is not fighting this one for the screen.
+    if (chosen) onRun(chosen);
+  });
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "palette-input";
+  input.placeholder = t("palette.placeholder");
+  input.setAttribute("aria-label", t("palette.placeholder"));
+  body.append(input);
+
+  const list = document.createElement("ul");
+  list.className = "palette-list";
+  body.append(list);
+
+  const empty = document.createElement("p");
+  empty.className = "muted";
+  empty.textContent = t("palette.none");
+  empty.hidden = true;
+  body.append(empty);
+
+  let shown = [];
+  let active = 0;
+
+  /** Everything typed must appear, in order, somewhere in the text.
+   *
+   * Subsequence rather than substring, so "tglterm" finds "Toggle Terminal" —
+   * the way a palette is actually typed. Ranked by how early the run of matches
+   * starts, so a leading match beats one buried at the end.
+   */
+  const score = (command, query) => {
+    const haystack = `${command.path.join(" ")} ${command.label}`.toLowerCase();
+    if (!query) return 0;
+    let at = 0;
+    let first = -1;
+    for (const character of query) {
+      at = haystack.indexOf(character, at);
+      if (at === -1) return null;
+      if (first === -1) first = at;
+      at += 1;
+    }
+    return first;
+  };
+
+  const render = () => {
+    list.replaceChildren();
+    empty.hidden = shown.length > 0;
+    shown.forEach((command, index) => {
+      const row = document.createElement("li");
+      row.className = index === active ? "palette-row active" : "palette-row";
+      const name = document.createElement("span");
+      name.className = "palette-label";
+      name.textContent = command.label;
+      const where = document.createElement("span");
+      where.className = "palette-path";
+      where.textContent = command.path.join(" ▸ ");
+      const accel = document.createElement("span");
+      accel.className = "palette-accel";
+      accel.textContent = command.accel || "";
+      row.append(name, where, accel);
+      row.addEventListener("mousemove", () => {
+        active = index;
+        render();
+      });
+      row.addEventListener("click", () => {
+        chosen = command;
+        closeOverlay();
+      });
+      list.append(row);
+    });
+    list.children[active]?.scrollIntoView({ block: "nearest" });
+  };
+
+  const filter = () => {
+    const query = input.value.trim().toLowerCase();
+    shown = commands
+      .map((command) => ({ command, rank: score(command, query) }))
+      .filter((entry) => entry.rank !== null)
+      .sort((a, b) => a.rank - b.rank)
+      .map((entry) => entry.command)
+      .slice(0, 200);
+    active = 0;
+    render();
+  };
+
+  input.addEventListener("input", filter);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!shown.length) return;
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      active = (active + step + shown.length) % shown.length;
+      render();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (!shown[active]) return;
+      chosen = shown[active];
+      closeOverlay();
+    }
+  });
+
+  filter();
+  input.focus();
+}
+
+/**
  * The New File chooser: a blank document, then every type that offers starting
  * content. Starred types sort to the top; both groups are alphabetical.
  *
