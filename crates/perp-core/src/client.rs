@@ -574,6 +574,82 @@ impl<'a> Client<'a> {
         )
     }
 
+    /// Anthropic's Messages API.
+    ///
+    /// Same shape of call as the OpenAI path — egress checked before the socket,
+    /// the body passed through `outbound` so a credential cannot leave in it — and
+    /// a different body, a different path and a different reading of the answer.
+    fn messages(&self, link: &Link, request: &ChatRequest) -> Result<Reply> {
+        let base = Self::base(link)?.trim_end_matches('/');
+        let url = format!("{base}/v1/messages");
+        self.check_egress(&url)?;
+        let body = crate::security::outbound(
+            &crate::anthropic::request_body(request, &link.model),
+            link,
+            &self.redact,
+        )
+        .text;
+        let http = Self::authorise(link, Request::post_json(url, body));
+        let response = self.transport.send(&http)?;
+        if !response.is_success() {
+            // The body first, because Anthropic says what is wrong in it and the
+            // status line alone turns "max_tokens: required" into "400". The
+            // complaint is the fallback for a failure with nothing readable in it.
+            return Err(crate::anthropic::parse(&response.body).err().unwrap_or_else(|| {
+                Error::unbound(
+                    format!("link.{}", link.name),
+                    format!("messages: {}", response.complaint()),
+                )
+            }));
+        }
+        crate::anthropic::parse(&response.body)
+    }
+
+    /// The `claude` command, run as a subprocess.
+    ///
+    /// No egress check, and that is not an oversight: there is no URL to check. The
+    /// CLI reaches Anthropic on its own account with its own configured
+    /// credential, which is why the kind is classified `Cloud` and cannot be
+    /// reached for in a `local-only` run (`M-4`).
+    ///
+    /// The prompt goes on stdin. A conversation is flattened first, because the
+    /// command takes one prompt and has no notion of turns.
+    fn command(&self, link: &Link, request: &ChatRequest) -> Result<Reply> {
+        let program = std::env::var("PERP_CLAUDE_BIN").unwrap_or_else(|_| "claude".to_string());
+        let prompt = crate::anthropic::cli_prompt(request);
+        let (args, stdin) = crate::anthropic::cli_invocation(&program, &link.model, &prompt);
+
+        // Redacted on the way out, the same as an HTTP body: a prompt assembled
+        // from a workspace can carry anything the workspace does.
+        let stdin = crate::security::outbound(&stdin, link, &self.redact).text;
+
+        let spec = crate::process::Spec::new(
+            args.join(" "),
+            std::path::Path::new("."),
+            std::time::Duration::from_secs(600),
+        )
+        .with_env(crate::process::Env::declared())
+        .with_stdin(stdin);
+        let run = crate::process::run(&spec)?;
+        if !matches!(run.exit, crate::process::Exit::Code(0)) {
+            // Its own words where it has any: the payload says why, and the exit
+            // code says only that it did not work.
+            return Err(crate::anthropic::parse_cli(&run.stdout_tail, &link.model)
+                .err()
+                .unwrap_or_else(|| {
+                    Error::unbound(
+                        format!("link.{}", link.name),
+                        format!(
+                            "{program} exited {}: {}",
+                            run.exit.describe(),
+                            run.stderr_tail.trim()
+                        ),
+                    )
+                }));
+        }
+        crate::anthropic::parse_cli(&run.stdout_tail, &link.model)
+    }
+
     /// Ask whether `/v1/responses` exists (`M-21`).
     ///
     /// An empty POST: a server that serves the route answers 4xx-with-a-message
@@ -632,7 +708,18 @@ impl<'a> Client<'a> {
     }
 
     /// One call, on a named protocol (`M-21`).
+    ///
+    /// Two kinds never reach the protocol match. `M-21` is about choosing between
+    /// OpenAI's two surfaces; Anthropic is a third wire format and `claude-cli` is
+    /// not a wire at all, so both are decided by kind before that question is
+    /// asked.
     pub fn speak(&self, link: &Link, request: &ChatRequest, protocol: Protocol) -> Result<Reply> {
+        if link.kind == crate::link::Kind::Anthropic {
+            return self.messages(link, request);
+        }
+        if link.kind.is_subprocess() {
+            return self.command(link, request);
+        }
         match protocol {
             Protocol::Responses => {
                 let base = Self::base(link)?.trim_end_matches('/');

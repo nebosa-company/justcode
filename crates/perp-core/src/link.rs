@@ -708,8 +708,23 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
             "an lmlink peer is addressed by device name, from `lms link set-device-name`",
         ));
     }
-    if kind != Kind::LmLink && field("base_url").is_none() {
-        return Err(Error::unbound(format!("link.{name}.base_url"), "is required"));
+    // Required only where there is nothing to fall back to.
+    //
+    // A kind with an obvious address carries its own default now, so stating
+    // `api.openai.com` in every binding is no longer the price of using OpenAI.
+    // `lmlink` is addressed by device, and `claude-cli` is a program rather than a
+    // host — asking either for a URL made a `claude-cli` link impossible to
+    // configure at all, which a subprocess test found by not being able to build
+    // one.
+    if field("base_url").is_none()
+        && kind != Kind::LmLink
+        && !kind.is_subprocess()
+        && kind.default_base_url().is_none()
+    {
+        return Err(Error::unbound(
+            format!("link.{name}.base_url"),
+            format!("is required — `{}` has no default address", kind.as_str()),
+        ));
     }
 
     let concurrency = match field("concurrency") {

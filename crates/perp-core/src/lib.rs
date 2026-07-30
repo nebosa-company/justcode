@@ -59,6 +59,7 @@
 //! would need a GPU to run.
 
 pub mod agent;
+pub mod anthropic;
 pub mod approval;
 pub mod artifact;
 pub mod atomic;
