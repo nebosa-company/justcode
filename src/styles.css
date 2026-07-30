@@ -2025,6 +2025,19 @@ body.perp-resizing {
   }
 }
 
+/* Below the scrolling body rather than inside it, so the field is always in
+   reach and — the reason it moved — outside the region a refresh redraws. It
+   supplies the horizontal padding `.perp-body` used to give it. */
+.perp-foot {
+  flex: none;
+  padding: 0 0.75rem 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* `.perp-foot` sets no `display`, so this is belt and braces rather than a
+   fix — several elements in this stylesheet do, and each needed exactly this. */
+.perp-foot[hidden] { display: none; }
+
 .perp-composer {
   display: flex;
   gap: 0.4rem;

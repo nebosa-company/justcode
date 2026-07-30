@@ -100,6 +100,12 @@ async function revalidate() {
 }
 
 let host = null;
+
+// The composer's own nodes, held across renders. [clearAbove] rebuilds them if
+// the panel is mounted somewhere else, so a stale reference cannot survive.
+let composer = null;
+let parts = null;
+
 let onOpenArtifact = null;
 let onShowTranscript = null;
 let onProblems = null;
@@ -235,6 +241,26 @@ export function inFlight() {
   return Boolean(state.view && state.view.position && state.view.position.in_flight);
 }
 
+/** Clear the region a render owns, and leave the composer where it is.
+ *
+ * The composer is built once and kept as the panel's last child, because a text
+ * field cannot survive being redrawn: removing a focused element blurs it, and
+ * `replaceChildren` removed this one on every refresh. The watcher fires on each
+ * journal write and the backstop poll every fifteen seconds, so a note being
+ * typed during a run lost the cursor after a few seconds. Everything above it is
+ * a projection and safe to rebuild; the input holds something only the person
+ * typing has.
+ */
+function clearAbove() {
+  if (composer && composer.parentNode === host) {
+    while (host.firstChild !== composer) host.removeChild(host.firstChild);
+    return;
+  }
+  host.replaceChildren();
+  composer = buildComposer();
+  host.append(composer);
+}
+
 function render() {
   // The status bar carries the signal too, so a run is visible with the panel
   // shut. `refresh` runs on the watcher's events whether or not anything is
@@ -243,42 +269,40 @@ function render() {
   if (badge) {
     const step = state.view?.position?.in_flight;
     badge.hidden = !step;
-    if (step) badge.textContent = `thinking · ${step}`;
+    if (step) badge.textContent = t("panel.thinking", { step });
   }
 
   if (!host) return;
-  host.replaceChildren();
+  clearAbove();
+  const add = (node) => host.insertBefore(node, composer);
 
+  // Every early return still lands on [dressComposer], which is what hides it:
+  // there is nothing to leave a note on without a workspace behind it.
   if (!state.root) {
-    host.append(el("p", "perp-empty", t("panel.noWorkspace")));
-    return;
-  }
-  if (!state.installed) {
+    add(el("p", "perp-empty", t("panel.noWorkspace")));
+  } else if (!state.installed) {
     // Absent, not broken. A blank panel reads as a bug.
-    host.append(el("p", "perp-empty", state.error));
-    return;
-  }
-  if (state.error) {
-    host.append(el("p", "perp-error", state.error));
-    return;
-  }
-  if (!state.view) {
-    host.append(el("p", "perp-empty", t("panel.reading")));
-    return;
+    add(el("p", "perp-empty", state.error));
+  } else if (state.error) {
+    add(el("p", "perp-error", state.error));
+  } else if (!state.view) {
+    add(el("p", "perp-empty", t("panel.reading")));
+  } else {
+    add(renderHeader(state.view));
+    add(renderTabs());
+
+    const body = el("div", "perp-body");
+    const view = state.view;
+    if (state.tab === "timeline") renderTimeline(body, view);
+    else if (state.tab === "chat") renderChat(body, view);
+    else if (state.tab === "approvals") renderApprovals(body, view);
+    else if (state.tab === "diff") renderDiff(body, view);
+    else if (state.tab === "btw") renderBtw(body, view);
+    else if (state.tab === "artifacts") renderArtifacts(body, view);
+    add(body);
   }
 
-  host.append(renderHeader(state.view));
-  host.append(renderTabs());
-
-  const body = el("div", "perp-body");
-  const view = state.view;
-  if (state.tab === "timeline") renderTimeline(body, view);
-  else if (state.tab === "chat") renderChat(body, view);
-  else if (state.tab === "approvals") renderApprovals(body, view);
-  else if (state.tab === "diff") renderDiff(body, view);
-  else if (state.tab === "btw") renderBtw(body, view);
-  else if (state.tab === "artifacts") renderArtifacts(body, view);
-  host.append(body);
+  dressComposer();
 }
 
 /** `$0.04` at full strength and the rest of the digits quiet.
@@ -318,7 +342,7 @@ function renderHeader(view) {
   // What `perp bind` said the last time the binding or links changed. A warning
   // beside the workspace it is about, not an error that stops anything.
   if (state.setupProblem) {
-    const problem = el("span", "perp-setup-problem", "binding");
+    const problem = el("span", "perp-setup-problem", t("panel.bindingProblem"));
     problem.title = state.setupProblem;
     header.append(problem);
   }
@@ -352,7 +376,7 @@ function renderHeader(view) {
     // italic text at 75% opacity, which looked the same as idle.
     const flight = el("span", "perp-flight");
     flight.append(el("span", "perp-pulse"));
-    flight.append(el("span", null, `thinking · ${position.in_flight}`));
+    flight.append(el("span", null, t("panel.thinking", { step: position.in_flight })));
     header.append(flight);
   }
   return header;
@@ -464,7 +488,7 @@ function renderTimeline(body, view) {
     if (entry.transcript && onShowTranscript) {
       // `I-4`: transcripts go to the terminal dock rather than a viewer
       // invented for this panel.
-      const open = el("button", "perp-link", "transcript");
+      const open = el("button", "perp-link", t("panel.transcript"));
       open.type = "button";
       open.addEventListener("click", () => onShowTranscript(entry.step, entry.transcript));
       row.append(open);
@@ -497,46 +521,72 @@ async function send(text) {
   await refresh();
 }
 
-function renderComposer(body) {
+/** The composer, built once for the life of the mount.
+ *
+ * Its nodes are kept in [parts] and written to by [dressComposer], rather than
+ * being made again each render. See [clearAbove] for why.
+ */
+function buildComposer() {
+  const foot = el("div", "perp-foot");
   const form = el("form", "perp-composer");
   const input = el("input", "perp-input");
   input.type = "text";
-  input.placeholder = "Leave a note for the loop…";
-  input.disabled = state.sending;
-  const button = el("button", "perp-send", state.sending ? "Sending…" : "Send");
+  const button = el("button", "perp-send");
   button.type = "submit";
-  button.disabled = state.sending;
   form.append(input, button);
+
+  // What the harness said back, verbatim. A note that was reclassified or
+  // refused says so here rather than looking like it was accepted.
+  const sent = el("p", "perp-sent");
+
+  // The boundary, stated where someone might expect more of it. This is not a
+  // way to steer a run: `/btw` is the only thing that can arrive from outside,
+  // and it cannot approve, pause or redirect.
+  const note = el("p", "perp-note");
+  foot.append(form, sent, note);
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const text = input.value;
     input.value = "";
     await send(text);
+    // Clicking Send leaves focus on the button. The next note usually follows
+    // the first, so put the cursor back in the field either way.
+    input.focus();
   });
-  body.append(form);
 
-  // What the harness said back, verbatim. A note that was reclassified or
-  // refused says so here rather than looking like it was accepted.
-  if (state.sent) body.append(el("p", "perp-sent", state.sent));
-
-  // The boundary, stated where someone might expect more of it. This is not a
-  // way to steer a run: `/btw` is the only thing that can arrive from outside,
-  // and it cannot approve, pause or redirect.
-  body.append(
-    el(
-      "p",
-      "perp-note",
-      t("panel.btwLimit"),
-    ),
-  );
+  parts = { input, button, sent, note };
+  return foot;
 }
 
+/** Put the current state onto the composer without rebuilding it. */
+function dressComposer() {
+  if (!composer || !parts) return;
+  // Only on the chat tab, and only with a workspace to leave a note on.
+  composer.hidden = !(state.root && state.installed && !state.error && state.view && state.tab === "chat");
+
+  // Read from `t()` on every pass, not once at build time: the panel is redrawn
+  // when the interface language changes, and these are the only strings in it
+  // that outlive a render.
+  parts.input.placeholder = t("panel.notePlaceholder");
+  parts.button.textContent = state.sending ? t("panel.sending") : t("panel.send");
+  parts.button.disabled = state.sending;
+  parts.note.textContent = t("panel.btwLimit");
+  parts.sent.textContent = state.sent || "";
+  parts.sent.hidden = !state.sent;
+
+  // The field stays live while a note is in flight — `send` already refuses a
+  // second one, and disabling a focused input blurs it, which is the bug this
+  // whole arrangement exists to avoid.
+}
+
+// The composer is not drawn here: it lives below the scrolling body and outside
+// what a render replaces, so [dressComposer] is what shows it on this tab.
 function renderChat(body, view) {
   if (!view.chat.length) {
     body.append(
       el("p", "perp-empty", t("panel.emptyChat")),
     );
-    renderComposer(body);
     return;
   }
   const list = el("div", "perp-chat");
@@ -548,12 +598,11 @@ function renderChat(body, view) {
       // The half a model produced before someone stopped it. Kept, and
       // labelled — it is exactly the interesting half when an answer was
       // going wrong.
-      turn.append(el("span", "perp-partial", "interrupted"));
+      turn.append(el("span", "perp-partial", t("panel.interrupted")));
     }
     list.append(turn);
   }
   body.append(list);
-  renderComposer(body);
 }
 
 // `I-3`: approving from the panel opens the diff first. The button only exists
@@ -574,7 +623,7 @@ function renderApprovals(body, view) {
     if (pending.reviewable) {
       const diff = el("pre", "perp-diff", pending.diff);
       card.append(diff);
-      const approve = el("button", "perp-approve", `Approve #${pending.id}`);
+      const approve = el("button", "perp-approve", t("panel.approveId", { id: pending.id }));
       approve.type = "button";
       // Deliberately not wired to an action. Approvals never arrive over a
       // channel (`O-6`), and the panel is a view (`I-5`) — this tells the
@@ -618,7 +667,7 @@ function renderBtw(body, view) {
     const row = el("li");
     row.append(el("span", "perp-class", item.class));
     row.append(el("span", "perp-summary", item.text));
-    row.append(el("span", "perp-reqs", `from ${item.source}`));
+    row.append(el("span", "perp-reqs", t("panel.fromSource", { source: item.source })));
     list.append(row);
   }
   body.append(list);

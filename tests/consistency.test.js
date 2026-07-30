@@ -227,3 +227,28 @@ test("a hidden element that is display-something has an explicit [hidden] rule",
     `these stay visible when hidden is set:\n${missing.join("\n")}`,
   );
 });
+
+test("no panel string is written in English at the point it is shown", () => {
+  // The locale test above proves every key is translated everywhere. It says
+  // nothing about a string that never became a key — and ten in this file never
+  // did, including the composer's placeholder and both halves of "thinking · …",
+  // which stayed English in all thirty-five languages while that test was green.
+  const text = readFileSync("src/perp.js", "utf8");
+
+  // Text as `el` receives it, and text assigned afterwards. A `t(...)` call is
+  // the point of the exercise; a class name or an id is not shown to anyone.
+  const shown = [
+    ...text.matchAll(/\bel\("[a-z]+",\s*[^,()]+,\s*(`[^`]*`|"[^"]*")\)/g),
+    ...text.matchAll(/\.(?:textContent|placeholder|title)\s*=\s*(`[^`]*`|"[^"]*")/g),
+  ];
+  const english = shown
+    .map((m) => m[1])
+    // A word of two or more letters is prose. `${x}`, `·`, `#` and `/` are not.
+    .filter((literal) => /[A-Za-z]{2,}/.test(literal.replace(/\$\{[^}]*\}/g, "")));
+
+  assert.deepEqual(
+    english,
+    [],
+    `these need a key in i18n.js and a t(...) call:\n${english.join("\n")}`,
+  );
+});
