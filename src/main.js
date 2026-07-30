@@ -2808,6 +2808,11 @@ function applyTranslations() {
   dom.statusCursor.title = t("status.lineColumn");
   renderTabs();
   renderStatus();
+  // The harness panel too. It builds its own labels from `t()`, so it is as stale
+  // as the menus were — switching to Japanese translated the menu bar and left
+  // the panel underneath it in the previous language, which reads worse than
+  // either language on its own.
+  perp.redraw();
 }
 
 onLocaleChange(applyTranslations);

@@ -12,6 +12,7 @@ import { readFileSync, readdirSync } from "node:fs";
 
 import { PATHS } from "../src/icons.js";
 import { EN } from "../src/i18n.js";
+import { TRANSLATIONS } from "../src/locales.js";
 
 /** Every `src/*.js`, as text, for the source-scanning checks below. */
 function sources() {
@@ -164,6 +165,35 @@ test("top-level menu mnemonics are lowercase and unique", () => {
     return false;
   });
   assert.deepEqual(clashing, [], `two menus claim the same Alt key: ${clashing.join(", ")}`);
+});
+
+test("every locale carries every key, with its placeholders intact", () => {
+  // English is the fallback, so a missing key degrades to English rather than to
+  // a raw key name — which means an incomplete translation is invisible until
+  // somebody switches language and sees half a sentence in the wrong one.
+  //
+  // The placeholder half matters more. `{path}`, `{total}`, `{n}`, `{b}` and
+  // `{i}` are substituted at runtime; a translation that drops one loses the
+  // number silently and the sentence still reads as if it were finished.
+  const keys = Object.keys(EN);
+  const holders = Object.fromEntries(
+    keys
+      .map((key) => [key, [...EN[key].matchAll(/\{(\w+)\}/g)].map((m) => m[0])])
+      .filter(([, found]) => found.length),
+  );
+
+  const problems = [];
+  for (const [lang, table] of Object.entries(TRANSLATIONS)) {
+    const missing = keys.filter((key) => !(key in table));
+    if (missing.length) problems.push(`${lang}: missing ${missing.length} key(s)`);
+    for (const [key, needed] of Object.entries(holders)) {
+      if (!(key in table)) continue;
+      for (const token of needed) {
+        if (!table[key].includes(token)) problems.push(`${lang}: ${key} lost ${token}`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], `translations are incomplete:\n${problems.join("\n")}`);
 });
 
 test("every element id the front-end looks up exists in index.html", () => {

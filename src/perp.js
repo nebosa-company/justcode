@@ -221,6 +221,15 @@ function el(tag, className, text) {
   return node;
 }
 
+/** Re-render with whatever `t()` now returns.
+ *
+ * Called when the interface language changes. The panel holds its view and draws
+ * its own labels, so nothing needs re-reading — only redrawing.
+ */
+export function redraw() {
+  render();
+}
+
 /** Whether a step is open right now, for callers that are not the panel. */
 export function inFlight() {
   return Boolean(state.view && state.view.position && state.view.position.in_flight);
@@ -241,7 +250,7 @@ function render() {
   host.replaceChildren();
 
   if (!state.root) {
-    host.append(el("p", "perp-empty", "No workspace open."));
+    host.append(el("p", "perp-empty", t("panel.noWorkspace")));
     return;
   }
   if (!state.installed) {
@@ -254,7 +263,7 @@ function render() {
     return;
   }
   if (!state.view) {
-    host.append(el("p", "perp-empty", "Reading the journal…"));
+    host.append(el("p", "perp-empty", t("panel.reading")));
     return;
   }
 
@@ -293,7 +302,7 @@ function renderHeader(view) {
   const position = view.position;
   const where =
     position.cycle === null
-      ? "nothing recorded yet"
+      ? t("panel.nothingRecorded")
       : `cycle ${position.cycle} · ${position.stage ?? "—"}`;
   header.append(el("span", "perp-where", where));
 
@@ -315,23 +324,26 @@ function renderHeader(view) {
   }
 
   const counts = el("span", "perp-counts");
-  const done = el("span", "perp-ok", `${position.done} done`);
+  const done = el("span", "perp-ok", t("panel.done", { n: position.done }));
   // What the number counts, because it is not obvious and was wrong until
   // recently: journalled steps, which is neither batches nor requirements. One
   // requirement is usually one step plus a share of a gate step.
   done.title = t("harness.doneHint");
   counts.append(done);
   if (position.blocked > 0) {
-    counts.append(el("span", "perp-bad", `${position.blocked} blocked`));
+    counts.append(el("span", "perp-bad", t("panel.blocked", { n: position.blocked })));
   }
   counts.append(
-    el("span", null, `gates ${view.spend.gates_green}/${view.spend.gates_run}`),
+    el("span", null, t("panel.gates", {
+      green: view.spend.gates_green,
+      total: view.spend.gates_run,
+    })),
   );
   // Money is shown even at zero: a missing figure reads as unknown, a zero
   // reads as free, and a local-only cycle really is free.
   counts.append(money(Number(view.spend.money)));
   if (view.approvals > 0) {
-    counts.append(el("span", "perp-bad", `${view.approvals} awaiting approval`));
+    counts.append(el("span", "perp-bad", t("panel.awaiting", { n: view.approvals })));
   }
   header.append(counts);
 
@@ -422,7 +434,7 @@ function renderTabs() {
 
 function renderTimeline(body, view) {
   if (!view.timeline.length) {
-    body.append(el("p", "perp-empty", "Nothing in the journal yet."));
+    body.append(el("p", "perp-empty", t("panel.emptyTimeline")));
     return;
   }
   const list = el("ul", "perp-timeline");
@@ -514,7 +526,7 @@ function renderComposer(body) {
     el(
       "p",
       "perp-note",
-      "Notes become `/btw` items. They cannot approve, pause or redirect a run.",
+      t("panel.btwLimit"),
     ),
   );
 }
@@ -522,7 +534,7 @@ function renderComposer(body) {
 function renderChat(body, view) {
   if (!view.chat.length) {
     body.append(
-      el("p", "perp-empty", "No conversation yet. `perp chat` writes into this journal."),
+      el("p", "perp-empty", t("panel.emptyChat")),
     );
     renderComposer(body);
     return;
@@ -590,7 +602,7 @@ function renderDiff(body, view) {
   if (!view.diff) {
     // Null, not empty: "nothing to show" and "no changes" are different, and a
     // blank pane reads as the second.
-    body.append(el("p", "perp-empty", "No changes in the working tree."));
+    body.append(el("p", "perp-empty", t("panel.emptyDiff")));
     return;
   }
   body.append(el("pre", "perp-diff", view.diff));
@@ -598,7 +610,7 @@ function renderDiff(body, view) {
 
 function renderBtw(body, view) {
   if (!view.btw.length) {
-    body.append(el("p", "perp-empty", "Nothing waiting."));
+    body.append(el("p", "perp-empty", t("panel.emptyBtw")));
     return;
   }
   const list = el("ul", "perp-btw");
@@ -614,7 +626,7 @@ function renderBtw(body, view) {
 
 function renderArtifacts(body, view) {
   if (!view.artifacts.length) {
-    body.append(el("p", "perp-empty", "None rendered. `perp artifact all` writes them."));
+    body.append(el("p", "perp-empty", t("panel.emptyArtifacts")));
     return;
   }
   const list = el("ul", "perp-artifacts");
