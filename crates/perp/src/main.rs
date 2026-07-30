@@ -1017,7 +1017,31 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
                     .append(&chat::Turn::operator(&text, time::now()).record(step.clone()))
                     .map_err(|e| e.to_string())?;
 
-                let request = ChatRequest::new(vec![Message::user(text)]);
+                // What the workspace knows, ahead of the question. Without it a
+                // model answers about a requirement id it has never seen, which
+                // it does fluently and wrongly. Read per turn rather than once
+                // at startup so an edit to the requirements is answered from
+                // the file as it is now, and put in a system message so it is a
+                // byte-identical prefix between turns and the provider's cache
+                // pays for it (`M-12`).
+                let vision = binding
+                    .resolve("path.vision")
+                    .ok()
+                    .and_then(|path| std::fs::read_to_string(path).ok());
+                let requirements = binding
+                    .resolve("path.requirements")
+                    .ok()
+                    .map(|path| perp_core::layout::requirements_text(&path));
+                let projection = replay(&records);
+                let context = chat::Context {
+                    vision: vision.as_deref(),
+                    requirements: requirements.as_deref(),
+                    projection: Some(&projection),
+                };
+                let request = ChatRequest::new(vec![
+                    Message::system(context.render()),
+                    Message::user(text),
+                ]);
                 let link = match links.resolve(Role::Chat, &AssumeHealthy, mode) {
                     Ok(link) => link.clone(),
                     Err(e) => {

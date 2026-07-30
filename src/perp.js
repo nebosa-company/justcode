@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { iconMarkup } from "./icons.js";
 import { t } from "./i18n.js";
+import { blocks } from "./replytext.js";
 
 // The safety net, not the mechanism. `perp:changed` from the watcher is what
 // normally triggers a re-read; this catches a workspace whose binding moves the
@@ -679,6 +680,77 @@ function dressComposer() {
  * label. Unknown ones are shown as they are rather than swallowed: a speaker
  * this build has no word for is still worth seeing.
  */
+/** Draw a reply's blocks as nodes.
+ *
+ * Every string here goes in through `textContent`, which is what makes this
+ * safe: the panel never assembles markup from a model's words, so a reply
+ * containing a tag is a reply displaying a tag. See `replytext.js`.
+ */
+function paintReply(into, text) {
+  for (const block of blocks(text)) {
+    if (block.kind === "code") {
+      const pre = el("pre", "perp-code");
+      // The language is shown rather than used: highlighting a model's code
+      // would mean parsing it, and reading it does not need that.
+      if (block.language) pre.dataset.language = block.language;
+      pre.textContent = block.text;
+      into.append(pre);
+      continue;
+    }
+    if (block.kind === "rule") {
+      into.append(el("hr", "perp-rule"));
+      continue;
+    }
+    if (block.kind === "heading") {
+      const level = Math.min(block.level + 2, 6);
+      const heading = el(`h${level}`, "perp-heading");
+      paintSpans(heading, block.spans);
+      into.append(heading);
+      continue;
+    }
+    if (block.kind === "list") {
+      const list = el(block.ordered ? "ol" : "ul", "perp-list");
+      for (const item of block.items) {
+        const row = el("li");
+        paintSpans(row, item);
+        list.append(row);
+      }
+      into.append(list);
+      continue;
+    }
+    if (block.kind === "quote") {
+      const quote = el("blockquote", "perp-quote");
+      paintSpans(quote, block.spans);
+      into.append(quote);
+      continue;
+    }
+    const para = el("p");
+    paintSpans(para, block.spans);
+    into.append(para);
+  }
+}
+
+function paintSpans(into, list) {
+  for (const span of list) {
+    if (span.kind === "code") {
+      into.append(el("code", "perp-inline-code", span.text));
+    } else if (span.kind === "strong") {
+      into.append(el("strong", null, span.text));
+    } else if (span.kind === "em") {
+      into.append(el("em", null, span.text));
+    } else if (span.kind === "link") {
+      // Shown, never clickable. A reply is untrusted content, and one click
+      // from untrusted content to a browser is how a phishing link works.
+      into.append(el("span", "perp-link-text", span.text));
+      if (span.href && span.href !== span.text) {
+        into.append(el("span", "perp-link-href", ` (${span.href})`));
+      }
+    } else {
+      into.append(document.createTextNode(span.text));
+    }
+  }
+}
+
 function speakerLabel(speaker) {
   const known = { operator: "panel.speakerOperator", assistant: "panel.speakerAssistant" };
   return known[speaker] ? t(known[speaker]) : speaker;
@@ -695,7 +767,15 @@ function renderChat(body, view) {
   for (const line of view.chat) {
     const turn = el("div", `perp-turn ${line.speaker}`);
     turn.append(el("span", "perp-speaker", speakerLabel(line.speaker)));
-    turn.append(el("p", null, line.text));
+    if (line.speaker === "assistant") {
+      // A reply arrives as Markdown. The operator's own words are shown as
+      // typed: rendering what someone just wrote back at them changes it.
+      const said = el("div", "perp-said");
+      paintReply(said, line.text);
+      turn.append(said);
+    } else {
+      turn.append(el("p", null, line.text));
+    }
     if (line.partial) {
       // The half a model produced before someone stopped it. Kept, and
       // labelled — it is exactly the interesting half when an answer was

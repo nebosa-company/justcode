@@ -2230,6 +2230,62 @@ body.perp-resizing {
   .perp-dot { animation: none; opacity: 0.5; }
 }
 
+/* A rendered reply. Every node here was built with textContent — see
+   `replytext.js` for why none of it comes from a string of markup. */
+.perp-said > :first-child { margin-top: 0.15rem; }
+.perp-said > :last-child { margin-bottom: 0; }
+.perp-said p { margin: 0.4rem 0; }
+
+.perp-said .perp-heading {
+  margin: 0.7rem 0 0.3rem;
+  font-size: 1em;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.perp-said .perp-list { margin: 0.4rem 0; padding-left: 1.2rem; }
+.perp-said .perp-list li { margin: 0.15rem 0; }
+
+.perp-said .perp-quote {
+  margin: 0.4rem 0;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+  opacity: 0.85;
+}
+
+.perp-said .perp-rule {
+  margin: 0.6rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Wide code scrolls inside its own box rather than widening the panel. */
+.perp-said .perp-code {
+  margin: 0.45rem 0;
+  padding: 0.5rem 0.6rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-hard, rgba(127, 127, 127, 0.12));
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.9em;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.perp-said .perp-inline-code {
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: rgba(127, 127, 127, 0.18);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+/* Shown, not clickable: the address is beside the text rather than behind it,
+   so what a reply is pointing at is read before it is visited. */
+.perp-link-text { text-decoration: underline; text-decoration-style: dotted; }
+.perp-link-href { opacity: 0.6; font-size: 0.9em; word-break: break-all; }
+
 /* The approvals queue and the diff (`I-3`). The diff is above the button on
    purpose: approving from the panel opens the diff first. */
 .perp-approval {

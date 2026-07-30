@@ -384,3 +384,140 @@ mod tests {
         assert!(record.detail.expect("detail").contains(&long), "and the text survives whole");
     }
 }
+
+/// What the model is told about the workspace before the question (`M-12`).
+///
+/// A turn used to carry the message and nothing else, so "what does T-2 ask
+/// for?" was answered from thin air — confidently, and wrong. The requirements
+/// are the answer to most questions anyone types here, and the harness already
+/// has them.
+///
+/// Assembled in a fixed order and returned as one string, so it can be a stable
+/// prompt segment: a provider's prefix cache only pays when the prefix is
+/// byte-identical, and this is identical between turns until the workspace
+/// itself changes.
+///
+/// Bounded, because a big backlog would otherwise crowd out the conversation.
+/// What is dropped is said so in the text rather than silently — a model told
+/// nine of forty requirements should know there are forty.
+pub struct Context<'a> {
+    pub vision: Option<&'a str>,
+    pub requirements: Option<&'a str>,
+    pub projection: Option<&'a crate::state::Projection>,
+}
+
+/// Roughly four characters to a token, the same estimate the prompt module uses.
+const CONTEXT_BUDGET: usize = 12_000;
+
+impl Context<'_> {
+    pub fn render(&self) -> String {
+        let mut out = String::new();
+        out.push_str(
+            "You are answering questions about a software project driven by the Perpetum \
+harness. Everything below is what the harness knows about it, taken from the \
+project's own files and its journal. Answer from it. If it does not say, say \
+that it does not say rather than guessing: a confident wrong answer about a \
+requirement is worse here than admitting the workspace does not tell you.\n",
+        );
+
+        if let Some(vision) = self.vision.map(str::trim).filter(|text| !text.is_empty()) {
+            out.push_str("\n## What the project is\n\n");
+            out.push_str(&clamp(vision, 2_000));
+            out.push('\n');
+        }
+
+        if let Some(text) = self.requirements.map(str::trim).filter(|text| !text.is_empty()) {
+            out.push_str("\n## Requirements\n\n");
+            out.push_str(&clamp(text, CONTEXT_BUDGET));
+            out.push('\n');
+        }
+
+        if let Some(projection) = self.projection {
+            out.push_str("\n## Where the work is\n\n");
+            let cycle = projection.cycle.unwrap_or(1);
+            let stage = projection.stage.clone().unwrap_or_else(|| "b1".to_string());
+            out.push_str(&format!(
+                "cycle {cycle}, stage {stage}: {} steps closed, {} blocked.\n",
+                projection.done.len(),
+                projection.blocked.len()
+            ));
+            if let Some(open) = &projection.open_step {
+                out.push_str(&format!("step {open} is open and has not closed.\n"));
+            }
+            // The last handful, newest first. What someone asks about is nearly
+            // always what just happened.
+            let recent: Vec<&crate::state::Done> = projection.done.iter().rev().take(8).collect();
+            if !recent.is_empty() {
+                out.push_str("\nmost recently closed:\n");
+                for done in recent {
+                    out.push_str(&format!("- {} — {}\n", done.step, clamp(&done.summary, 200)));
+                }
+            }
+            for blocked in projection.blocked.iter().take(5) {
+                out.push_str(&format!(
+                    "- BLOCKED {} — {}\n",
+                    blocked.step,
+                    clamp(&blocked.summary, 200)
+                ));
+            }
+        }
+        out
+    }
+}
+
+/// Cut to a byte budget on a character boundary, and say that it was cut.
+fn clamp(text: &str, budget: usize) -> String {
+    if text.len() <= budget {
+        return text.to_string();
+    }
+    let mut cut = budget;
+    while cut > 0 && !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!("{}\n[... {} more characters, not shown]", &text[..cut], text.len() - cut)
+}
+
+#[cfg(test)]
+mod context_tests {
+    use super::*;
+
+    #[test]
+    fn the_requirements_are_in_it() {
+        let context = Context {
+            vision: Some("A toolkit of small string functions."),
+            requirements: Some("| T-2 | `truncate(text, limit)` shortens text. |"),
+            projection: None,
+        };
+        let rendered = context.render();
+        assert!(rendered.contains("truncate(text, limit)"), "{rendered}");
+        assert!(rendered.contains("A toolkit"), "{rendered}");
+        // The instruction not to invent an answer is the point of the whole
+        // thing: without the requirements a model answered anyway.
+        assert!(rendered.contains("does not say"), "{rendered}");
+    }
+
+    #[test]
+    fn what_is_dropped_is_declared() {
+        let long = "x".repeat(CONTEXT_BUDGET + 500);
+        let context = Context { vision: None, requirements: Some(&long), projection: None };
+        let rendered = context.render();
+        assert!(rendered.contains("more characters, not shown"), "silent truncation");
+        assert!(rendered.len() < long.len(), "and it actually got shorter");
+    }
+
+    #[test]
+    fn a_multibyte_boundary_is_not_split() {
+        // Cutting mid-character would panic on the slice.
+        let text = "e\u{0301}".repeat(CONTEXT_BUDGET);
+        let context = Context { vision: None, requirements: Some(&text), projection: None };
+        let rendered = context.render();
+        assert!(rendered.contains("not shown"), "it was cut");
+    }
+
+    #[test]
+    fn an_empty_workspace_still_renders_the_instruction() {
+        let context = Context { vision: None, requirements: None, projection: None };
+        let rendered = context.render();
+        assert!(rendered.contains("Perpetum"), "{rendered}");
+    }
+}
