@@ -48,7 +48,11 @@ pub fn attempted(records: &[crate::journal::Record], cycle: u32) -> Vec<String> 
     let mut seen = Vec::new();
     for record in records.iter().filter(|r| r.step.cycle == cycle) {
         for id in &record.requirements {
-            if id != "V-2" && !seen.contains(id) {
+            // No exception for `V-2` any more. It was here because the gate cited
+            // `V-2` on every batch, which would have marked the harness's own
+            // `V-2` attempted without anyone working on it — and it would now do
+            // the opposite harm, keeping real work on `V-2` from ever counting.
+            if !seen.contains(id) {
                 seen.push(id.clone());
             }
         }
@@ -495,7 +499,10 @@ impl Driver<'_> {
                 .unwrap_or_else(|| format!("c{cycle}/{}", phase.letter()));
             let subject = format!("Record {phase} evidence");
             let mut report = report;
-            match land_batch(&self.root, &step, &["V-2".to_string()], &subject, &paths, None) {
+            // No requirement: this commit is the evidence a phase wrote about
+            // itself, and there is none in flight. `Perpetum-Step` carries the
+            // provenance, which is what a reader of this commit actually needs.
+            match land_batch(&self.root, &step, &[], &subject, &paths, None) {
                 Ok(Some(sha)) => report.warnings.push(format!("committed evidence as {sha}")),
                 Ok(None) => {}
                 Err(e) => report.warnings.push(format!("evidence not committed: {e}")),
@@ -626,6 +633,29 @@ path.requirements = docs/perpetum.md
         .expect("binding");
         let binding = crate::Binding::load(&dir).expect("load");
         (dir, binding)
+    }
+
+    #[test]
+    fn every_cited_id_counts_as_attempted_with_no_exceptions() {
+        // `attempted` used to skip `V-2` outright, because the gate cited it on
+        // every batch and would otherwise have marked the harness's own `V-2`
+        // attempted with nobody working on it.
+        //
+        // The gate stopped citing it, so the exception stopped protecting
+        // anything and started doing the opposite harm: real work on `V-2` would
+        // never count as attempted, and the same batch would offer it again for
+        // the rest of the cycle. Which is the bug `attempted` exists to prevent.
+        use crate::journal::Record;
+        use crate::step::StepId;
+
+        let step = |n: u32| StepId::new(4, "b1", n).expect("step");
+        let records = vec![
+            Record::outcome(step(1), 100, true, "did the work").for_requirements(["V-2"]),
+            Record::outcome(step(2), 200, true, "did more").for_requirements(["L-3", "V-9"]),
+        ];
+        let seen = attempted(&records, 4);
+        assert!(seen.contains(&"V-2".to_string()), "no id is exempt: {seen:?}");
+        assert_eq!(seen.len(), 3, "and each is counted once: {seen:?}");
     }
 
     #[test]
@@ -845,9 +875,9 @@ out.state = docs/perpetum/state.md
         let step = |n: u32| StepId::new(1, "b1", n).expect("step");
         let records = vec![
             Record::outcome(step(1), 100, true, "did it").for_requirements(["L-2"]),
-            // A gate cites `V-2` on every batch; that must not take `V-2` off a
-            // backlog it was never on.
-            Record::outcome(step(2), 200, true, "gate").for_requirements(["V-2"]),
+            // A gate no longer cites `V-2`, so nothing here needs an exception
+            // for it. See the test below for why the exception had to go.
+            Record::outcome(step(2), 200, true, "gate").for_requirements(["L-2"]),
         ];
 
         let left = remaining(SOURCE, &records, 1, 10);

@@ -512,12 +512,26 @@ impl Gates {
 impl Work for Gates {
     fn next(&mut self) -> Option<Task> {
         let gate = self.gates.get(self.next)?;
-        // `V-2` first: the gate is always evidence for the rule that says only a
-        // gate may call something green, and the batch's own ids come after so
-        // each of them can find this transcript.
-        let mut ids = vec!["V-2".to_string()];
-        ids.extend(self.covering.iter().cloned());
-        Some(Task::new(format!("gate: {}", gate.name)).idempotent().for_requirements(ids))
+        // The batch's own ids, and nothing else.
+        //
+        // This used to cite `V-2` as well — the harness's own requirement for
+        // "only a gate may call something green". True, and the wrong place to
+        // say it: `V-2` is defined in the harness's requirements, not in the
+        // project being worked on, so every run stamped an id into the target's
+        // journal that the target had never heard of. `perp check ids` then
+        // reported it as used-but-never-defined and could not pass on any
+        // workspace the harness drove — the tool contradicting the loop that
+        // shipped with it.
+        //
+        // Nothing is lost. The step summary says `gate: test`, the transcript is
+        // in the record, and the step id is what every other surface cites. An
+        // empty list is honest for a phase with no requirements in flight; every
+        // reader already renders it as no trailer rather than as a blank one.
+        Some(
+            Task::new(format!("gate: {}", gate.name))
+                .idempotent()
+                .for_requirements(self.covering.clone()),
+        )
     }
 
     fn perform(&mut self, _task: &Task) -> Done {
@@ -839,18 +853,28 @@ mod tests {
     }
 
     #[test]
-    fn a_gate_is_evidence_for_the_batch_it_gated_not_only_for_the_rule() {
-        // Found by reading an evidence chain the harness produced. `T-2` passed,
-        // the batch gate went green in the same leg, and `perp explain T-2`
-        // said "no gate transcript on any of these steps" — because the gate
-        // step cited `V-2` and nothing else, so no requirement could reach it.
+    fn a_gate_is_evidence_for_the_batch_it_gated_and_cites_nothing_else() {
+        // Two findings, a day apart, pulling the same string.
+        //
+        // First: `perp explain T-2` said "no gate transcript on any of these
+        // steps" for a requirement whose batch had gone green in the same leg,
+        // because the gate cited `V-2` and nothing else — so no requirement in
+        // the batch could reach the transcript that cleared it.
+        //
+        // Then: citing `V-2` at all put the harness's own requirement id into
+        // the target project's journal, where it is not defined, so
+        // `perp check ids` reported a stray on every workspace the harness
+        // drove. The batch's ids are the answer to both.
         let root = workspace("engine-covering");
         let binding = crate::Binding::load(&root).expect("binding");
         let target = root.join("target");
 
+        // A phase with nothing in flight cites nothing. The step summary and the
+        // step id carry the provenance, and every reader renders an empty list as
+        // no trailer rather than as a blank one.
         let mut bare = Gates::from_binding(&binding, &target).expect("gates");
         let task = Work::next(&mut bare).expect("a gate");
-        assert_eq!(task.requirements, vec!["V-2".to_string()], "V-2 alone when nothing is covered");
+        assert!(task.requirements.is_empty(), "nothing covered, nothing cited: {task:?}");
 
         let mut covering = Gates::from_binding(&binding, &target)
             .expect("gates")
@@ -858,8 +882,12 @@ mod tests {
         let task = Work::next(&mut covering).expect("a gate");
         assert_eq!(
             task.requirements,
-            vec!["V-2".to_string(), "T-2".to_string(), "T-3".to_string()],
-            "and the batch's own ids alongside it, so each can find this transcript"
+            vec!["T-2".to_string(), "T-3".to_string()],
+            "the batch's own ids, so each can find this transcript"
+        );
+        assert!(
+            !task.requirements.contains(&"V-2".to_string()),
+            "and never the harness's own id, which the target has never heard of"
         );
     }
 
