@@ -141,6 +141,27 @@ impl View {
         }
         let mut summarised: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+        // An intent whose outcome says exactly the same thing is not worth a row
+        // of its own.
+        //
+        // The engine journals an intent before every step and an outcome after,
+        // uniformly and with no special cases — that is `L-3`, and it is why a
+        // crash leaves an intent with no outcome for `perp resume` to find. For
+        // most steps the pair carries information: `gate: test` then `gate test is
+        // green`. For a stop it cannot, because nothing happens between deciding
+        // to stop and stopping, so both records carry the same sentence and the
+        // timeline showed it twice.
+        //
+        // Collapsed here rather than fixed there: the journal is the truth and it
+        // is right, and a special case in the most load-bearing invariant in the
+        // engine would be a bad trade for a tidier list. An intent with no
+        // matching outcome still shows, which is the case that matters.
+        let closed: std::collections::HashSet<(String, String)> = records
+            .iter()
+            .filter(|record| record.kind == Kind::Outcome)
+            .map(|record| (record.step.to_string(), record.summary.clone()))
+            .collect();
+
         for record in records {
             if let Some(line) = chat_line(record) {
                 chat.push(line);
@@ -166,6 +187,11 @@ impl View {
                     requirements: record.requirements.clone(),
                     transcript: None,
                 });
+                continue;
+            }
+            if record.kind == Kind::Intent
+                && closed.contains(&(record.step.to_string(), record.summary.clone()))
+            {
                 continue;
             }
             // `/btw` is in the timeline as itself, not as a chat line: it is an
@@ -478,6 +504,49 @@ impl Sidecar {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stop_is_one_line_and_an_unfinished_step_is_still_shown() {
+        // `c1/E/s45 stopped: the backlog is exhausted`, twice. Not a double write:
+        // an intent and an outcome for the same step, both carrying the same
+        // sentence, because nothing happens between deciding to stop and
+        // stopping.
+        let stop = crate::step::StepId::new(1, "E", 45).expect("step");
+        let gate = crate::step::StepId::new(1, "b1", 9).expect("step");
+        let crashed = crate::step::StepId::new(1, "b2", 1).expect("step");
+
+        let records = vec![
+            // A pair that says the same thing twice.
+            Record::intent(stop.clone(), 100, "stopped: the backlog is exhausted"),
+            Record::outcome(stop.clone(), 101, true, "stopped: the backlog is exhausted"),
+            // A pair that does not: both halves are worth a row.
+            Record::intent(gate.clone(), 200, "gate: test"),
+            Record::outcome(gate.clone(), 201, true, "gate test is green"),
+            // An intent with no outcome — a step that never finished, which is
+            // the whole reason the engine writes intents first.
+            Record::intent(crashed.clone(), 300, "T-9: add dedupe"),
+        ];
+
+        let view = View::of(&records, &Approvals::new(), Vec::new(), 400);
+        let lines: Vec<&str> = view.timeline.iter().map(|e| e.summary.as_str()).collect();
+
+        assert_eq!(
+            lines,
+            vec![
+                "stopped: the backlog is exhausted",
+                "gate: test",
+                "gate test is green",
+                "T-9: add dedupe",
+            ],
+            "the stop collapses, the gate keeps both halves, the orphan survives"
+        );
+
+        // And the row that survives the collapse is the outcome, because it is
+        // the one carrying `ok` and the detail.
+        let stopped = view.timeline.iter().find(|e| e.summary.starts_with("stopped")).expect("row");
+        assert_eq!(stopped.kind, "outcome");
+        assert_eq!(stopped.ok, Some(true));
+    }
 
     #[test]
     fn model_calls_are_one_line_per_step_not_one_line_each() {
