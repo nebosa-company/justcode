@@ -11,6 +11,7 @@
 // Markdown), for the stream-based modes (they produce no error nodes), and for
 // TypeScript/JSX (Acorn would flag valid type annotations and tags).
 
+import { t } from "./i18n.js";
 /** @type {Record<string, {label: string, extensions: string[], load?: () => Promise<any[]>}>} */
 const LANGUAGES = {
   html: {
@@ -355,7 +356,7 @@ export function associationGroups() {
       label: language.label,
       extensions: language.extensions.map((extension) => ({
         extension,
-        label: EXTENSION_LABELS[extension] || `${language.label} file`,
+        label: EXTENSION_LABELS[extension] || t("lang.fileOf", { name: language.label }),
         recommended: !NOT_BY_DEFAULT.has(extension),
       })),
     }))

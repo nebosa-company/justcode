@@ -228,23 +228,56 @@ test("a hidden element that is display-something has an explicit [hidden] rule",
   );
 });
 
-test("no panel string is written in English at the point it is shown", () => {
+test("no string is written in English at the point it is shown", () => {
   // The locale test above proves every key is translated everywhere. It says
-  // nothing about a string that never became a key — and ten in this file never
-  // did, including the composer's placeholder and both halves of "thinking · …",
-  // which stayed English in all thirty-five languages while that test was green.
-  const text = readFileSync("src/perp.js", "utf8");
+  // nothing about a string that never became a key — and twenty-eight never
+  // did, from the composer's placeholder to every "Could not open …" dialog,
+  // all of them English in thirty-five languages while that test was green.
+  //
+  // Names are not prose and stay as they are: a language is called Rust in
+  // every language, and so are the shells and the product.
+  const NAMES = new Set([
+    "JustCode", "Perpetum", "HTML", "CSS", "JavaScript", "TypeScript",
+    "JavaScript (JSX)", "TypeScript (TSX)", "Markdown", "Python", "Java",
+    "Kotlin", "Swift", "TOML", "Protocol Buffers", "Go", "Rust", "JSON",
+    "YAML", "XML", "SQL", "SQL (SQLite)", "SQL (MySQL)", "SQL (PostgreSQL)",
+    "Dart", "Object Pascal", "PowerShell", "Shell", "Terraform", "Batch",
+    "Plain Text", "Command Prompt", "zsh", "bash", "sh",
+  ]);
 
-  // Text as `el` receives it, and text assigned afterwards. A `t(...)` call is
-  // the point of the exercise; a class name or an id is not shown to anyone.
   const shown = [
-    ...text.matchAll(/\bel\("[a-z]+",\s*[^,()]+,\s*(`[^`]*`|"[^"]*")\)/g),
-    ...text.matchAll(/\.(?:textContent|placeholder|title)\s*=\s*(`[^`]*`|"[^"]*")/g),
+    // Text as `el` receives it, and text assigned afterwards. A `t(...)` call
+    // is the point of the exercise; a class name or an id is shown to no one.
+    ["el(...)", /\bel\("[a-z]+",\s*[^,()]+,\s*(`[^`]*`|"[^"]*")\)/g],
+    ["textContent", /\.textContent\s*=\s*(`[^`]*`|"[^"]*")/g],
+    ["placeholder", /\.placeholder\s*=\s*(`[^`]*`|"[^"]*")/g],
+    ["aria-label", /setAttribute\("aria-label",\s*(`[^`]*`|"[^"]*")\)/g],
+    // The dialogs, which is where most of them were hiding. Whatever is being
+    // reported reaches the user in whatever language it was written in.
+    ["dialog", /\b(?:message|confirm|ask)\(\s*(`[^`]*`|"[^"]*")/g],
   ];
-  const english = shown
-    .map((m) => m[1])
-    // A word of two or more letters is prose. `${x}`, `·`, `#` and `/` are not.
-    .filter((literal) => /[A-Za-z]{2,}/.test(literal.replace(/\$\{[^}]*\}/g, "")));
+
+  const english = [];
+  for (const { name, text } of sources()) {
+    for (const [what, pattern] of shown) {
+      for (const match of text.matchAll(pattern)) {
+        const literal = match[1];
+        const inner = literal.slice(1, -1);
+        if (NAMES.has(inner)) continue;
+        const withoutValues = literal.replace(/\$\{[^}]*\}/g, "");
+        // Prose is two or more letters once the placeholders are taken out.
+        // `·`, `#` and `/` are not.
+        if (!/[A-Za-z]{2,}/.test(withoutValues)) continue;
+        // A short suffix stuck to a value is that value's unit, and `px` means
+        // px everywhere. Only where there was a placeholder to attach to, so a
+        // bare "Run" is still prose.
+        const rest = withoutValues.slice(1, -1).trim();
+        if (literal.includes("${") && rest.length <= 3 && !/\s/.test(rest)) continue;
+        const line = text.slice(0, match.index).split("\n").length;
+        english.push(`src/${name}:${line} (${what}) ${literal}`);
+      }
+    }
+  }
 
   assert.deepEqual(
     english,

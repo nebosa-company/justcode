@@ -12,6 +12,7 @@ import {
   searchPanelOpen,
 } from "@codemirror/search";
 import { iconElement } from "./icons.js";
+import { t } from "./i18n.js";
 
 // Counting every match in a huge file would block typing, so stop here and
 // display the total as "999+".
@@ -151,7 +152,7 @@ class SearchPanel {
       return;
     }
     if (invalid) {
-      this.count.textContent = "Invalid regex";
+      this.count.textContent = t("search.invalidRegex");
       return;
     }
 

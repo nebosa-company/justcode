@@ -139,6 +139,29 @@ const dom = {
   statusPerp: document.getElementById("status-perp"),
 };
 
+/** Where the caret last was, so a language change can redraw its tooltip.
+ *
+ * Declared here rather than beside [renderCaret] because `onSelection` below
+ * closes over it, and this file has already had one blank window from reading a
+ * `let` that was declared three hundred lines further down.
+ */
+let lastCaret = { line: 1, column: 1 };
+
+/** The caret's position in the status bar, and the tooltip that spells it out.
+ *
+ * The tooltip was built here in English while `applyTranslations` set a
+ * translated one, and this runs on every caret move — so the translation was
+ * overwritten before anyone could read it. One place builds it now, and the
+ * language change calls the same function.
+ */
+function renderCaret() {
+  dom.statusCursor.textContent = `${lastCaret.line}:${lastCaret.column}`;
+  dom.statusCursor.title = t("status.lineColumn", {
+    line: lastCaret.line,
+    column: lastCaret.column,
+  });
+}
+
 /** @type {Array<{id:number,path:string|null,name:string,state:import("@codemirror/state").EditorState|null,savedText:string,dirty:boolean}>} */
 const tabs = [];
 
@@ -205,8 +228,8 @@ const listeners = {
     }
   },
   onSelection: (position) => {
-    dom.statusCursor.textContent = `${position.line}:${position.column}`;
-    dom.statusCursor.title = `Line ${position.line}, Column ${position.column}`;
+    lastCaret = position;
+    renderCaret();
   },
   onDiagnostics: ({ count, errors, spelling }) => {
     const parts = [count === 1 ? t("status.problem") : t("status.problems", { n: count })];
@@ -961,7 +984,7 @@ function showLanguagePicker() {
   const filter = document.createElement("input");
   filter.className = "lang-picker-filter";
   filter.type = "text";
-  filter.placeholder = "Select Language Mode";
+  filter.placeholder = t("lang.filterPlaceholder");
   filter.spellcheck = false;
 
   const list = document.createElement("div");
@@ -1319,7 +1342,7 @@ async function openPath(path, { quiet = false, line = null, column = null } = {}
     return true;
   } catch (error) {
     if (!quiet) {
-      await message(`Could not open ${path}\n\n${error}`, { title: "JustCode", kind: "error" });
+      await message(`${t("error.openFile", { path })}\n\n${error}`, { title: "JustCode", kind: "error" });
     }
     return false;
   } finally {
@@ -1373,7 +1396,7 @@ async function saveTab(tab, { forcePrompt = false } = {}) {
     const contents = tab.eol === "\n" ? text : text.replaceAll("\n", tab.eol);
     await invoke("write_text_file", { path, contents });
   } catch (error) {
-    await message(`Could not save ${path}\n\n${error}`, { title: "JustCode", kind: "error" });
+    await message(`${t("error.saveFile", { path })}\n\n${error}`, { title: "JustCode", kind: "error" });
     return false;
   }
 
@@ -1463,7 +1486,7 @@ async function run() {
       const path = await invoke("write_preview", { name: current.name, html });
       await invoke("open_in_browser", { path });
     } catch (error) {
-      await message(`Could not preview ${current.name}\n\n${error}`, {
+      await message(`${t("error.preview", { name: current.name })}\n\n${error}`, {
         title: "JustCode",
         kind: "error",
       });
@@ -1481,7 +1504,7 @@ async function run() {
     try {
       await invoke("run_script", { path: current.path, kind: SCRIPT_KINDS[current.language] });
     } catch (error) {
-      await message(`Could not run ${current.name}\n\n${error}`, {
+      await message(`${t("error.run", { name: current.name })}\n\n${error}`, {
         title: "JustCode",
         kind: "error",
       });
@@ -1495,7 +1518,7 @@ async function run() {
       : [...tabs].reverse().find((tab) => tab.language === "html");
 
   if (!target) {
-    await message("Open or create an .html or .md file first — Run needs a page to show.", {
+    await message(t("run.needsPage"), {
       title: "JustCode",
       kind: "warning",
     });
@@ -1514,7 +1537,7 @@ async function run() {
   try {
     await invoke("open_in_browser", { path: target.path });
   } catch (error) {
-    await message(`Could not open the browser\n\n${error}`, { title: "JustCode", kind: "error" });
+    await message(`${t("error.browser")}\n\n${error}`, { title: "JustCode", kind: "error" });
   }
 }
 
@@ -1640,7 +1663,7 @@ async function editCopy() {
   // otherwise a stale terminal selection would quietly hijack every copy.
   if (lastCopySurface === "terminal" && terminalSelectedText()) {
     if (!(await copyTerminalSelection())) {
-      await message("Copy needs clipboard access, which the system declined.", {
+      await message(t("clipboard.copyDenied"), {
         title: "JustCode",
         kind: "warning",
       });
@@ -1652,7 +1675,7 @@ async function editCopy() {
   const selection = view.state.selection.main;
   const range = selection.empty ? cursorLineRange() : selection;
   if (!(await writeClipboard(view.state.sliceDoc(range.from, range.to)))) {
-    await message("Copy needs clipboard access, which the system declined.", {
+    await message(t("clipboard.copyDenied"), {
       title: "JustCode",
       kind: "warning",
     });
@@ -1676,7 +1699,7 @@ async function editPaste() {
   try {
     text = await readClipboard();
   } catch {
-    await message("Paste needs clipboard access, which the system declined.", {
+    await message(t("clipboard.pasteDenied"), {
       title: "JustCode",
       kind: "warning",
     });
@@ -1876,7 +1899,7 @@ async function revealActiveFile() {
   try {
     await invoke("reveal_in_file_manager", { path: tab.path });
   } catch (error) {
-    await message(`Could not show ${tab.name}\n\n${error}`, { title: "JustCode", kind: "error" });
+    await message(`${t("error.show", { name: tab.name })}\n\n${error}`, { title: "JustCode", kind: "error" });
   }
 }
 
@@ -1884,7 +1907,7 @@ async function openExternalUrl(url) {
   try {
     await invoke("open_url", { url });
   } catch (error) {
-    await message(`Could not open ${url}\n\n${error}`, { title: "JustCode", kind: "error" });
+    await message(`${t("error.openUrl", { url })}\n\n${error}`, { title: "JustCode", kind: "error" });
   }
 }
 setLinkHandler(openExternalUrl);
@@ -1911,7 +1934,7 @@ async function confirmClose() {
   } catch (error) {
     // Never leave the window un-closable because a dialog failed; say what
     // happened and treat it as "do not close".
-    await message(`Could not check for unsaved changes.\n\n${error}`, {
+    await message(`${t("error.unsavedCheck")}\n\n${error}`, {
       title: "JustCode",
       kind: "error",
     });
@@ -1947,7 +1970,7 @@ async function closeWindow() {
       await window_.close();
     } catch (closeError) {
       closingWindow = false;
-      await message(`Could not close the window.\n\n${destroyError}\n${closeError}`, {
+      await message(`${t("error.closeWindow")}\n\n${destroyError}\n${closeError}`, {
         title: "JustCode",
         kind: "error",
       });
@@ -2805,7 +2828,7 @@ function applyTranslations() {
   label("btn-save", "toolbar.save");
   label("btn-run", "toolbar.run");
   dom.statusLang.title = t("status.selectLanguage");
-  dom.statusCursor.title = t("status.lineColumn");
+  renderCaret();
   renderTabs();
   renderStatus();
   // The harness panel too. It builds its own labels from `t()`, so it is as stale
@@ -3722,7 +3745,7 @@ async function togglePerpPanel() {
   }
   const root = await perpRoot();
   if (!root) {
-    await message("Open a file in the project first — the panel reads its journal.", {
+    await message(t("panel.needsFile"), {
       title: "Perpetum",
     });
     return;

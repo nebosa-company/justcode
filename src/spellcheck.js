@@ -1,5 +1,6 @@
 import { linter, forEachDiagnostic } from "@codemirror/lint";
 import { StateEffect } from "@codemirror/state";
+import { t } from "./i18n.js";
 
 /**
  * Signal to re-run the spell check. A linter normally only re-runs when the
@@ -163,7 +164,7 @@ function spellingMessage(view, diagnostic, word) {
   wrap.className = "spell-message";
 
   const text = document.createElement("span");
-  text.textContent = `"${word}" is not in the dictionary`;
+  text.textContent = t("spell.notInDictionary", { word });
   wrap.append(text);
 
   let filled = false;
@@ -173,7 +174,7 @@ function spellingMessage(view, diagnostic, word) {
     const suggestions = suggestionsFor(word);
     if (!suggestions.length) return;
 
-    text.textContent = `"${word}" — did you mean:`;
+    text.textContent = t("spell.didYouMean", { word });
     const row = document.createElement("span");
     row.className = "spell-suggestions";
     for (const suggestion of suggestions) {
