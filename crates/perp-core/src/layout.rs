@@ -64,6 +64,12 @@ pub const GITIGNORE_BODY: &str = "\
 
 # The control channel: pause, step and stop, read at the next step boundary.
 control
+
+# Rendered artifacts. Every one is a projection of the journal, which is
+# committed — so these are regenerable by `perp artifact all`, and committing
+# them means seven files churning on every closed step for no information the
+# journal does not already hold.
+artifacts/
 ";
 
 /// Where requirements live when a project keeps more than one file of them.
@@ -114,23 +120,55 @@ pub fn enclosing(from: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Write the ignore file if it is not there.
+/// Write the ignore file, or add to it a rule it is missing.
 ///
-/// Idempotent and never overwriting: someone who edited it gets to keep their
-/// edit, and someone who deleted it gets the default back. Returns whether it
-/// wrote anything, so a caller can say so rather than doing it silently.
+/// Idempotent, and additive rather than overwriting. Someone who deleted it gets
+/// the default back; someone who edited it keeps every line they wrote, and gains
+/// only the managed rules that are absent. Returns whether it wrote anything, so
+/// a caller can say so rather than doing it silently.
+///
+/// Write-once was not enough. A rule added here reached new workspaces and no
+/// existing one, so `artifacts/` — added when a run began writing all seven
+/// rather than one — would have left every workspace that already had this file
+/// churning seven files per step, which is the case the rule exists for.
+///
+/// Nothing is ever removed: a rule the file has that this one does not is the
+/// project's business.
 ///
 /// A failure here is not an error worth stopping for — the loop's job is not
 /// managing a `.gitignore` — so it is reported as `false` and nothing else.
 pub fn ensure_gitignore(root: &Path) -> bool {
     let path = root.join(GITIGNORE);
-    if path.exists() {
+    if !path.exists() {
+        if std::fs::create_dir_all(dir_in(root)).is_err() {
+            return false;
+        }
+        return std::fs::write(&path, GITIGNORE_BODY).is_ok();
+    }
+
+    let Ok(existing) = std::fs::read_to_string(&path) else { return false };
+    let has = |rule: &str| existing.lines().any(|line| line.trim() == rule);
+    let missing: Vec<&str> = GITIGNORE_BODY
+        .lines()
+        .filter(|line| {
+            let line = line.trim();
+            !line.is_empty() && !line.starts_with('#') && !has(line)
+        })
+        .collect();
+    if missing.is_empty() {
         return false;
     }
-    if std::fs::create_dir_all(dir_in(root)).is_err() {
-        return false;
+
+    let mut out = existing;
+    if !out.ends_with('\n') {
+        out.push('\n');
     }
-    std::fs::write(&path, GITIGNORE_BODY).is_ok()
+    out.push_str("\n# Added by `perp`, which manages this file and adds rules it is missing.\n");
+    for rule in missing {
+        out.push_str(rule);
+        out.push('\n');
+    }
+    std::fs::write(&path, out).is_ok()
 }
 
 /// Every requirements file, for a `path.requirements` that names either one file
@@ -253,18 +291,25 @@ mod tests {
     }
 
     #[test]
-    fn the_ignore_file_is_written_once_and_never_overwritten() {
+    fn the_ignore_file_gains_missing_rules_and_never_loses_any() {
         let root = tmpdir("layout-gitignore");
 
         assert!(ensure_gitignore(&root), "written on a workspace that has none");
         let path = root.join(GITIGNORE);
         assert!(path.is_file());
+        assert!(!ensure_gitignore(&root), "nothing to add the second time");
 
         // Someone else's rules survive. A tool that rewrites a file it found is a
-        // tool that eats an edit somebody made on purpose.
+        // tool that eats an edit somebody made on purpose. What it may do is add
+        // the managed rules that are not there — write-once meant a rule added
+        // later reached new workspaces and no existing one.
         std::fs::write(&path, "*.mine\n").expect("edit");
-        assert!(!ensure_gitignore(&root), "nothing to do the second time");
-        assert_eq!(std::fs::read_to_string(&path).expect("read"), "*.mine\n");
+        assert!(ensure_gitignore(&root), "the managed rules are all missing");
+        let after = std::fs::read_to_string(&path).expect("read");
+        assert!(after.contains("*.mine"), "someone's own rule was eaten: {after}");
+        assert!(after.contains("artifacts/"), "the missing rule was not added: {after}");
+        assert!(after.contains("*.log"), "{after}");
+        assert!(!ensure_gitignore(&root), "idempotent once they are all there");
 
         // Deleted, and it comes back.
         std::fs::remove_file(&path).expect("remove");
@@ -291,5 +336,14 @@ mod tests {
             });
             assert!(covered, "{name} would be committed by `git add -A`");
         }
+
+        // Every artifact, by the directory they all live in. A run writes seven
+        // of them per closed step, so uncovered they are the noisiest thing the
+        // harness produces.
+        let dir_rule = ARTIFACTS.rsplit('/').next().unwrap_or("artifacts");
+        assert!(
+            GITIGNORE_BODY.lines().any(|rule| rule.trim() == format!("{dir_rule}/")),
+            "the artifacts directory would be committed by `git add -A`"
+        );
     }
 }
