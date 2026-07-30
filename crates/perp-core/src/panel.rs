@@ -41,6 +41,10 @@ pub struct View {
     pub timeline: Vec<Entry>,
     pub chat: Vec<ChatLine>,
     pub artifacts: Vec<String>,
+    /// Requirement id to its one-line text, for surfaces that show a bare id
+    /// (`I-2`). The panel puts `T-26` beside a step and had no way to say what
+    /// `T-26` meant without opening the requirements file.
+    pub requirements: Vec<(String, String)>,
     /// The approvals queue, and the diff each one is asking about (`I-3`).
     pub approvals: Vec<Pending>,
     /// The working tree's diff, read from git rather than stored.
@@ -221,6 +225,7 @@ impl View {
             timeline,
             chat,
             artifacts,
+            requirements: Vec::new(),
             approvals: Vec::new(),
             diff: None,
         }
@@ -231,6 +236,16 @@ impl View {
     /// The diff is **read from git**, never stored in the journal — git already
     /// keeps it, and a second copy is a second thing that can disagree. Same
     /// decision as `C-7`'s evidence chain.
+    /// Attach the requirement text, read from the source the binding names.
+    ///
+    /// Separate from `of`, which takes records and nothing else: the projection is
+    /// a fold over the journal, and the requirements file is not in it. A caller
+    /// that has the source passes it, and one that does not gets bare ids.
+    pub fn with_requirements(mut self, source: &str) -> View {
+        self.requirements = crate::cycle::backlog_all(source);
+        self
+    }
+
     pub fn with_review(
         mut self,
         repo: &crate::git::Repo,
@@ -386,6 +401,15 @@ impl View {
                                 ("partial", Value::Bool(line.partial)),
                             ])
                         })
+                        .collect(),
+                ),
+            ),
+            (
+                "requirements",
+                Value::Obj(
+                    self.requirements
+                        .iter()
+                        .map(|(id, text)| (id.clone(), Value::str(text.clone())))
                         .collect(),
                 ),
             ),

@@ -65,6 +65,21 @@ pub fn replay(records: &[Record]) -> Projection {
     let mut open: Vec<(StepId, String)> = Vec::new();
 
     for record in records {
+        // A model call is accounting, not a step.
+        //
+        // `M-11` put every one of them in the journal so the ledger survives a
+        // restart, which was right, and this counted them as work: a workspace
+        // with forty-four steps reported **409 done**, of which 365 were round
+        // trips to a model. Nobody could have said what the number meant, and
+        // someone asking "is that steps, batches or requirements?" was asking the
+        // only sensible question — it was none of them.
+        //
+        // Skipped for every purpose here, not just the count: they carry no
+        // requirement of their own and would otherwise pad `requirements_touched`
+        // and drag `last_step` around too.
+        if crate::cost::from_record(record).is_some() {
+            continue;
+        }
         projection.cycle = Some(record.step.cycle);
         projection.stage = Some(record.step.stage.clone());
         projection.last_step = Some(record.step.clone());
@@ -252,6 +267,41 @@ mod tests {
 
     fn step(text: &str) -> StepId {
         StepId::parse(text).expect("step id")
+    }
+
+    #[test]
+    fn a_model_call_is_not_a_completed_step() {
+        // A real workspace reported **409 done** with forty-four steps in it. The
+        // other 365 were round trips to a model, journalled by `M-11` so the cost
+        // ledger survives a restart, and counted here as if each one were work
+        // finished.
+        use crate::cost::{Entry, Usage};
+
+        let step = StepId::new(1, "b1", 7).expect("step");
+        let mut records =
+            vec![Record::outcome(step.clone(), 100, true, "T-9: added dedupe").for_requirements(["T-9"])];
+        for n in 0..12 {
+            records.push(crate::cost::annotate(
+                Record::outcome(step.clone(), 101 + n, true, "coder · link ds-fast"),
+                &Entry {
+                    step: step.to_string(),
+                    role: "coder".into(),
+                    link: "ds-fast".into(),
+                    model: "deepseek-v4-flash".into(),
+                    usage: Usage { cache_hit_tokens: 8, cache_miss_tokens: 4, output_tokens: 2 },
+                    latency_ms: 90,
+                    charge: 0.0001,
+                },
+            ));
+        }
+
+        let projection = replay(&records);
+        assert_eq!(projection.done.len(), 1, "one step, twelve calls: {:?}", projection.done);
+        assert_eq!(
+            projection.requirements_touched,
+            vec!["T-9".to_string()],
+            "and the calls carry no requirement to add"
+        );
     }
 
     #[test]

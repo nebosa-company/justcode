@@ -213,6 +213,22 @@ function render() {
   host.append(body);
 }
 
+/** `$0.04` at full strength and the rest of the digits quiet.
+ *
+ * Four decimal places are needed — a cycle can cost less than a cent — but only
+ * the first two are a number anyone reads. Shown rather than rounded, because a
+ * run that spent `$0.0004` and one that spent `$0.0400` must not both say
+ * `$0.00`.
+ */
+function money(amount) {
+  const text = amount.toFixed(4);
+  const wrap = el("span", "perp-money");
+  wrap.append(document.createTextNode(`$${text.slice(0, 4)}`));
+  wrap.append(el("span", "perp-money-fraction", text.slice(4)));
+  wrap.title = t("harness.spendHint", { total: `$${text}` });
+  return wrap;
+}
+
 function renderHeader(view) {
   const header = el("div", "perp-header");
   const position = view.position;
@@ -232,7 +248,12 @@ function renderHeader(view) {
   }
 
   const counts = el("span", "perp-counts");
-  counts.append(el("span", "perp-ok", `${position.done} done`));
+  const done = el("span", "perp-ok", `${position.done} done`);
+  // What the number counts, because it is not obvious and was wrong until
+  // recently: journalled steps, which is neither batches nor requirements. One
+  // requirement is usually one step plus a share of a gate step.
+  done.title = t("harness.doneHint");
+  counts.append(done);
   if (position.blocked > 0) {
     counts.append(el("span", "perp-bad", `${position.blocked} blocked`));
   }
@@ -241,7 +262,7 @@ function renderHeader(view) {
   );
   // Money is shown even at zero: a missing figure reads as unknown, a zero
   // reads as free, and a local-only cycle really is free.
-  counts.append(el("span", null, `$${Number(view.spend.money).toFixed(4)}`));
+  counts.append(money(Number(view.spend.money)));
   if (view.approvals > 0) {
     counts.append(el("span", "perp-bad", `${view.approvals} awaiting approval`));
   }
@@ -344,10 +365,22 @@ function renderTimeline(body, view) {
     // seeing, but it is not something that happened.
     const tone = entry.ok === false ? "bad" : entry.kind === "calls" ? "calls" : null;
     const row = el("li", tone);
-    row.append(el("code", "perp-step", entry.step));
+    const step = el("code", "perp-step", entry.step);
+    // `at` is journalled in seconds; the panel has been showing an id with no
+    // sense of when it happened.
+    if (entry.at) step.title = new Date(entry.at * 1000).toLocaleString();
+    row.append(step);
     row.append(el("span", "perp-summary", entry.summary));
     if (entry.requirements.length) {
-      row.append(el("span", "perp-reqs", entry.requirements.join(" ")));
+      const reqs = el("span", "perp-reqs", entry.requirements.join(" "));
+      // What the ids mean. One line each, so a row citing three of them explains
+      // all three rather than making you go and look.
+      const known = view.requirements || {};
+      const said = entry.requirements
+        .map((id) => (known[id] ? `${id} — ${known[id]}` : id))
+        .join("\n");
+      reqs.title = said;
+      row.append(reqs);
     }
     if (entry.transcript && onShowTranscript) {
       // `I-4`: transcripts go to the terminal dock rather than a viewer
@@ -451,7 +484,7 @@ function renderChat(body, view) {
 // confirming.
 function renderApprovals(body, view) {
   if (!view.approvals_pending.length) {
-    body.append(el("p", "perp-empty", "Nothing waiting on a person."));
+    body.append(el("p", "perp-empty", t("harness.noApprovals")));
     return;
   }
   for (const pending of view.approvals_pending) {

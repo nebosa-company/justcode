@@ -70,6 +70,40 @@ pub fn remaining(source: &str, records: &[crate::journal::Record], cycle: u32, l
         .collect()
 }
 
+/// Every requirement in the source with its text, done or not.
+///
+/// `backlog` skips anything already marked, because it answers "what is left to
+/// work on". This answers "what does this id mean", which has to include the
+/// finished ones: a step citing `T-2` is worth explaining long after `T-2` is
+/// ticked.
+pub fn backlog_all(source: &str) -> Vec<(String, String)> {
+    let mut all: Vec<(String, String)> = Vec::new();
+    for line in source.lines() {
+        let line = line.trim();
+        if !line.starts_with('|') {
+            continue;
+        }
+        let mut cells = line.trim_matches('|').split('|');
+        let (Some(first), Some(text)) = (cells.next(), cells.next()) else { continue };
+        let id = first
+            .trim()
+            .trim_start_matches(['✅', '🟡', '⛔', '🔶', '❌', '🚧'])
+            .replace('~', "")
+            .trim()
+            .trim_matches('`')
+            .trim()
+            .to_string();
+        if !is_requirement_id(&id) || text.trim().is_empty() {
+            continue;
+        }
+        let summary: String = text.trim().chars().take(160).collect();
+        if !all.iter().any(|(seen, _)| *seen == id) {
+            all.push((id, summary));
+        }
+    }
+    all
+}
+
 pub fn backlog(source: &str, limit: usize) -> Vec<Item> {
     let mut items = Vec::new();
     // Checked before the loop, not inside it: the earlier version pushed an

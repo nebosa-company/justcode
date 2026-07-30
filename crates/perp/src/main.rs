@@ -1347,7 +1347,16 @@ fn cmd_panel(args: &[&str]) -> std::result::Result<(), String> {
     // journal alone reports none rather than guessing at some.
     // `I-3`: the diff travels with the view, so the panel cannot offer an
     // approve button before it has something to show.
+    // The requirements text travels with the view so a panel can say what an id
+    // means. Read here rather than in `View::of`, which folds records and knows
+    // nothing about files.
+    let source = binding
+        .resolve("path.requirements")
+        .ok()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .unwrap_or_default();
     let view = View::of(&records, &Approvals::new(), artifacts, time::now())
+        .with_requirements(&source)
         .with_review(&Repo::at(binding.root()), &Approvals::new(), time::now());
     println!("{}", view.to_json());
     Ok(())
