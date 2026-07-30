@@ -102,6 +102,8 @@ export const EN = {
   "view.autismThemeHint": "Muted, low-contrast colours for sensory sensitivity",
   "view.bionicReading": "Bionic Reading",
   "view.problems": "Problems",
+  "file.recentOpen": "already open",
+  "file.reopen": "Reopen from Disk",
   "palette.title": "Commands",
   "palette.placeholder": "Type to search every command…",
   "palette.none": "No command matches.",

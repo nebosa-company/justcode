@@ -1063,20 +1063,48 @@ function newFile() {
 
 // ------------------------------------------------------------- recent files
 
+/** The recent list as `{path, at}`, newest first.
+ *
+ * Reads the old format too — a bare array of paths — because a stored list from
+ * before this carried no times, and dropping it to gain a grouping nobody asked
+ * for would be a poor trade. Those entries get `at: 0`, which sorts them under
+ * the line as "before today", which is true.
+ */
 function readRecentFiles() {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE.recent) || "[]");
-    return Array.isArray(stored) ? stored.filter((entry) => typeof entry === "string") : [];
+    if (!Array.isArray(stored)) return [];
+    return stored
+      .map((entry) => {
+        if (typeof entry === "string") return { path: entry, at: 0 };
+        if (entry && typeof entry.path === "string") {
+          return { path: entry.path, at: Number(entry.at) || 0 };
+        }
+        return null;
+      })
+      .filter(Boolean);
   } catch {
     return [];
   }
 }
 
-/** Records a path as most-recent, keeping the list unique and capped. */
+/** Records a path as most-recent, keeping the list unique and capped.
+ *
+ * Called on every open, including re-opening a file that is already in a tab, so
+ * the order is genuinely "last reached" rather than "first discovered".
+ */
 function rememberRecentFile(path) {
   if (!path) return;
-  const next = [path, ...readRecentFiles().filter((entry) => entry !== path)];
+  const key = samePathKey(path);
+  const rest = readRecentFiles().filter((entry) => samePathKey(entry.path) !== key);
+  const next = [{ path, at: Date.now() }, ...rest];
   localStorage.setItem(STORAGE.recent, JSON.stringify(next.slice(0, MAX_RECENT_FILES)));
+}
+
+/** Midnight this morning, in local time. The boundary for "today". */
+function startOfToday() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 }
 
 // ----------------------------------------------------------------- session
@@ -2259,12 +2287,33 @@ function buildMenus() {
         submenu: () => {
           const recent = readRecentFiles();
           if (!recent.length) return [{ label: t("file.recentEmpty"), enabled: () => false, run() {} }];
-          return recent.map((path) => ({
-            label: baseName(path),
-            hint: path,
-            run: () => openPath(path).then(renderStatus),
-          }));
+
+          // Today above the line, everything older below it. A list of twenty
+          // file names with no sense of when says less than two short lists.
+          const midnight = startOfToday();
+          const row = (entry) => {
+            const open = Boolean(findTabByPath(entry.path));
+            return {
+              // Open files are marked, because half of a recent list is usually
+              // already on screen and picking one of those only switches tabs.
+              icon: open ? "check" : "file",
+              label: baseName(entry.path),
+              hint: open ? `${entry.path} — ${t("file.recentOpen")}` : entry.path,
+              run: () => openPath(entry.path).then(renderStatus),
+            };
+          };
+          const today = recent.filter((entry) => entry.at >= midnight).map(row);
+          const older = recent.filter((entry) => entry.at < midnight).map(row);
+          if (!today.length || !older.length) return [...today, ...older];
+          return [...today, { separator: true }, ...older];
         },
+      },
+      {
+        label: t("file.reopen"),
+        icon: "refresh",
+        accel: "Ctrl+Shift+R",
+        enabled: () => Boolean(activeTab()?.path),
+        run: reopenActiveTab,
       },
       { separator: true },
       {
@@ -2832,6 +2881,11 @@ window.addEventListener(
     //
     // H for Harness. P collided with print and paste in muscle memory and named
     // the old panel rather than what the menu is now called.
+    if (ctrl && event.shiftKey && event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      reopenActiveTab();
+      return;
+    }
     if (ctrl && event.shiftKey && event.key.toLowerCase() === "p") {
       event.preventDefault();
       openCommandPalette();
@@ -3318,6 +3372,47 @@ async function perpRoot() {
     return await invoke("perp_root", { from });
   } catch {
     return null;
+  }
+}
+
+/** Re-read the active tab's file from disk, into the same tab.
+ *
+ * For the case the editor cannot see: the file changed underneath you, because a
+ * build wrote it or the harness did. Opening it again would only activate the tab
+ * that is already there, which is why this exists as its own command.
+ *
+ * Unsaved changes are confirmed first. The whole point is to throw away what is
+ * in the buffer, and doing that to an edit somebody made without asking is not a
+ * refresh, it is a loss.
+ */
+async function reopenActiveTab() {
+  const tab = activeTab();
+  if (!tab?.path) return;
+  if (isModified(tab)) {
+    const answer = await askSaveChanges([tab.name]);
+    if (answer === "cancel") return;
+    if (answer === "save" && !(await saveTab(tab))) return;
+  }
+  try {
+    const text = await invoke("read_text_file", { path: tab.path });
+    const pane = paneOfTab(tab.id);
+    if (!pane) return;
+    // Same tab, same position in the tab strip, new contents — and the cursor
+    // put back where it was, because a refresh that scrolls you to the top is a
+    // refresh you stop using.
+    const line = pane.view.state.doc.lineAt(
+      Math.min(pane.view.state.selection.main.head, pane.view.state.doc.length),
+    ).number;
+    pane.view.dispatch({
+      changes: { from: 0, to: pane.view.state.doc.length, insert: text },
+    });
+    tab.savedText = text;
+    tab.eol = detectEol(text);
+    revealLine(pane.view, line, 1);
+    renderTabs();
+    renderStatus();
+  } catch (error) {
+    await message(`${error}`, { title: "JustCode", kind: "error" });
   }
 }
 
