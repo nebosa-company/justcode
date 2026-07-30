@@ -228,6 +228,27 @@ test("a hidden element that is display-something has an explicit [hidden] rule",
   );
 });
 
+test("stripping a file name off a path accepts both separators", () => {
+  // `[\/][^\/]*$` reads like "the last segment" and is, on a POSIX path. Windows
+  // hands the editor `C:\dir\todo.md`, where it matches nothing and returns the
+  // whole path — so a file was passed where a folder was meant, and Harness
+  // Init tried to create `todo.md\.harness`. Two of the three copies of this
+  // idiom had it wrong; splitting a step id like `c1/b1/s44` is a different
+  // thing and is not this pattern.
+  const wrong = [];
+  for (const { name, text } of sources()) {
+    // The idiom itself: a character class, then a negated one, then `*$`.
+    for (const match of text.matchAll(/replace\(\/(\[[^\]]*\]\[\^[^\]]*\]\*\$)\//g)) {
+      const [charClass] = match[1].split("]");
+      if (!charClass.includes("\\\\")) {
+        const line = text.slice(0, match.index).split("\n").length;
+        wrong.push(`src/${name}:${line} ${match[1]} — add \\\\ to the class`);
+      }
+    }
+  }
+  assert.deepEqual(wrong, [], `these miss Windows separators:\n${wrong.join("\n")}`);
+});
+
 test("no string is written in English at the point it is shown", () => {
   // The locale test above proves every key is translated everywhere. It says
   // nothing about a string that never became a key — and twenty-eight never

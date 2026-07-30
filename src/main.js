@@ -139,6 +139,18 @@ const dom = {
   statusPerp: document.getElementById("status-perp"),
 };
 
+/** The folder a file sits in, on either kind of path separator.
+ *
+ * Written three times and got the separator class wrong in two of them. Windows
+ * hands the editor `C:\dir\todo.md`, a forward-slash-only pattern matches
+ * nothing in it, and the whole path came back as though it were a directory —
+ * so `init` tried to make `todo.md\.harness` and Windows answered "cannot
+ * create a file when that file already exists".
+ */
+function folderOf(path) {
+  return path ? path.replace(/[\\/][^\\/]*$/, "") : null;
+}
+
 /** Where the caret last was, so a language change can redraw its tooltip.
  *
  * Declared here rather than beside [renderCaret] because `onSelection` below
@@ -2143,10 +2155,7 @@ initTerminals({
   },
   // New terminals start beside the file being edited, which is nearly always
   // where a build or a git command wants to run.
-  currentDirectory: () => {
-    const path = activeTab()?.path;
-    return path ? path.replace(/[\\/][^\\/]*$/, "") : null;
-  },
+  currentDirectory: () => folderOf(activeTab()?.path),
 });
 
 window.addEventListener("resize", () => relayoutTerminals());
@@ -3426,8 +3435,7 @@ let perpAttachedRoot = null;
 
 
 async function refreshHarnessState() {
-  const path = activeTab()?.path;
-  const from = path ? path.replace(/[\/][^\/]*$/, "") : null;
+  const from = folderOf(activeTab()?.path);
   if (!from) {
     harness = { root: null, initRoot: null, requirements: [] };
     return;
@@ -3540,9 +3548,8 @@ async function followPerpWorkspace() {
  * up — so the panel only worked for a file at the top of the project.
  */
 async function perpRoot() {
-  const path = activeTab()?.path;
-  if (!path) return null;
-  const from = path.replace(/[\/][^\/]*$/, "");
+  const from = folderOf(activeTab()?.path);
+  if (!from) return null;
   try {
     return await invoke("perp_root", { from });
   } catch {

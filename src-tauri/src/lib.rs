@@ -785,7 +785,8 @@ fn perp_start(batches: u32, items: u32, root: String) -> Result<String, String> 
 /// not in a Perpetum workspace and the panel says so rather than guessing.
 #[tauri::command]
 fn perp_root(from: String) -> Option<String> {
-    let mut dir = std::path::Path::new(&from);
+    let owned = directory_of(&from);
+    let mut dir = owned.as_path();
     // Bounded by the filesystem: `parent()` yields `None` at the root.
     loop {
         if dir.join(".harness/binding.md").is_file() {
@@ -793,6 +794,24 @@ fn perp_root(from: String) -> Option<String> {
         }
         dir = dir.parent()?;
     }
+}
+
+/// The directory a path denotes: itself, or its parent when it names a file.
+///
+/// Every caller here means "the folder to search from", and the searches walk
+/// upwards, so being handed a file was harmless for them by luck. It was not
+/// harmless for `init`, which joins `.harness` onto what it is given: pointed at
+/// `todo.md` it asked Windows to create `todo.md\.harness` and got "cannot
+/// create a file when that file already exists". Answering the question the
+/// callers are actually asking costs one `is_file` and cannot be got wrong twice.
+fn directory_of(from: &str) -> std::path::PathBuf {
+    let given = std::path::Path::new(from);
+    if given.is_file() {
+        if let Some(parent) = given.parent() {
+            return parent.to_path_buf();
+        }
+    }
+    given.to_path_buf()
 }
 
 /// Bumped whenever the panel points at a workspace. A watcher thread whose
@@ -924,7 +943,8 @@ fn changed_between(
 /// and which requirements files exist.
 #[tauri::command]
 fn harness_state(from: String) -> serde_json::Value {
-    let start = std::path::Path::new(&from);
+    let start = directory_of(&from);
+    let start = start.as_path();
 
     let mut root: Option<std::path::PathBuf> = None;
     let mut dir = Some(start);
@@ -2341,5 +2361,45 @@ mod preview_server_tests {
         assert!(require_html_extension(Path::new("a.htm")).is_ok());
         assert!(require_html_extension(Path::new("a.exe")).is_err());
         assert!(require_html_extension(Path::new("a.bat")).is_err());
+    }
+}
+
+#[cfg(test)]
+mod harness_root_tests {
+    use super::directory_of;
+
+    /// The editor knows which file is open, not which folder it is in, so a file
+    /// path reaching these commands is ordinary rather than a mistake to guard
+    /// against. `perp_root` survived one by luck — it walks upwards, so starting
+    /// one level too deep still found the workspace. `harness_state` did not:
+    /// with no `.git` above it, `init_root` fell back to the path as given, and
+    /// `init` was asked to create `.harness` inside a file.
+    #[test]
+    fn a_file_resolves_to_the_folder_holding_it() {
+        let dir = std::env::temp_dir().join("justcode-directory-of-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("todo.md");
+        std::fs::write(&file, "# notes\n").unwrap();
+
+        assert_eq!(directory_of(&file.to_string_lossy()), dir);
+
+        std::fs::remove_file(&file).ok();
+        std::fs::remove_dir(&dir).ok();
+    }
+
+    /// A directory is already the answer. Stepping up from one would search the
+    /// parent of the folder the user is actually in.
+    #[test]
+    fn a_directory_is_left_alone() {
+        let dir = std::env::temp_dir();
+        assert_eq!(directory_of(&dir.to_string_lossy()), dir);
+    }
+
+    /// Nothing on disk to inspect, so it cannot be a file: pass it through
+    /// rather than guessing at a parent.
+    #[test]
+    fn a_path_that_does_not_exist_is_passed_through() {
+        let missing = std::env::temp_dir().join("justcode-no-such-dir-here");
+        assert_eq!(directory_of(&missing.to_string_lossy()), missing);
     }
 }
