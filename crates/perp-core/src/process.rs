@@ -181,6 +181,20 @@ pub struct Spec {
     /// any other user on the machine can read out of a process listing, or the
     /// filesystem, which outlives the call (`S-2`).
     pub stdin: Option<String>,
+    /// The arguments to run, when the caller already has them as a list.
+    ///
+    /// A gate is a line a person wrote and has to be split. A call we assemble
+    /// ourselves is already a list, and flattening it to a line to split it back
+    /// apart loses things: an argument containing a space needs quoting, and an
+    /// **empty** argument cannot survive the round trip at all.
+    ///
+    /// That is not hypothetical. `claude --tools ""` means *no tools*, and the
+    /// same flag with the empty argument dropped means *every tool* — the exact
+    /// opposite, silently. See [`crate::anthropic::cli_invocation`].
+    ///
+    /// [`Spec::command`] stays as written for the journal, which wants something
+    /// a person can read rather than a list.
+    pub argv: Option<Vec<String>>,
 }
 
 impl Spec {
@@ -191,6 +205,7 @@ impl Spec {
             env: Env::declared(),
             timeout,
             stdin: None,
+            argv: None,
         }
     }
 
@@ -203,6 +218,21 @@ impl Spec {
     pub fn with_env(mut self, env: Env) -> Spec {
         self.env = env;
         self
+    }
+
+    /// Run exactly these arguments, without splitting anything. See [`Spec::argv`].
+    pub fn with_argv(mut self, argv: Vec<String>) -> Spec {
+        self.argv = Some(argv);
+        self
+    }
+
+    /// What to actually run: the caller's list where there is one, and the split
+    /// of the command line where there is not.
+    fn parts(&self) -> Result<Vec<String>> {
+        match &self.argv {
+            Some(argv) if !argv.is_empty() => Ok(argv.clone()),
+            _ => split_command(&self.command),
+        }
     }
 }
 
@@ -327,7 +357,7 @@ fn on_path(_program: &str) -> Option<std::ffi::OsString> {
 
 /// Run a command to completion or to its deadline, whichever comes first.
 pub fn run(spec: &Spec) -> Result<Run> {
-    let parts = split_command(&spec.command)?;
+    let parts = spec.parts()?;
     let (program, args) = parts.split_first().ok_or_else(|| {
         Error::unbound("command", "is empty")
     })?;
@@ -515,7 +545,7 @@ impl Nursery {
     }
 
     pub fn spawn(&mut self, spec: &Spec) -> Result<u32> {
-        let parts = split_command(&spec.command)?;
+        let parts = spec.parts()?;
         let (program, args) = parts
             .split_first()
             .ok_or_else(|| Error::unbound("command", "is empty"))?;
@@ -704,6 +734,36 @@ mod tests {
     fn rejects_a_command_it_cannot_run() {
         assert!(split_command("git commit -m \"unclosed").is_err());
         assert!(split_command("   ").is_err());
+    }
+
+    /// An argument list is run as given, and an **empty** argument in it survives.
+    ///
+    /// This is the whole point of [`Spec::argv`]. `claude --tools ""` means no
+    /// tools and `claude --tools` means every tool, so an empty argument quietly
+    /// dropped on the way to the child inverts the flag that keeps a second agent
+    /// from editing the workspace behind the harness's back.
+    ///
+    /// The loss is in the **join**, not the split: `split_command` gives an empty
+    /// token back for a `""` that is still written in the line, but a list joined
+    /// on spaces has no way to write one, so by then it is already gone.
+    #[test]
+    fn an_argument_list_is_run_as_given_including_an_empty_argument() {
+        let argv = vec!["claude".to_string(), "--tools".to_string(), String::new()];
+        let spec =
+            Spec::new(argv.join(" "), ".", Duration::from_secs(1)).with_argv(argv.clone());
+        assert_eq!(spec.parts().expect("parts"), argv, "the list is used as given");
+
+        // The same spec without the list: what the child would have been given.
+        let flattened = Spec::new(argv.join(" "), ".", Duration::from_secs(1));
+        let parts = flattened.parts().expect("parts");
+        assert_eq!(parts, vec!["claude", "--tools"], "the empty argument is gone: {parts:?}");
+    }
+
+    /// A gate is still a line a person wrote, and still gets split.
+    #[test]
+    fn a_spec_with_no_argument_list_still_splits_its_command_line() {
+        let spec = Spec::new("cargo test --workspace", ".", Duration::from_secs(1));
+        assert_eq!(spec.parts().expect("parts"), vec!["cargo", "test", "--workspace"]);
     }
 
     #[test]

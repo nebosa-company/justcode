@@ -627,21 +627,40 @@ impl<'a> Client<'a> {
     ///
     /// The prompt goes on stdin. A conversation is flattened first, because the
     /// command takes one prompt and has no notion of turns.
+    ///
+    /// The system prompt does not go with it. It is written to a temporary file
+    /// and named with `--system-prompt-file`, so that the command receives it as
+    /// instructions rather than as user text claiming to be instructions — see
+    /// [`crate::anthropic::cli_invocation`] for what happens when it does not.
     fn command(&self, link: &Link, request: &ChatRequest) -> Result<Reply> {
         let program = std::env::var("PERP_CLAUDE_BIN").unwrap_or_else(|_| "claude".to_string());
         let prompt = crate::anthropic::cli_prompt(request);
-        let (args, stdin) = crate::anthropic::cli_invocation(&program, &link.model, &prompt);
 
         // Redacted on the way out, the same as an HTTP body: a prompt assembled
-        // from a workspace can carry anything the workspace does.
-        let stdin = crate::security::outbound(&stdin, link, &self.redact).text;
+        // from a workspace can carry anything the workspace does. The system text
+        // is assembled the same way and gets the same treatment.
+        let stdin = crate::security::outbound(&prompt, link, &self.redact).text;
+        let system = crate::anthropic::cli_system(request)
+            .map(|text| crate::security::outbound(&text, link, &self.redact).text);
+        let handed = system.as_deref().map(SystemFile::write).transpose()?;
 
+        let (args, stdin) = crate::anthropic::cli_invocation(
+            &program,
+            &link.model,
+            handed.as_ref().map(SystemFile::path),
+            &stdin,
+        );
+
+        // The arguments go as a list. Joined into a line and split back apart,
+        // `--tools ""` loses its empty argument and becomes `--tools`, which
+        // means every tool rather than none — see `Spec::argv`.
         let spec = crate::process::Spec::new(
             args.join(" "),
             std::path::Path::new("."),
             std::time::Duration::from_secs(600),
         )
         .with_env(crate::process::Env::declared())
+        .with_argv(args.clone())
         .with_stdin(stdin);
         let run = crate::process::run(&spec)?;
         if !matches!(run.exit, crate::process::Exit::Code(0)) {
@@ -915,6 +934,46 @@ impl<'a> Client<'a> {
                     .join("; ")
             ),
         ))
+    }
+}
+
+/// A system prompt on disk for the length of one `claude-cli` call.
+///
+/// The command takes its system prompt as a file. The file is a temporary one and
+/// not a workspace one on purpose: written under the workspace it would be seen by
+/// the file watcher, staged by a careless `git add`, and left behind for whoever
+/// reads the repository next.
+///
+/// It is removed on drop rather than after the call, so that an error return, an
+/// early `?`, or a panic in between does not leak it. Removal failure is ignored:
+/// a leftover file in the temporary directory is not worth failing a call that
+/// otherwise succeeded, and there is nothing useful to do about it here.
+struct SystemFile(std::path::PathBuf);
+
+impl SystemFile {
+    fn write(text: &str) -> Result<SystemFile> {
+        // Named by process and by a counter: two calls in one process must not
+        // share a path, and two processes must not either.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let ordinal = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let path = std::env::temp_dir().join(format!("perp-system-{}-{ordinal}.txt", std::process::id()));
+        std::fs::write(&path, text).map_err(|failed| {
+            Error::unbound(
+                "link",
+                format!("cannot write the system prompt to {}: {failed}", path.display()),
+            )
+        })?;
+        Ok(SystemFile(path))
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for SystemFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
 

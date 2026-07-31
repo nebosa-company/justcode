@@ -149,16 +149,80 @@ pub fn parse(body: &str) -> Result<Reply> {
 /// `-p` is the non-interactive mode: one prompt, one answer, no session. The JSON
 /// output carries usage and cost, which the ledger needs — the plain text output
 /// carries neither and would make every call look free.
-pub fn cli_invocation(program: &str, model: &str, prompt: &str) -> (Vec<String>, String) {
-    let args = vec![
+///
+/// ## It is an agent, and a link wants a model
+///
+/// `claude` is not a model endpoint. It is an agent: its own tools, its own
+/// permission prompts, its own reading of the operator's `CLAUDE.md`. Run as it
+/// comes, it does the work *itself* — which sounds like a feature and is not. Its
+/// edits land outside `X-2`'s confinement, no tool call is journalled, and no red
+/// run happens, so the loop cannot say what changed or undo it. Two agents, one
+/// wheel. Three flags take the agent off and leave the model:
+///
+/// - **`--system-prompt-file`** — the harness's prompt as an actual system
+///   prompt. `system` is a path, not the text: the text is thousands of
+///   characters of workspace-derived prompt, longer than a Windows command line
+///   allows and visible in a process listing to every other user (`S-2`).
+///
+///   Folding it into the user turn instead — which is what this used to do — puts
+///   a tool protocol and a claim of authority into user text, and that is the
+///   exact shape of a prompt injection. A well-behaved agent refuses it. Ours
+///   did, in as many words, and then used its own tools.
+///
+/// - **`--tools ""`** — no tools at all, so there is nothing to use but ours.
+///   Denying them by name was tried and does not work: the list is long, it
+///   changes between versions, and what it missed the model reported as its
+///   *real* toolset — concluding that ours were fake and the tool results it was
+///   being shown could not be trusted. Right conclusion, from its side.
+///
+///   The empty string is load-bearing and is why this returns a list rather than
+///   a line: `--tools ""` means none, and `--tools` with the empty argument lost
+///   means **all**, silently. See [`crate::process::Spec::argv`].
+///
+/// - **`--safe-mode`** — no `CLAUDE.md`, skills, plugins, hooks, MCP servers or
+///   custom agents. The operator's `CLAUDE.md` is written for their own sessions
+///   and says things like which two sections every answer must end with; appended
+///   here it corrupts every reply, because a reply is parsed as a tool call and
+///   read by no one.
+///
+///   Not `--bare`, which looks similar and also forces authentication through
+///   `ANTHROPIC_API_KEY` — that would take the subscription out of the picture,
+///   which is the whole reason this link kind exists.
+pub fn cli_invocation(
+    program: &str,
+    model: &str,
+    system: Option<&std::path::Path>,
+    prompt: &str,
+) -> (Vec<String>, String) {
+    let mut args = vec![
         program.to_string(),
         "-p".to_string(),
         "--output-format".to_string(),
         "json".to_string(),
         "--model".to_string(),
         model.to_string(),
+        // The agent, off. See above for why each of these and not another.
+        "--safe-mode".to_string(),
+        "--tools".to_string(),
+        String::new(),
     ];
+    if let Some(path) = system {
+        args.push("--system-prompt-file".to_string());
+        args.push(path.display().to_string());
+    }
     (args, prompt.to_string())
+}
+
+/// The system text of a request, which the CLI takes as a file and not a message.
+pub fn cli_system(request: &ChatRequest) -> Option<String> {
+    let mut out = String::new();
+    for message in request.messages.iter().filter(|m| m.role == "system") {
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(&message.content);
+    }
+    Some(out).filter(|text| !text.is_empty())
 }
 
 /// Flatten a conversation into the single prompt the CLI takes.
@@ -167,14 +231,16 @@ pub fn cli_invocation(program: &str, model: &str, prompt: &str) -> (Vec<String>,
 /// rendered into one prompt. Roles are labelled rather than dropped: a model given
 /// an unlabelled wall of text cannot tell its own previous answers from the
 /// user's.
+///
+/// System messages are not here. They go to [`cli_system`] and reach the command
+/// as a system prompt, for the reason given on [`cli_invocation`].
 pub fn cli_prompt(request: &ChatRequest) -> String {
     let mut out = String::new();
-    for message in &request.messages {
+    for message in request.messages.iter().filter(|m| m.role != "system") {
         if !out.is_empty() {
             out.push_str("\n\n");
         }
         match message.role.as_str() {
-            "system" => out.push_str(&message.content),
             "user" => {
                 out.push_str("Human: ");
                 out.push_str(&message.content);
@@ -345,7 +411,7 @@ mod tests {
     fn the_cli_takes_its_prompt_on_stdin_and_never_in_argv() {
         // A prompt is longer than any command line allows, and argv is visible to
         // every other process on the machine (`S-2`).
-        let (args, stdin) = cli_invocation("claude", "claude-opus-5", "Add dedupe.");
+        let (args, stdin) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.");
         assert_eq!(stdin, "Add dedupe.");
         assert!(!args.iter().any(|arg| arg.contains("Add dedupe.")), "not in argv: {args:?}");
         assert_eq!(args.first().map(String::as_str), Some("claude"));
@@ -356,6 +422,74 @@ mod tests {
         assert!(args.contains(&"claude-opus-5".to_string()), "the model is named: {args:?}");
     }
 
+    /// The system prompt is named as a file, and its text is not in argv either —
+    /// it is the longest thing in the whole request.
+    #[test]
+    fn the_system_prompt_reaches_the_cli_as_a_system_prompt() {
+        let (args, _) = cli_invocation(
+            "claude",
+            "claude-opus-5",
+            Some(std::path::Path::new("/tmp/sys.txt")),
+            "Add dedupe.",
+        );
+        let at = args.iter().position(|arg| arg == "--system-prompt-file").expect("{args:?}");
+        assert!(args[at + 1].contains("sys.txt"), "the path follows the flag: {args:?}");
+        // Unquoted, because these go as a list and never through a splitter.
+        assert!(!args[at + 1].starts_with('"'), "not quoted: {args:?}");
+    }
+
+    /// The operator's own `CLAUDE.md` is written for their sessions — it says
+    /// which two sections every answer must end with — and appended to ours it
+    /// shapes every reply we then try to parse as a tool call.
+    #[test]
+    fn the_operators_own_customisations_are_left_out() {
+        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.");
+        assert!(args.iter().any(|arg| arg == "--safe-mode"), "{args:?}");
+        // `--bare` looks like it would do too, and also forces authentication
+        // through `ANTHROPIC_API_KEY`, which is the one thing this must not do.
+        assert!(!args.iter().any(|arg| arg == "--bare"), "not this one: {args:?}");
+    }
+
+    /// The defect this whole shape exists to fix. With no file to put it in, the
+    /// system text used to be folded into the user turn — where it reads as user
+    /// text claiming authority over the model, which is an injection, and the
+    /// agent on the other end refused it and did the job with its own tools.
+    #[test]
+    fn the_system_text_is_never_folded_into_the_user_turn() {
+        let prompt = cli_prompt(&request());
+        assert!(!prompt.contains("Be terse."), "the system text is not in the prompt: {prompt}");
+        assert_eq!(cli_system(&request()).as_deref(), Some("Be terse."), "it is here instead");
+    }
+
+    /// `claude` is an agent and brings its own tools. Left with them it edits the
+    /// workspace itself: outside `X-2`, unjournalled, and with no red run.
+    ///
+    /// The empty argument is the whole flag. `--tools ""` is no tools; `--tools`
+    /// with the empty one lost is *every* tool, which is why this asserts the
+    /// pair and not just the flag.
+    #[test]
+    fn the_commands_own_tools_are_taken_away_so_that_it_is_a_model_and_not_an_agent() {
+        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.");
+        let at = args.iter().position(|arg| arg == "--tools").expect("{args:?}");
+        assert_eq!(args.get(at + 1).map(String::as_str), Some(""), "empty, not absent: {args:?}");
+    }
+
+    /// The reason [`cli_invocation`] returns a list and the caller passes it as
+    /// one. Flattening it to a line and splitting it back drops the empty
+    /// argument, and the flag that meant *no tools* comes out meaning *all* of
+    /// them — the failure this whole shape exists to prevent, and a silent one.
+    #[test]
+    fn flattening_the_arguments_to_a_line_would_invert_the_tools_flag() {
+        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.");
+        let round_tripped = crate::process::split_command(&args.join(" ")).expect("split");
+        let at = round_tripped.iter().position(|arg| arg == "--tools").expect("{round_tripped:?}");
+        assert_ne!(
+            round_tripped.get(at + 1).map(String::as_str),
+            Some(""),
+            "if this ever round-trips, the list can go back to being a line"
+        );
+    }
+
     #[test]
     fn a_conversation_is_flattened_with_its_roles_labelled() {
         // The CLI takes one prompt. A model handed an unlabelled wall of text
@@ -363,7 +497,6 @@ mod tests {
         let mut talk = request();
         talk.messages.push(Message { role: "assistant".into(), content: "Done.".into() });
         let prompt = cli_prompt(&talk);
-        assert!(prompt.starts_with("Be terse."), "the system text leads: {prompt}");
         assert!(prompt.contains("Human: Add dedupe."), "{prompt}");
         assert!(prompt.contains("Assistant: Done."), "{prompt}");
     }
