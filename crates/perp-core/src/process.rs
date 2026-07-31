@@ -13,7 +13,7 @@
 //! requirements source).
 
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -250,6 +250,36 @@ pub fn split_command(line: &str) -> Result<Vec<String>> {
     Ok(parts)
 }
 
+/// Where to find the program named by a command.
+///
+/// A name with no separator in it — `python`, `cargo`, `git` — is a `PATH`
+/// lookup and is left alone. A name *with* one — `.venv/Scripts/python.exe` —
+/// is a path, and a relative path is meant relative to the directory the
+/// command runs in.
+///
+/// The platform does not read it that way. `Command::current_dir` sets where
+/// the child starts, not where its executable is looked for: on Windows the
+/// program is resolved against the **parent's** directory, so a binding naming
+/// `.venv/Scripts/python.exe` worked when `perp` happened to be run from the
+/// workspace and failed when it was run with `--root` from anywhere else — the
+/// editor starts a cycle exactly that way. Joining it here makes the two agree,
+/// which is what a person writing that line already assumed.
+///
+/// Left alone when the join does not exist, so the error still names what was
+/// asked for rather than a path this function invented.
+fn resolve_program(program: &str, cwd: &Path) -> std::ffi::OsString {
+    let named = Path::new(program);
+    if named.is_absolute() || named.parent() == Some(Path::new("")) {
+        return program.into();
+    }
+    let joined = cwd.join(named);
+    if joined.exists() {
+        joined.into_os_string()
+    } else {
+        program.into()
+    }
+}
+
 /// Run a command to completion or to its deadline, whichever comes first.
 pub fn run(spec: &Spec) -> Result<Run> {
     let parts = split_command(&spec.command)?;
@@ -257,7 +287,7 @@ pub fn run(spec: &Spec) -> Result<Run> {
         Error::unbound("command", "is empty")
     })?;
 
-    let mut command = Command::new(program);
+    let mut command = Command::new(resolve_program(program, &spec.cwd));
     command
         .args(args)
         .current_dir(&spec.cwd)
@@ -500,6 +530,52 @@ impl Drop for Nursery {
 
 #[cfg(test)]
 mod tests {
+
+    /// A binding may name its own interpreter — `.venv/Scripts/python` — and
+    /// mean it relative to where the command runs. The platform does not: the
+    /// program is looked up against the *parent's* directory, so this worked
+    /// only when `perp` happened to be started from the workspace and failed
+    /// when it was started with `--root` from anywhere else, which is how the
+    /// editor starts a cycle.
+    #[test]
+    fn a_relative_program_is_found_beside_the_working_directory() {
+        let dir = crate::testutil::tmpdir("process-relative-program");
+        let nested = dir.join("tools");
+        std::fs::create_dir_all(&nested).expect("dirs");
+
+        // A real executable, named by a path relative to `cwd`.
+        let name = if cfg!(windows) { "say.bat" } else { "say.sh" };
+        let script = nested.join(name);
+        if cfg!(windows) {
+            std::fs::write(&script, "@echo off\r\necho found me\r\n").expect("write");
+        } else {
+            std::fs::write(&script, "#!/bin/sh\necho found me\n").expect("write");
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+                    .expect("chmod");
+            }
+        }
+
+        let relative = format!("tools/{name}");
+        let spec = Spec::new(relative, &dir, Duration::from_secs(30));
+        let run = run(&spec).expect("run");
+        assert!(run.is_success(), "{}", run.transcript());
+        assert!(run.stdout_tail.contains("found me"), "{}", run.transcript());
+    }
+
+    /// A bare name is a `PATH` lookup and must stay one — joining it to the
+    /// working directory would break every ordinary gate.
+    #[test]
+    fn a_bare_program_name_is_still_looked_up_on_the_path() {
+        let dir = crate::testutil::tmpdir("process-bare-program");
+        let command = if cfg!(windows) { "cmd /c echo hello" } else { "echo hello" };
+        let run = run(&Spec::new(command, &dir, Duration::from_secs(30))).expect("run");
+        assert!(run.is_success(), "{}", run.transcript());
+        assert!(run.stdout_tail.contains("hello"), "{}", run.transcript());
+    }
+
     use super::*;
     use crate::testutil::tmpdir;
 
