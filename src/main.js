@@ -21,6 +21,7 @@ import {
   showNewFile,
   isOverlayOpen,
 } from "./help.js";
+import { decideReload } from "./ondisk.js";
 import { findSymbols, supportsSymbols } from "./symbols.js";
 import { templateFor, hasTemplate } from "./templates.js";
 import { openSearchPanel, findNext, findPrevious } from "@codemirror/search";
@@ -716,6 +717,9 @@ const closeOtherTabs = () => {
 
 function renderTabs() {
   for (const pane of panes) renderTabsFor(pane);
+  // What is open decides what is watched, and this is where opening, closing,
+  // reordering and Save As all arrive.
+  syncFileWatch();
   // Every change to what is open — opening, closing, reordering, splitting,
   // Save As — ends up here, which makes it the one place the session has to be
   // written from.
@@ -1381,7 +1385,12 @@ async function openFile() {
 async function openExternalFiles(targets) {
   let opened = false;
   for (const { path, line, column } of targets) {
-    if (await openPath(path, { quiet: true, line, column })) opened = true;
+    // Not quiet. These are files someone asked for by name — on the command
+    // line, or by double-clicking one — and a request that fails silently
+    // leaves an empty window and no way to find out why. Session restore is the
+    // case that is allowed to be quiet, because a file that has moved since
+    // last time is ordinary rather than a failure.
+    if (await openPath(path, { line, column })) opened = true;
   }
   if (opened) {
     // A file arriving from Explorer replaces the placeholder blank document.
@@ -3216,6 +3225,118 @@ renderStatus();
 // listener is registered before any awaiting below, so nothing is missed.
 listen("open-files", (event) => openExternalFiles(event.payload || [])).catch(() => {});
 
+// ------------------------------------------------------ files changing on disk
+
+/** Which files the watcher is currently told about, so it is not re-armed for
+ *  the same set on every redraw. */
+let watchedKey = "";
+
+/** The disk text a person chose to keep their own edits over, per path.
+ *
+ * Without it, declining once means being asked again on the next tick, for the
+ * same change, forever. Keyed by the text rather than by the path so that a
+ * *further* change — a second write, by something that did not know either — is
+ * a new question rather than one already answered.
+ */
+const declinedOnDisk = new Map();
+
+/** Whether a reconciliation is already in progress. Declared here rather than
+ *  below its reader: a `let` used above its declaration is a blank window
+ *  waiting for the day something calls it a moment earlier. */
+let reconciling = false;
+
+/** Point the watcher at whatever is open now.
+ *
+ * Called from [renderTabs], which its own comment already calls the one place
+ * every change to what is open ends up.
+ */
+function syncFileWatch() {
+  const paths = [...new Set(tabs.map((tab) => tab.path).filter(Boolean))];
+  const key = paths.join("\u0000");
+  if (key === watchedKey) return;
+  watchedKey = key;
+  if (!paths.length) {
+    invoke("unwatch_files").catch(() => {});
+    return;
+  }
+  invoke("watch_files", { paths }).catch(() => {});
+}
+
+/** A file open in a tab changed underneath the editor.
+ *
+ * Two cases, and they are not the same question:
+ *
+ * - **Nothing typed since it was saved.** The buffer is a copy of the file and
+ *   the file has moved on, so it is replaced. Silently, because there is nothing
+ *   to decide and a dialog for every `git checkout` is a dialog people learn to
+ *   dismiss without reading.
+ * - **Edits in the buffer.** Now there are two versions and only a person can
+ *   say which one is wanted, so it asks — and keeps the edits if the answer is
+ *   no, or if the question cannot be put at all.
+ *
+ * The watcher reports size and modified time, which is a coarse signal on
+ * purpose. The file is read and compared here before anything happens, so the
+ * editor's own save — which moves both — is recognised as already-known text and
+ * passes without a flicker.
+ */
+async function fileChangedOnDisk(paths) {
+  // One at a time. Several files can arrive in one tick, and stacking modal
+  // questions is how a person ends up answering the second one for the first.
+  if (reconciling) return;
+  reconciling = true;
+  try {
+    for (const path of Array.isArray(paths) ? paths : []) {
+      const tab = tabs.find((open) => open.path === path);
+      if (!tab) continue;
+
+      let text;
+      try {
+        text = await invoke("read_text_file", { path });
+      } catch {
+        // Unreadable now — being written this instant, or gone. The buffer is
+        // the better copy either way.
+        continue;
+      }
+
+      const verdict = decideReload({
+        diskText: text,
+        savedText: tab.savedText,
+        modified: isModified(tab),
+        declined: declinedOnDisk.has(path) ? declinedOnDisk.get(path) : null,
+      });
+
+      if (verdict === "ignore") {
+        // Either what we already have — the editor's own save lands here — or a
+        // version already declined once.
+        if (text === tab.savedText) declinedOnDisk.delete(path);
+        continue;
+      }
+      if (verdict === "reload") {
+        putIntoTab(tab, text);
+        continue;
+      }
+
+      const take = await ask(t("reload.question", { name: tab.name }), {
+        title: t("reload.title"),
+        kind: "warning",
+        okLabel: t("reload.discard"),
+        cancelLabel: t("reload.keep"),
+      }).catch(() => false);
+      if (take) {
+        declinedOnDisk.delete(path);
+        putIntoTab(tab, text);
+      } else {
+        declinedOnDisk.set(path, text);
+      }
+    }
+  } finally {
+    reconciling = false;
+  }
+}
+
+listen("files:changed", (event) => fileChangedOnDisk(event.payload)).catch(() => {});
+
+
 /**
  * Everything that changes what is on screen, finished before the window is
  * revealed. Each of these used to run after the window appeared, so the first
@@ -3629,25 +3750,34 @@ async function reopenActiveTab() {
   }
   try {
     const text = await invoke("read_text_file", { path: tab.path });
-    const pane = paneOfTab(tab.id);
-    if (!pane) return;
-    // Same tab, same position in the tab strip, new contents — and the cursor
-    // put back where it was, because a refresh that scrolls you to the top is a
-    // refresh you stop using.
-    const line = pane.view.state.doc.lineAt(
-      Math.min(pane.view.state.selection.main.head, pane.view.state.doc.length),
-    ).number;
-    pane.view.dispatch({
-      changes: { from: 0, to: pane.view.state.doc.length, insert: text },
-    });
-    tab.savedText = text;
-    tab.eol = detectEol(text);
-    revealLine(pane.view, line, 1);
-    renderTabs();
-    renderStatus();
+    putIntoTab(tab, text);
   } catch (error) {
     await message(`${error}`, { title: "JustCode", kind: "error" });
   }
+}
+
+/** Replace a tab's contents with text from disk, keeping where you were.
+ *
+ * Same tab, same position in the tab strip, new contents — and the cursor put
+ * back on the line it was on, because a refresh that scrolls you to the top is a
+ * refresh you stop using. The line rather than the offset: text that arrived
+ * above the cursor would otherwise slide it into the middle of a word.
+ */
+function putIntoTab(tab, text) {
+  const pane = paneOfTab(tab.id);
+  if (!pane) return;
+  const line = pane.view.state.doc.lineAt(
+    Math.min(pane.view.state.selection.main.head, pane.view.state.doc.length),
+  ).number;
+  pane.view.dispatch({
+    changes: { from: 0, to: pane.view.state.doc.length, insert: text },
+  });
+  tab.savedText = text;
+  tab.dirty = false;
+  tab.eol = detectEol(text);
+  revealLine(pane.view, line, 1);
+  renderTabs();
+  renderStatus();
 }
 
 /** Every runnable menu item, flattened, with the path that names it.

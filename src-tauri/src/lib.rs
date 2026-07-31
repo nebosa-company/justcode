@@ -1104,6 +1104,78 @@ async fn perp_chat(message: String, root: String) -> Result<String, String> {
     .map_err(|e| format!("chat did not finish: {e}"))?
 }
 
+/// Bumped whenever the set of open files changes, so a watcher thread whose
+/// generation is stale exits on its next tick rather than emitting alongside
+/// its replacement.
+static FILE_WATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How often open files are checked. Slower than the harness watcher: a journal
+/// grows while you look at it, and a source file changes when a person or a
+/// branch changes it, which is not a per-frame event.
+const FILE_WATCH_MS: u64 = 1_000;
+
+/// Watch the files that are open in tabs, and say which ones moved.
+///
+/// The editor had no idea a file had changed underneath it. The harness watcher
+/// has always covered `.harness/`, so the panel and the menus were current while
+/// the tab showing one of those very files sat there holding what it read when
+/// it opened — and saving from it would have written that stale text back over
+/// whatever arrived in the meantime, silently.
+///
+/// Size and modified time, not content. This runs every second against every
+/// open file, and hashing them to answer a question that is almost always "no"
+/// is work for nothing. It is deliberately a coarse signal: the editor reads the
+/// file and compares it against what the tab holds before doing anything, so a
+/// touched-but-identical file — including the one the editor just saved itself —
+/// costs one read and no interruption.
+#[tauri::command]
+fn watch_files(app: tauri::AppHandle, paths: Vec<String>) {
+    use std::sync::atomic::Ordering;
+
+    let generation = FILE_WATCH.fetch_add(1, Ordering::SeqCst) + 1;
+    if paths.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        let stamp = |path: &str| -> Option<(u64, std::time::SystemTime)> {
+            let meta = std::fs::metadata(path).ok()?;
+            Some((meta.len(), meta.modified().ok()?))
+        };
+        // The baseline is taken before the first sleep, so a file is reported
+        // when it changes from how it was when the watch began — not when the
+        // watch began.
+        let mut seen: Vec<Option<(u64, std::time::SystemTime)>> =
+            paths.iter().map(|path| stamp(path)).collect();
+
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(FILE_WATCH_MS));
+            if FILE_WATCH.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            let mut moved = Vec::new();
+            for (index, path) in paths.iter().enumerate() {
+                let now = stamp(path);
+                // A file that has gone is not reported. Its buffer is the only
+                // copy left, and replacing it with nothing would be the one
+                // outcome worse than being out of date.
+                if now.is_some() && now != seen[index] {
+                    moved.push(path.clone());
+                }
+                seen[index] = now;
+            }
+            if !moved.is_empty() && app.emit("files:changed", moved).is_err() {
+                return;
+            }
+        }
+    });
+}
+
+/// Stop watching. Called when the last file closes.
+#[tauri::command]
+fn unwatch_files() {
+    FILE_WATCH.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+}
+
 /// Stop watching. Called when the panel is pointed at nothing.
 #[tauri::command]
 fn perp_unwatch() {
@@ -2013,6 +2085,8 @@ pub fn run() {
             perp_root,
             perp_start,
             perp_init,
+            watch_files,
+            unwatch_files,
             perp_chat,
             harness_state,
             perp_watch,

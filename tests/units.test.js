@@ -13,6 +13,7 @@ import { findSymbols, supportsSymbols } from "../src/symbols.js";
 import { t, EN } from "../src/i18n.js";
 import { iconMarkup, PATHS } from "../src/icons.js";
 import { blocks, spans } from "../src/replytext.js";
+import { decideReload } from "../src/ondisk.js";
 import { renderMarkdownDocument } from "../src/markdown.js";
 
 test("a file's language comes from its own extension, not its path", () => {
@@ -179,4 +180,80 @@ test("an empty or absent reply is no blocks rather than a crash", () => {
   assert.deepEqual(blocks(""), []);
   assert.deepEqual(blocks(null), []);
   assert.deepEqual(spans(""), []);
+});
+
+// ------------------------------------------------ a file changing under a tab
+
+test("an untouched buffer takes what is on disk, without asking", () => {
+  assert.equal(
+    decideReload({ diskText: "new", savedText: "old", modified: false }),
+    "reload",
+  );
+});
+
+test("a buffer with edits in it asks before anything is lost", () => {
+  assert.equal(
+    decideReload({ diskText: "new", savedText: "old", modified: true }),
+    "ask",
+  );
+});
+
+test("the editor's own save is not a change to react to", () => {
+  // The watcher reports size and modified time, both of which a save moves.
+  // Without this every save would reload the tab it just came from.
+  assert.equal(
+    decideReload({ diskText: "same", savedText: "same", modified: false }),
+    "ignore",
+  );
+  // And with edits on top of a save, it is still not an external change.
+  assert.equal(
+    decideReload({ diskText: "same", savedText: "same", modified: true }),
+    "ignore",
+  );
+});
+
+test("declining once is not answered by being asked again", () => {
+  const state = { diskText: "theirs", savedText: "old", modified: true };
+  assert.equal(decideReload(state), "ask");
+  assert.equal(decideReload({ ...state, declined: "theirs" }), "ignore");
+});
+
+test("a further change is a new question, not the one already declined", () => {
+  // Something wrote again, not knowing about the buffer either. Staying quiet
+  // because a *previous* version was declined would hide the second write.
+  assert.equal(
+    decideReload({
+      diskText: "theirs, again",
+      savedText: "old",
+      modified: true,
+      declined: "theirs",
+    }),
+    "ask",
+  );
+});
+
+test("a declined version that later matches the buffer's save stops mattering", () => {
+  // Saving over it makes the disk agree with the tab, which outranks any
+  // memory of having declined something.
+  assert.equal(
+    decideReload({
+      diskText: "mine",
+      savedText: "mine",
+      modified: false,
+      declined: "theirs",
+    }),
+    "ignore",
+  );
+});
+
+test("an emptied file is still a change worth reacting to", () => {
+  // Truncation is a real edit and must not be mistaken for nothing.
+  assert.equal(
+    decideReload({ diskText: "", savedText: "something", modified: false }),
+    "reload",
+  );
+  assert.equal(
+    decideReload({ diskText: "", savedText: "something", modified: true }),
+    "ask",
+  );
 });
