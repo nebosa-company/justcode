@@ -38,6 +38,21 @@ pub const MAX_REPAIRS: u32 = 2;
 /// The fence the bottom rung asks for.
 pub const FENCE: &str = "perp-call";
 
+/// What opens a value that spans lines.
+///
+/// The block format is one `key: value` per line, which cannot express a file.
+/// Asked to write one anyway, a model does the only thing left and escapes the
+/// newlines — and the escapes were written through verbatim, so nine files came
+/// out as a single line each and the project stopped building. The model worked
+/// out what was happening and left a `_escape_test.dart` behind containing
+/// `line one\nline two`, which is how it was found.
+///
+/// Unescaping the value instead would be the smaller change and the wrong one:
+/// source code is full of legitimate `\n` inside string literals, and there is
+/// no way to tell one the model meant from one it escaped. A marker has no such
+/// ambiguity — the text between is nobody's business but the file's.
+pub const HEREDOC: &str = "<<";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rung {
     Native,
@@ -79,7 +94,22 @@ impl Rung {
                  path: src/main.rs\n\
                  ```\n\
                  \n\
-                 One key per line, `key: value`. One block per call. Blocks may repeat."
+                 One key per line, `key: value`. One block per call. Blocks may repeat.\n\
+                 \n\
+                 A value that spans lines — a file you are writing — opens with \
+                 `{HEREDOC}` and a marker of your choosing, and runs to a line that is \
+                 just that marker. Everything between is taken exactly as typed, so \
+                 write real newlines and do not escape them:\n\
+                 \n\
+                 ```{FENCE}\n\
+                 tool: write\n\
+                 path: src/hello.rs\n\
+                 content: {HEREDOC}EOF\n\
+                 fn main() {{\n\
+                 \x20   println!(\"hi\");\n\
+                 }}\n\
+                 EOF\n\
+                 ```"
             ),
         }
     }
@@ -305,8 +335,9 @@ fn parse_lines(body: &str) -> Result<Call> {
     let mut args: Vec<(String, String)> = Vec::new();
     let mut requirement = None;
 
-    for line in body.lines() {
-        let line = line.trim();
+    let mut lines = body.lines();
+    while let Some(raw) = lines.next() {
+        let line = raw.trim();
         if line.is_empty() {
             continue;
         }
@@ -314,6 +345,37 @@ fn parse_lines(body: &str) -> Result<Call> {
             return Err(bad(format!("`{line}` is not `key: value`")));
         };
         let (key, value) = (key.trim(), value.trim());
+
+        // `key: <<END` takes everything up to a line that is just `END`, kept
+        // exactly as written. See [`HEREDOC`].
+        if let Some(marker) = value.strip_prefix(HEREDOC) {
+            let marker = marker.trim();
+            if marker.is_empty() {
+                return Err(bad(format!("`{key}: {HEREDOC}` has no end marker")));
+            }
+            let mut collected: Vec<&str> = Vec::new();
+            let mut closed = false;
+            for line in lines.by_ref() {
+                if line.trim() == marker {
+                    closed = true;
+                    break;
+                }
+                collected.push(line);
+            }
+            if !closed {
+                return Err(bad(format!(
+                    "`{key}` opened with `{HEREDOC}{marker}` and never reached a line saying `{marker}`"
+                )));
+            }
+            let text = collected.join("\n");
+            match key {
+                "tool" => tool = Some(Tool::parse(text.trim())?),
+                "requirement" => requirement = Some(text.trim().to_string()),
+                _ => args.push((key.to_string(), text)),
+            }
+            continue;
+        }
+
         match key {
             "tool" => tool = Some(Tool::parse(value)?),
             "requirement" => requirement = Some(value.to_string()),
@@ -468,6 +530,90 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].tool, Tool::Patch);
         assert_eq!(calls[0].get("expect"), Some("x"));
+    }
+
+    /// The defect this exists for. A file has newlines in it; a format of one
+    /// `key: value` per line has nowhere to put them.
+    #[test]
+    fn a_value_that_spans_lines_survives_with_its_newlines() {
+        // Joined rather than one literal: a `\` line continuation in Rust eats
+        // the indentation that this test is about.
+        let block = [
+            "```perp-call",
+            "tool: write",
+            "path: lib/main.dart",
+            "content: <<EOF",
+            "void main() {",
+            "  runApp(const App());",
+            "}",
+            "EOF",
+            "```",
+        ]
+        .join("\n");
+        let calls = parse_block(&block).expect("parses");
+        assert_eq!(calls.len(), 1, "{calls:?}");
+        let content = calls[0]
+            .args
+            .iter()
+            .find(|(key, _)| key == "content")
+            .map(|(_, value)| value.as_str())
+            .expect("a content argument");
+        assert_eq!(content, "void main() {\n  runApp(const App());\n}", "{content:?}");
+        assert_eq!(content.lines().count(), 3, "three lines, not one");
+    }
+
+    /// Indentation is a file's own business. Trimming it would reformat every
+    /// Python file the loop ever writes into one that does not run.
+    #[test]
+    fn the_lines_of_a_spanning_value_are_not_trimmed() {
+        let block = [
+            "```perp-call",
+            "tool: write",
+            "path: a.py",
+            "content: <<END",
+            "def f():",
+            "    return 1",
+            "END",
+            "```",
+        ]
+        .join("\n");
+        let calls = parse_block(&block).expect("parses");
+        let (_, content) = calls[0].args.iter().find(|(k, _)| k == "content").expect("content");
+        assert!(content.contains("\n    return 1"), "the indent is kept: {content:?}");
+    }
+
+    /// An unterminated one is a mistake worth naming, not a file that quietly
+    /// swallows the rest of the reply.
+    #[test]
+    fn a_spanning_value_that_never_closes_is_refused_by_name() {
+        let block = "```perp-call\n\
+                     tool: write\n\
+                     path: a.txt\n\
+                     content: <<EOF\n\
+                     one\n\
+                     two\n\
+                     ```";
+        let failed = parse_block(block).expect_err("an unclosed value is not a call");
+        let said = format!("{failed}");
+        assert!(said.contains("EOF"), "it names the marker it wanted: {said}");
+    }
+
+    /// The escaping a model falls back to when the format gives it no choice.
+    /// This is what the nine broken files looked like, and it must not be what
+    /// gets written now.
+    #[test]
+    fn the_single_line_form_still_works_for_values_that_have_no_newlines() {
+        let block = "```perp-call\ntool: read\npath: src/main.rs\n```";
+        let calls = parse_block(block).expect("parses");
+        assert_eq!(calls[0].args, vec![("path".to_string(), "src/main.rs".to_string())]);
+    }
+
+    /// The prompt has to say the form exists, or no model will use it.
+    #[test]
+    fn the_prompted_rung_explains_how_to_write_a_file() {
+        let said = Rung::Prompted.instructions();
+        assert!(said.contains(HEREDOC), "it shows the marker: {said}");
+        assert!(said.contains("do not escape them"), "and says why: {said}");
     }
 
     #[test]
