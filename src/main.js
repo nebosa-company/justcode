@@ -175,6 +175,32 @@ function renderCaret() {
   });
 }
 
+// State about files changing underneath the editor. Up here, with the tabs it
+// is about, and above every function that reads it.
+//
+// It was declared beside its handler three thousand lines below, and `renderTabs`
+// — which runs during startup — reads it. A `let` read before its declaration is
+// not undefined, it throws: `Cannot access 'watchedKey' before initialization`,
+// which took out session restore and opening a file from the command line, and
+// left a window that looked merely empty. The third time this shape has cost an
+// hour in this file.
+
+/** Which files the watcher is currently told about, so it is not re-armed for
+ *  the same set on every redraw. */
+let watchedKey = "";
+
+/** The disk text a person chose to keep their own edits over, per path.
+ *
+ * Without it, declining once means being asked again on the next tick, for the
+ * same change, forever. Keyed by the text rather than by the path so that a
+ * *further* change — a second write, by something that did not know either — is
+ * a new question rather than one already answered.
+ */
+const declinedOnDisk = new Map();
+
+/** Whether a reconciliation is already in progress. */
+let reconciling = false;
+
 /** @type {Array<{id:number,path:string|null,name:string,state:import("@codemirror/state").EditorState|null,savedText:string,dirty:boolean}>} */
 const tabs = [];
 
@@ -3226,24 +3252,6 @@ renderStatus();
 listen("open-files", (event) => openExternalFiles(event.payload || [])).catch(() => {});
 
 // ------------------------------------------------------ files changing on disk
-
-/** Which files the watcher is currently told about, so it is not re-armed for
- *  the same set on every redraw. */
-let watchedKey = "";
-
-/** The disk text a person chose to keep their own edits over, per path.
- *
- * Without it, declining once means being asked again on the next tick, for the
- * same change, forever. Keyed by the text rather than by the path so that a
- * *further* change — a second write, by something that did not know either — is
- * a new question rather than one already answered.
- */
-const declinedOnDisk = new Map();
-
-/** Whether a reconciliation is already in progress. Declared here rather than
- *  below its reader: a `let` used above its declaration is a blank window
- *  waiting for the day something calls it a moment earlier. */
-let reconciling = false;
 
 /** Point the watcher at whatever is open now.
  *
