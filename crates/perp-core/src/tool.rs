@@ -501,6 +501,7 @@ impl Host {
 
     /// Classify, then run. There is no method that skips the first half.
     pub fn run(&self, call: &Call) -> Result<Output> {
+        crate::verbose::say("tool", &call.signature());
         match classify(call) {
             Policy::Never { reason } => Err(Error::refused(call.signature(), reason)),
             Policy::Approve { reason } => Err(Error::refused(

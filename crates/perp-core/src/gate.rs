@@ -113,6 +113,11 @@ impl Gate {
         // it executes. `Runtime::Host` returns it untouched.
         let spec = self.runtime.wrap(&spec)?;
         let run = process::run(&spec)?;
+        crate::verbose::say(
+            "gate",
+            &format!("{} · {} · {}", self.name, self.command, run.exit.describe()),
+        );
+        crate::verbose::body("gate/output", &run.stdout_tail);
         Ok(GateResult {
             name: self.name.clone(),
             run,

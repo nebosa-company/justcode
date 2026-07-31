@@ -269,15 +269,60 @@ pub fn split_command(line: &str) -> Result<Vec<String>> {
 /// asked for rather than a path this function invented.
 fn resolve_program(program: &str, cwd: &Path) -> std::ffi::OsString {
     let named = Path::new(program);
-    if named.is_absolute() || named.parent() == Some(Path::new("")) {
+    if named.is_absolute() {
         return program.into();
     }
-    let joined = cwd.join(named);
-    if joined.exists() {
-        joined.into_os_string()
-    } else {
-        program.into()
+    if named.parent() != Some(Path::new("")) {
+        let joined = cwd.join(named);
+        return if joined.exists() { joined.into_os_string() } else { program.into() };
     }
+    // A bare name is a `PATH` lookup, and on Windows the platform's own is not
+    // the one anybody means. See [`on_path`].
+    on_path(program).unwrap_or_else(|| program.into())
+}
+
+/// A bare program name, found the way a shell would.
+///
+/// Only on Windows, and only because the platform's own lookup is narrower than
+/// every other tool's. `CreateProcess` searches `PATH` but appends `.exe` and
+/// nothing else — it never consults `PATHEXT`. So `flutter`, whose whole
+/// installation is `flutter.bat`, cannot be spawned by that name at all, and
+/// neither can `npm`, `npx`, `yarn`, `pnpm` or `gradle`. A binding declaring
+/// `gate.test = flutter test` failed before running with "the system cannot
+/// find the file specified" — reported against the *working directory*, because
+/// that is what the spawn error carries, so the message named the one thing
+/// that was fine.
+///
+/// It can *run* a `.bat` perfectly well once given the full path. Only finding
+/// it is broken, so finding it is all this does.
+///
+/// `None` when nothing matches, and the caller then passes the name through so
+/// the platform's own error stands rather than one invented here.
+#[cfg(windows)]
+fn on_path(program: &str) -> Option<std::ffi::OsString> {
+    if Path::new(program).extension().is_some() {
+        return None;
+    }
+    // The user's own list, in their own order: `.COM` before `.EXE` before
+    // `.BAT` is what the shell does, and a project with both `x.exe` and
+    // `x.bat` means the same thing by `x` as its terminal does.
+    let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        for ext in pathext.split(';').filter(|e| !e.is_empty()) {
+            let candidate = dir.join(format!("{program}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate.into_os_string());
+            }
+        }
+    }
+    None
+}
+
+/// Everywhere else `execvp` already does this, and correctly.
+#[cfg(not(windows))]
+fn on_path(_program: &str) -> Option<std::ffi::OsString> {
+    None
 }
 
 /// Run a command to completion or to its deadline, whichever comes first.
@@ -530,6 +575,47 @@ impl Drop for Nursery {
 
 #[cfg(test)]
 mod tests {
+
+    /// `CreateProcess` appends `.exe` and never reads `PATHEXT`, so a tool whose
+    /// whole installation is a `.bat` — `flutter`, `npm`, `yarn`, `gradle` —
+    /// could not be named in a binding at all. It could always *run* one; it
+    /// just could not find it.
+    #[cfg(windows)]
+    #[test]
+    fn a_bat_on_the_path_is_found_by_its_bare_name() {
+        let dir = crate::testutil::tmpdir("process-pathext");
+        std::fs::write(dir.join("perp-probe-tool.bat"), "@echo off\r\necho from the bat\r\n")
+            .expect("write");
+
+        // The lookup reads the environment, the same as a shell would.
+        let old = std::env::var_os("PATH");
+        let mut entries = vec![dir.clone()];
+        if let Some(existing) = &old {
+            entries.extend(std::env::split_paths(existing));
+        }
+        std::env::set_var("PATH", std::env::join_paths(entries).expect("join"));
+
+        let run = run(&Spec::new("perp-probe-tool", &dir, Duration::from_secs(30)));
+
+        match old {
+            Some(value) => std::env::set_var("PATH", value),
+            None => std::env::remove_var("PATH"),
+        }
+
+        let run = run.expect("a .bat on PATH must be spawnable by its bare name");
+        assert!(run.is_success(), "{}", run.transcript());
+        assert!(run.stdout_tail.contains("from the bat"), "{}", run.transcript());
+    }
+
+    /// A name that is already a full file name is left alone: resolving it a
+    /// second time could pick a different file with the same stem.
+    #[cfg(windows)]
+    #[test]
+    fn a_name_that_already_has_an_extension_is_not_re_resolved() {
+        assert_eq!(on_path("flutter.bat"), None);
+        assert_eq!(on_path("cargo.exe"), None);
+    }
+
 
     /// A binding may name its own interpreter — `.venv/Scripts/python` — and
     /// mean it relative to where the command runs. The platform does not: the

@@ -50,6 +50,25 @@ pub struct ModelFacts {
 }
 
 impl ModelFacts {
+    /// What is known about a model nobody can be asked about.
+    ///
+    /// A subprocess link — `claude-cli` — has no address and no `/v1/models`,
+    /// so there is no server to answer `M-14`'s question. The name it was
+    /// configured with is the only fact available, and claiming more would be
+    /// inventing it: the kind, the publisher and the quantization are left
+    /// unknown rather than guessed.
+    pub fn of(model: &str) -> ModelFacts {
+        ModelFacts {
+            id: model.to_string(),
+            kind: "llm".to_string(),
+            publisher: None,
+            arch: None,
+            quantization: None,
+            state: LoadState::Unknown,
+            max_context_length: None,
+        }
+    }
+
     pub fn is_embedding_model(&self) -> bool {
         self.kind == "embeddings"
     }

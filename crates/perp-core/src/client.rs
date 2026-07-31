@@ -509,6 +509,19 @@ impl<'a> Client<'a> {
 
     /// The link's facts, re-fetched only when the cached ones go stale.
     fn cached_facts(&mut self, links: &Links, link: &Link, now: i64) -> Result<ModelFacts> {
+        // `M-14` asks a server which models it serves, so that a link naming one
+        // it does not have is skipped rather than earning a 400. A subprocess
+        // has no server to ask: there is no address, no `/v1/models`, and the
+        // command decides its own model from its own configuration.
+        //
+        // Probing it anyway is what made a `claude-cli` link unusable. The probe
+        // needed a `base_url`, a subprocess has none, so the link failed here —
+        // *before* it was ever run — and the chain quietly fell through to the
+        // paid link behind it. The run worked, which is what made it hard to
+        // notice: the only sign was the provenance line naming the wrong model.
+        if link.kind.is_subprocess() {
+            return Ok(ModelFacts::of(&link.model));
+        }
         let fresh = now - self.ttl_secs;
         self.facts.retain(|(_, _, at)| *at > fresh);
         if let Some((_, facts, _)) = self.facts.iter().find(|(name, _, _)| name == &link.name) {
@@ -696,6 +709,23 @@ impl<'a> Client<'a> {
     /// One call, keeping the raw response so a caller can read native tool
     /// calls out of it (`M-8`).
     pub fn chat_raw(&self, link: &Link, request: &ChatRequest) -> Result<(Reply, String)> {
+        // The same two exceptions [`speak`] makes, made here too — because this
+        // is the method the chain walker actually calls. Routing them in `speak`
+        // alone left both unreachable from the path every real call takes: a
+        // `claude-cli` link failed on `base()` needing an address it has no
+        // business having, the chain fell through to the paid link behind it,
+        // and the run *worked*. The only sign was a provenance line naming the
+        // wrong model, which is the kind of wrong that survives a long time.
+        if link.kind == crate::link::Kind::Anthropic {
+            let reply = self.messages(link, request)?;
+            let raw = reply.content.clone();
+            return Ok((reply, raw));
+        }
+        if link.kind.is_subprocess() {
+            let reply = self.command(link, request)?;
+            let raw = reply.content.clone();
+            return Ok((reply, raw));
+        }
         let base = Self::base(link)?.trim_end_matches('/');
         let url = format!("{base}/v1/chat/completions");
         self.check_egress(&url)?;
@@ -832,8 +862,26 @@ impl<'a> Client<'a> {
             };
 
             let started = std::time::Instant::now();
+            crate::verbose::say(
+                "call",
+                &format!("{} · {} · {} message(s)", link.name, link.model, request.messages.len()),
+            );
+            for message in &request.messages {
+                crate::verbose::body(&format!("call/{}", message.role), &message.content);
+            }
             match self.chat_raw(link, request) {
                 Ok((reply, raw)) => {
+                    crate::verbose::body("reply", &reply.content);
+                    crate::verbose::say(
+                        "reply/usage",
+                        &format!(
+                            "{} in ({} cached) / {} out · {}ms",
+                            reply.usage.prompt_tokens,
+                            reply.usage.cache_hit_tokens,
+                            reply.usage.completion_tokens,
+                            started.elapsed().as_millis()
+                        ),
+                    );
                     return Ok(Served {
                         model: if reply.model.is_empty() {
                             link.model.clone()

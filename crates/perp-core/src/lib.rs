@@ -103,6 +103,7 @@ pub mod step;
 pub mod stream;
 pub mod time;
 pub mod tool;
+pub mod verbose;
 pub mod verify;
 pub mod watchdog;
 

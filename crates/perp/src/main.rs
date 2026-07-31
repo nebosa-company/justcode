@@ -39,6 +39,11 @@ use perp_core::{atomic, time, Result, VERSION};
 const USAGE: &str = "\
 perp — the Perpetum harness
 
+Any command takes --verbose (-v): a running commentary on stderr of the calls
+made, the prompts sent, the replies received, the tools run and the gates. It is
+redacted with the same patterns as everything else that leaves the process, and
+it goes to stderr so it never mixes into the JSON that `panel` writes.
+
 usage:
   perp init [--root <dir>]
       Create the files a workspace needs under `.harness/`: a binding that
@@ -173,6 +178,15 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
+    // Read before dispatch and honoured by every command, rather than being a
+    // flag each one has to remember to accept. It takes no value, so
+    // `positionals` already skips it — it is listed there among the flags that
+    // stand alone.
+    if refs.iter().any(|arg| *arg == "--verbose" || *arg == "-v") {
+        perp_core::verbose::enable();
+        perp_core::verbose::say("perp", &format!("{VERSION} · verbose"));
+    }
+
     match run(&refs) {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
@@ -272,7 +286,7 @@ fn positionals<'a>(args: &[&'a str]) -> Vec<&'a str> {
         }
         if let Some(_name) = arg.strip_prefix("--") {
             // Every flag in this CLI except --ok/--failed takes a value.
-            skip_next = !matches!(*arg, "--ok" | "--failed");
+            skip_next = !matches!(*arg, "--ok" | "--failed" | "--verbose" | "--dry-run");
             continue;
         }
         out.push(*arg);
