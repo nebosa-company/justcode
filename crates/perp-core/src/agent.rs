@@ -18,7 +18,6 @@
 //!   optimisation. A model that can only emit a fenced block still drives this,
 //!   more slowly, and the ladder walks down to it without anyone deciding to.
 
-use std::time::Duration;
 
 use crate::client::{ChatRequest, Client, Message};
 use crate::engine::{Done, Task, Work};
@@ -465,8 +464,34 @@ impl Work for Agent<'_> {
 /// (`S-4`), and an agent that could reach the internet by default would make
 /// the allowlist a formality.
 pub fn host_for(root: &std::path::Path) -> Host {
-    let _ = Duration::from_secs(300);
-    Host::new(root)
+    Host::new(root).protecting(requirements_sources(root))
+}
+
+/// What no writing tool may touch (`V-12`): the requirements source.
+///
+/// Read from the binding, because `path.requirements` is where it is actually
+/// named and a project may point it anywhere — including at a directory, which
+/// is protected along with everything under it.
+///
+/// The layout defaults go in the list too, and are not a duplicate of the
+/// binding's answer but the case where there is no answer. A workspace with no
+/// binding, or one whose binding will not parse, would otherwise be a workspace
+/// where the requirements source is writable — and "the configuration was
+/// broken" is not a reason to let the loop mark its own work done.
+fn requirements_sources(root: &std::path::Path) -> Vec<String> {
+    let mut paths = vec![
+        crate::layout::REQUIREMENTS.to_string(),
+        format!("{}/perpetum.md", crate::layout::DIR),
+    ];
+    if let Ok(binding) = crate::Binding::load(root) {
+        if let Ok(named) = binding.get("path.requirements") {
+            let named = named.to_string();
+            if !paths.contains(&named) {
+                paths.push(named);
+            }
+        }
+    }
+    paths
 }
 
 #[cfg(test)]
@@ -835,6 +860,54 @@ path: f.txt
         // And the refusal reached the model, which is what the second reply
         // proves — it only exists because the first turn came back.
         assert_eq!(agent.turns.len(), 2);
+    }
+
+    /// `V-12`, through the constructor the loop actually uses.
+    ///
+    /// `Host::protecting` on its own proves only that a list is honoured. The
+    /// defect was that nothing ever put the requirements source *on* the list,
+    /// so this asserts the wiring rather than the mechanism.
+    #[test]
+    fn the_loops_host_protects_the_requirements_source_the_binding_names() {
+        let dir = tmpdir("agent-protects-reqs");
+        std::fs::create_dir_all(dir.join(".harness")).expect("dirs");
+        std::fs::write(dir.join(".harness/perpetum.md"), "| `V-12` | text |\n").expect("reqs");
+        std::fs::write(
+            dir.join(".harness/binding.md"),
+            "```perp-binding\npath.requirements = .harness/perpetum.md\n```\n",
+        )
+        .expect("binding");
+
+        let host = host_for(&dir);
+        let err = host
+            .run_approved(
+                &crate::tool::Call::new(crate::tool::Tool::Write)
+                    .arg("path", ".harness/perpetum.md")
+                    .arg("content", "| ✅ ~~`V-12`~~ | marked by the loop |"),
+                "operator",
+            )
+            .expect_err("the loop's own host must refuse it");
+        assert!(format!("{err}").contains("requirements source"), "{err}");
+    }
+
+    /// A workspace whose binding will not load is not a workspace where the
+    /// requirements source becomes writable. The layout defaults cover it.
+    #[test]
+    fn the_requirements_source_is_protected_even_with_no_binding() {
+        let dir = tmpdir("agent-protects-no-binding");
+        std::fs::create_dir_all(dir.join(".harness")).expect("dirs");
+        std::fs::write(dir.join(".harness/perpetum.md"), "| `V-12` | text |\n").expect("reqs");
+
+        let err = host_for(&dir)
+            .run_approved(
+                &crate::tool::Call::new(crate::tool::Tool::Patch)
+                    .arg("path", ".harness/perpetum.md")
+                    .arg("expect", "| `V-12` |")
+                    .arg("replace", "| ✅ |"),
+                "operator",
+            )
+            .expect_err("no binding is not permission");
+        assert!(format!("{err}").contains("requirements source"), "{err}");
     }
 
     /// `L-23`. Measured on a real cycle: thirteen tool calls before the first

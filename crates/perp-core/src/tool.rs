@@ -473,6 +473,18 @@ pub struct Host {
     /// with no allowlist reaches nothing, which is the safe direction for the
     /// one tool that leaves the machine.
     egress: crate::security::Egress,
+    /// Paths no writing tool may touch (`V-12`).
+    ///
+    /// The requirements source, and everything under it when the binding names
+    /// a directory. `V-2` says model prose is never written to a status marker
+    /// and `V-9` says ids are minted only here — both are about this file, and
+    /// neither was enforced against a loop holding `patch` and a
+    /// workspace-relative path. `X-2` did not help: the requirements source is
+    /// *inside* the workspace, which is the whole point of it.
+    ///
+    /// Cycle 8 aimed two patches at it. They failed on a pre-image mismatch, so
+    /// the guarantee survived by luck rather than by rule.
+    protected: Vec<PathBuf>,
 }
 
 impl Host {
@@ -488,7 +500,50 @@ impl Host {
             budget: DEFAULT_BUDGET,
             timeout: Duration::from_secs(120),
             egress: crate::security::Egress::default(),
+            protected: Vec::new(),
         }
+    }
+
+    /// Refuse every writing tool on these paths, and on anything under them
+    /// (`V-12`). Relative to the workspace root.
+    pub fn protecting<I, S>(mut self, paths: I) -> Host
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for path in paths {
+            let joined = self.root.join(path.as_ref());
+            // Canonicalised where it exists so that `.harness/../.harness/x`
+            // and a symlink to it are the same path as the one named here.
+            let real = joined.canonicalize().unwrap_or(joined);
+            if !self.protected.contains(&real) {
+                self.protected.push(real);
+            }
+        }
+        self
+    }
+
+    /// Whether a writing tool may touch this path (`V-12`).
+    ///
+    /// Called after [`Host::resolve`], so `path` is already known to be inside
+    /// the workspace and already canonicalised the same way the protected list
+    /// was — which is what makes comparing them meaningful.
+    fn writable(&self, path: &Path, tool: Tool) -> Result<()> {
+        let real = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        for guarded in &self.protected {
+            if real == *guarded || real.starts_with(guarded) {
+                return Err(Error::refused(
+                    format!("{} {}", tool.as_str(), path.display()),
+                    format!(
+                        "`{}` is the requirements source. Ids are minted there and status \
+                         markers go on there, and neither is the loop's to write — a person \
+                         reads the evidence and marks (`V-2`, `V-9`, `V-12`)",
+                        guarded.display()
+                    ),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Lower the host's own bound on how long a command may run.
@@ -556,16 +611,19 @@ impl Host {
             }
             Tool::Write => {
                 let path = self.resolve(call.need("path")?)?;
+                self.writable(&path, call.tool)?;
                 crate::atomic::write_atomic(&path, call.need("content")?)?;
                 format!("wrote {}", path.display())
             }
             Tool::Patch => {
                 let path = self.resolve(call.need("path")?)?;
+                self.writable(&path, call.tool)?;
                 let applied = patch(&path, call.need("expect")?, call.need("replace")?)?;
                 applied
             }
             Tool::Delete => {
                 let path = self.resolve(call.need("path")?)?;
+                self.writable(&path, call.tool)?;
                 if !path.exists() {
                     return Err(Error::refused(
                         format!("delete {}", path.display()),
@@ -784,6 +842,84 @@ mod tests {
             .run(&Call::new(Tool::Read).arg("path", "../../etc/passwd"))
             .expect_err("must refuse");
         assert!(format!("{err}").contains("outside the workspace"), "{err}");
+    }
+
+    /// `V-12`. The loop holds `patch` and a workspace-relative path, and the
+    /// requirements source is inside the workspace — so `X-2` never applied to
+    /// it. Cycle 8 aimed two patches at `.harness/perpetum.md`; they failed on
+    /// a pre-image mismatch, which is luck rather than a rule.
+    #[test]
+    fn no_writing_tool_may_touch_the_requirements_source() {
+        let dir = tmpdir("tool-protected");
+        std::fs::create_dir_all(dir.join(".harness")).expect("dirs");
+        let reqs = dir.join(".harness/perpetum.md");
+        std::fs::write(&reqs, "| `V-12` | not the loop's to mark |\n").expect("write");
+        let host = Host::new(&dir).protecting([".harness/perpetum.md"]);
+
+        for call in [
+            Call::new(Tool::Write).arg("path", ".harness/perpetum.md").arg("content", "| ✅ |"),
+            Call::new(Tool::Patch)
+                .arg("path", ".harness/perpetum.md")
+                .arg("expect", "| `V-12` |")
+                .arg("replace", "| ✅ ~~`V-12`~~ |"),
+            Call::new(Tool::Delete).arg("path", ".harness/perpetum.md"),
+        ] {
+            let err = host.run_approved(&call, "operator").expect_err("must refuse");
+            assert!(
+                format!("{err}").contains("requirements source"),
+                "{}: {err}",
+                call.tool.as_str()
+            );
+        }
+
+        assert_eq!(
+            std::fs::read_to_string(&reqs).expect("read"),
+            "| `V-12` | not the loop's to mark |\n",
+            "and the file is exactly as it was"
+        );
+    }
+
+    /// An approval does not unlock it either. `V-2` is not a permission a
+    /// person can grant per call — the marker means a person read the evidence,
+    /// and a person clicking through a prompt has not.
+    #[test]
+    fn the_requirements_source_is_protected_from_reading_nothing_else() {
+        let dir = tmpdir("tool-protected-read");
+        std::fs::create_dir_all(dir.join(".harness")).expect("dirs");
+        std::fs::write(dir.join(".harness/perpetum.md"), "| `V-12` | text |\n").expect("write");
+        std::fs::write(dir.join("src.rs"), "fn main() {}\n").expect("write");
+        let host = Host::new(&dir).protecting([".harness/perpetum.md"]);
+
+        // Reading it is how the loop knows what it is working on.
+        let out = host
+            .run(&Call::new(Tool::Read).arg("path", ".harness/perpetum.md"))
+            .expect("read is allowed");
+        assert!(out.text.contains("V-12"), "{}", out.text);
+
+        // And every other file is still writable.
+        host.run(&Call::new(Tool::Write).arg("path", "src.rs").arg("content", "fn main() {}\n"))
+            .expect("ordinary files are unaffected");
+    }
+
+    /// A directory form is protected along with everything under it: a project
+    /// that outgrows one table points `path.requirements` at a folder, and a
+    /// rule that only knew about files would quietly stop applying.
+    #[test]
+    fn protecting_a_directory_covers_the_files_in_it() {
+        let dir = tmpdir("tool-protected-dir");
+        std::fs::create_dir_all(dir.join(".harness/requirements")).expect("dirs");
+        std::fs::write(dir.join(".harness/requirements/loop.md"), "| `L-1` |\n").expect("write");
+        let host = Host::new(&dir).protecting([".harness/requirements"]);
+
+        let err = host
+            .run_approved(
+                &Call::new(Tool::Write)
+                    .arg("path", ".harness/requirements/loop.md")
+                    .arg("content", "| ✅ |"),
+                "operator",
+            )
+            .expect_err("must refuse a file inside it");
+        assert!(format!("{err}").contains("requirements source"), "{err}");
     }
 
     /// `T-19`: the only route before this was `git rm`, which stages as a side
