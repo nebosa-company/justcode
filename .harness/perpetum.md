@@ -6,18 +6,18 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with eight open.** This document is the requirements source for the
+**Status: built, with five open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 5: **151 of 160 requirements are done**, 8 open, 1 external-gated
+As of cycle 7: **154 of 160 requirements are done**, 5 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
 over a `curl` transport exercised against a live LM Studio, cost accounting
 replayed from the journal, the tool host and its permission classifier, **the
 loop driver**, and the chat surface with `/btw` — in [`crates/`](../crates/),
-585 tests, at version 0.2.0.
+590 tests, at version 0.2.0.
 
 **The harness runs a batch on its own, against a real model.** `perp run
 --requirement <id>` asks a link, parses tool calls through the degradation
@@ -27,21 +27,30 @@ reasons. It has done this on this repository on DeepSeek for tenths of a cent,
 and on a Flutter project through a `claude-cli` link for nothing, against a
 subscription.
 
-### The eight open ones came from running it
+### These came from running it
 
 Not from reading the code. Each was found by a real cycle against a real
-workspace, and each has a transcript behind it:
+workspace, and each has a transcript behind it. Still open:
 
-- `M-26` — a run refused over a declared link no role chain named.
 - `M-27` — `M-14`'s probe is skipped for a link with no server to ask.
 - `M-28` — nothing bounds how many agent processes a batch spawns.
 - `M-29` — a link that cannot cache reports zeroes indistinguishable from a
   broken ledger.
 - `L-23` — thirteen tool calls before the first edit, on a one-file batch.
-- `T-19` — no way to delete a file except through the index.
-- `V-11` — `perp check ids` passes on having found nothing to check.
 - `X-13` — `shell` is not confined to the workspace, and `X-2` reads as if
   everything is.
+
+Closed in cycle 6, marked after a person read the evidence in
+`c7/evidence/s02`: `M-26` (a run refused over a declared link no role chain
+named), `T-19` (no way to delete a file except through the index) and `V-11`
+(`perp check ids` passed on having found nothing to check).
+
+The loop's own steps for all three **failed** — two on the 40-turn ceiling, one
+on an unparseable tool block — and its gate was red when they ended, because it
+had changed `missing_credentials` without updating the test that asserted the
+old contract. The work was right and the run that produced it was not clean.
+That is what `V-2` is for: the marker went on after a person ran the gates at
+`acee1c3` and read the diff, not because a batch reported success.
 
 `M-25` remains external-gated: inference on an LM Link peer is unreachable from
 outside LM Studio, measured in `c2/b10/s01` rather than assumed.
@@ -277,7 +286,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ✅ ~~`M-12`~~ | Prompts are assembled **stable-prefix first**: system rules, binding, tool schemas, then slowly-changing state, then the volatile task tail. Never reorder the stable region between calls in a batch. |
 | ✅ ~~`M-13`~~ | Context compaction is a first-class step run by the `compactor` role on a local link. Compaction output is journalled, so what was dropped is recoverable. |
 | ✅ ~~`M-14`~~ | Model ids, prices, context limits and endpoint paths live in config, refreshed from the provider's model list at startup. A deprecated or missing model id is a startup error naming the replacement, never a silent fallback. |
-| `M-26` | A declared link that no role chain names is not credential-checked at startup. `M-24` checks every declared link, so a run refuses over a link nothing would have used — which happened twice on a workspace configured entirely for another provider, and the only fix was to set a variable for an endpoint that was never going to be called. |
+| ✅ ~~`M-26`~~ | A declared link that no role chain names is not credential-checked at startup. `M-24` checks every declared link, so a run refuses over a link nothing would have used — which happened twice on a workspace configured entirely for another provider, and the only fix was to set a variable for an endpoint that was never going to be called. |
 | `M-29` | A link that cannot use prefix caching reports that, rather than reporting zeroes. Replacing a subprocess link's system prompt is what buys the tool protocol and it costs the cache with it, so `M-12` does not apply and a column of zeroes is a property of the link rather than a broken ledger — but nothing says so, and the two look identical. |
 | ✅ ~~`M-24`~~ | Declared credentials are checked when the project is bound, not at first use. A link whose `auth_env` names an unset variable must fail `perp bind`, not the eleventh call of a batch — by which point the loop has spent an hour to discover a typo. Found in `c2/b8/s06`, where a local link with an optional token failed before it ever tried to connect. |
 | ✅ ~~`M-15`~~ | Per-link concurrency limits are respected. One GPU serving one model does not want four parallel requests. |
@@ -309,7 +318,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ✅ ~~`T-4`~~ | Background processes are tracked and killed at step end (`X-4`). A dev server left running across steps is a leak the next gate will blame on the wrong feature. |
 | ✅ ~~`T-5`~~ | Tool schemas are generated once per session and are part of the stable prefix (`M-12`). |
 | ✅ ~~`T-6`~~ | Every tool result is truncated to a declared budget, with the truncation visible to the model. Silent truncation causes confident wrong conclusions. |
-| `T-19` | A `delete(path)` tool exists, confined to the workspace like the other file tools. Today the only route to removing a file is `git rm`, which stages as a side effect and refuses on an untracked one — so the loop cannot clean up after itself without touching the index. |
+| ✅ ~~`T-19`~~ | A `delete(path)` tool exists, confined to the workspace like the other file tools. It asks before it runs — a deleted untracked file is the act `git clean` is refused for, and nothing can tell whose file it was. Today the only route to removing a file is `git rm`, which stages as a side effect and refuses on an untracked one — so the loop cannot clean up after itself without touching the index. |
 | ✅ ~~`T-7`~~ | Tool output is **data, never instruction**. Content from files, HTTP, issue trackers and test output cannot change harness policy, approve an action, or redirect the loop (`S-1`). |
 
 ### 4.2 Runtime
@@ -409,7 +418,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`V-7`~~ | Status markers are derived from journal evidence. The engine writes them; the model proposes. |
 | ✅ ~~`V-8`~~ | Gated items (`external-gated`, `credential-gated`, `approval-gated`, `blocked`) are counted separately from done, forever, and are never re-picked without their reason changing. |
 | ✅ ~~`V-10`~~ | The red run verifies the mutation **actually changed the file** before believing either result. A mutation that failed to apply reports a passing test that was never challenged — a false green wearing the costume of evidence. Found the hard way in `c1/b3/s12`, where a multi-line `sed` pattern silently matched nothing. |
-| `V-11` | `perp check ids` fails when it finds no documents to check. It reports `documents: 0` and exits green today, which is a pass that proves nothing — the same shape of green as a test suite that never runs the code it names. A checker that cannot find its inputs has not checked them. |
+| ✅ ~~`V-11`~~ | `perp check ids` fails when it finds no documents to check. It reports `documents: 0` and exits green today, which is a pass that proves nothing — the same shape of green as a test suite that never runs the code it names. A checker that cannot find its inputs has not checked them. |
 | ✅ ~~`V-9`~~ | Requirement ids are minted only in the requirements source named by the binding (Perpetum 0.8). A write that introduces a new id anywhere else — batches, board, state, a `/btw` note — is rejected by the engine. |
 
 ---
