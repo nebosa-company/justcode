@@ -14,8 +14,8 @@ single call site knowing which.
 
 | Key | Meaning |
 |---|---|
-| `link.<name>.kind` | `lmstudio`, `lmlink`, `deepseek`, `openai-compat` |
-| `link.<name>.base_url` | required except for `lmlink`, which is addressed by device |
+| `link.<name>.kind` | `lmstudio`, `lmlink`, `deepseek`, `claude-cli`, `openai-compat` |
+| `link.<name>.base_url` | required except for `lmlink` and `claude-cli`, neither of which is an address |
 | `link.<name>.device` | `lmlink` only — the name from `lms link set-device-name` |
 | `link.<name>.model` | checked against what the link actually offers at startup (`M-14`) |
 | `link.<name>.privacy` | `local` or `cloud`; implied by kind where the kind settles it |
@@ -24,8 +24,10 @@ single call site knowing which.
 | `deprecated.<id>` | a model id known to be dead, and what replaced it |
 
 Privacy is not free-form. An `lmstudio` or `lmlink` link is always `local` — a
-rig you own is yours even when it is in another room — and a `deepseek` link is
-always `cloud`. Declaring otherwise is a startup error rather than a preference.
+rig you own is yours even when it is in another room — and a `deepseek` or
+`claude-cli` link is always `cloud`. Declaring otherwise is a startup error
+rather than a preference. A `claude-cli` link runs a command on this machine,
+but the machine that answers it is somebody else's, whoever is paying for it.
 
 ```perp-links
 # On this machine. Small, always available, and the only link that sees
@@ -38,13 +40,31 @@ link.here.concurrency = 1
 # only if you have enabled auth — a declared variable that is not set makes the
 # link fail before it connects, which is `M-24`'s whole point.
 
-# A DeepSeek link is configured but unreachable until batch 8 gives the harness
-# an HTTPS transport. Listed so the router can be exercised against a cloud
-# link, and so `local-only` can be seen to skip it rather than fall back to it.
-link.ds-fast.kind     = deepseek
-link.ds-fast.base_url = https://api.deepseek.com
-link.ds-fast.model    = deepseek-v4-flash
-link.ds-fast.auth_env = DEEPSEEK_API_KEY
+# Claude Code, driven as a subprocess. No `base_url` and no `auth_env`: the CLI
+# holds its own credential and signs in as you, which is the point — this runs
+# against the Max subscription rather than metered API tokens.
+#
+# Two links rather than one, and not for redundancy. `V-5` says the verifier
+# must not be the link that authored the change; two models under one
+# subscription is the cheapest way to make that the default rather than a rule
+# somebody has to remember.
+link.claude.kind  = claude-cli
+link.claude.model = sonnet
+
+link.claude-deep.kind  = claude-cli
+link.claude-deep.model = opus
+
+# The DeepSeek link is deliberately not declared. It works, the key is set, and
+# leaving it in a role chain means a Claude link that fails once quietly hands
+# the work to a metered endpoint and the run succeeds — which is exactly what
+# happened before `chat_raw` learned to route subprocess links, and the only
+# sign was a provenance line naming the wrong model. Commented out rather than
+# deleted so the shape is here when a second opinion is wanted on purpose.
+#
+# link.ds-fast.kind     = deepseek
+# link.ds-fast.base_url = https://api.deepseek.com
+# link.ds-fast.model    = deepseek-v4-flash
+# link.ds-fast.auth_env = DEEPSEEK_API_KEY
 
 # An LM Link peer goes here once `lms link status` names one. Left out rather
 # than invented — a configuration that describes hardware nobody has is worse
@@ -53,11 +73,11 @@ link.ds-fast.auth_env = DEEPSEEK_API_KEY
 # link.rig.device = <from lms link set-device-name>
 # link.rig.model  = qwen3-coder-30b
 
-role.planner    = ds-fast, here
-role.coder      = ds-fast, here
-role.gatefixer  = ds-fast, here
-role.verifier   = here, ds-fast
-role.chat       = ds-fast, here
+role.planner    = claude, here
+role.coder      = claude, here
+role.gatefixer  = claude, here
+role.verifier   = claude-deep, here
+role.chat       = claude, here
 role.compactor  = here
 role.classifier = here
 role.summarizer = here
@@ -67,9 +87,17 @@ role.embedder   = here
 # because they change — a harness that bakes them in reports yesterday's bill
 # with total confidence. A link with no price is free, which is right for a
 # local one and a visible zero for a cloud one.
-price.ds-fast.cache_hit  = 0.0028
-price.ds-fast.cache_miss = 0.14
-price.ds-fast.output     = 0.28
+#
+# Claude Code is billed by subscription and not by token, so zero is the truth
+# about the meter rather than a number nobody filled in. A cycle costing
+# $0.000000 in the ledger is the correct report, not a broken one.
+price.claude.cache_hit  = 0
+price.claude.cache_miss = 0
+price.claude.output     = 0
+
+price.claude-deep.cache_hit  = 0
+price.claude-deep.cache_miss = 0
+price.claude-deep.output     = 0
 
 deprecated.deepseek-chat     = deepseek-v4-flash
 deprecated.deepseek-reasoner = deepseek-v4-pro
@@ -77,13 +105,19 @@ deprecated.deepseek-reasoner = deepseek-v4-pro
 
 ## Why the chains look like this
 
-- **`verifier` is `here` first, then `ds-fast`** — the opposite of `coder`.
-  `V-5` says the verifier must not be the link that authored the change, and
-  ordering the two chains differently is the cheapest way to make that the
-  default rather than a rule someone has to remember.
+- **`verifier` is `claude-deep`, and `coder` is `claude`.** `V-5` says the
+  verifier must not be the link that authored the change. Two models under one
+  subscription is the cheapest way to make that the default rather than a rule
+  someone has to remember — and the stronger one reads rather than writes,
+  which is the way round that catches things.
 - **`compactor`, `classifier` and `embedder` never leave the machine.** They are
   the highest-volume, lowest-stakes calls in the loop; sending them to a paid
-  endpoint would cost the most and prove the least.
+  endpoint would cost the most and prove the least. `embedder` in particular is
+  not a chat call at all, and `claude-cli` has nothing to answer it with.
+- **No metered link is in any chain.** Not because DeepSeek is worse, but
+  because a fallback to it is silent: the run succeeds, the work looks done,
+  and the only sign is a provenance line naming a model nobody chose. If a
+  paid second opinion is wanted, it should be asked for on purpose.
 - **Every role has a local option**, so `local-only` mode is a supported
   configuration rather than a broken one (`M-5`, vision clause 2). `perp links
   --local-only` reports any role that loses its last option.
