@@ -297,6 +297,16 @@ pub fn split_command(line: &str) -> Result<Vec<String>> {
 ///
 /// Left alone when the join does not exist, so the error still names what was
 /// asked for rather than a path this function invented.
+/// A bare program name, resolved the way a shell would, for callers that spawn
+/// their own child rather than going through [`run`].
+///
+/// The streaming reader is one: it owns its process so it can enforce a
+/// first-token deadline, and `claude` on Windows is a `.cmd` that
+/// `CreateProcess` will not find on its own.
+pub fn program_path(program: &str) -> std::ffi::OsString {
+    resolve_program(program, Path::new("."))
+}
+
 fn resolve_program(program: &str, cwd: &Path) -> std::ffi::OsString {
     let named = Path::new(program);
     if named.is_absolute() {

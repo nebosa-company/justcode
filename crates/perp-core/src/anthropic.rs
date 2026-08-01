@@ -213,6 +213,29 @@ pub fn cli_invocation(
     (args, prompt.to_string())
 }
 
+/// The same invocation, asking for the stream rather than the finished answer.
+///
+/// `--output-format stream-json` needs `--verbose` — the CLI refuses the
+/// combination without it — and `--include-partial-messages` is the flag that
+/// actually makes the deltas appear. Without it the "stream" is one message at
+/// the end, which passes every test and defeats the point (`M-23`).
+pub fn cli_streaming_invocation(
+    program: &str,
+    model: &str,
+    system: Option<&std::path::Path>,
+    prompt: &str,
+) -> (Vec<String>, String) {
+    let (mut args, stdin) = cli_invocation(program, model, system, prompt);
+    for arg in &mut args {
+        if arg == "json" {
+            "stream-json".clone_into(arg);
+        }
+    }
+    args.push("--include-partial-messages".to_string());
+    args.push("--verbose".to_string());
+    (args, stdin)
+}
+
 /// The system text of a request, which the CLI takes as a file and not a message.
 pub fn cli_system(request: &ChatRequest) -> Option<String> {
     let mut out = String::new();

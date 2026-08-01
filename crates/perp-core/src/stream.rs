@@ -145,6 +145,53 @@ pub fn parse_line(line: &str) -> Option<Event> {
         .map(|reason| Event::Done { finish_reason: Some(reason.to_string()) })
 }
 
+/// Parse one line of `claude --output-format stream-json`.
+///
+/// Not SSE. The CLI writes one JSON object per line with no `data:` framing,
+/// wrapping the Messages API's own events in `{"type":"stream_event","event":…}`
+/// and emitting several kinds that are not the answer — `system`, `assistant`,
+/// `rate_limit_event` — which are the `None` cases.
+///
+/// Usage is read from `result`, the last line, and not from the `message_delta`
+/// that also carries it. Both are correct and taking both would double the
+/// ledger.
+pub fn parse_cli_line(line: &str) -> Option<Event> {
+    let parsed = json::parse(line.trim()).ok()?;
+    let kind = parsed.get("type").and_then(Value::as_str).unwrap_or_default();
+
+    // The terminal record, which is the one that knows what the call cost.
+    if kind == "result" || parsed.get("total_cost_usd").is_some() {
+        let usage = parsed.get("usage")?;
+        let int = |name: &str| usage.get(name).and_then(Value::as_i64).unwrap_or_default();
+        return Some(Event::Usage {
+            prompt: int("input_tokens"),
+            completion: int("output_tokens"),
+            // A read is a hit. Creation costs *more* than a miss, not less, so
+            // counting it here would understate the bill (`M-11`).
+            cached: int("cache_read_input_tokens"),
+        });
+    }
+
+    let event = parsed.get("event")?;
+    match event.get("type").and_then(Value::as_str).unwrap_or_default() {
+        "content_block_delta" => {
+            let delta = event.get("delta")?;
+            // Reasoning first and kept apart (`M-22`): folded into the message
+            // it would be replayed back to the model as if it had said it.
+            if let Some(text) = delta.get("thinking").and_then(Value::as_str) {
+                return (!text.is_empty()).then(|| Event::Reasoning(text.to_string()));
+            }
+            let text = delta.get("text").and_then(Value::as_str)?;
+            (!text.is_empty()).then(|| Event::Delta(text.to_string()))
+        }
+        "message_delta" => {
+            let reason = event.get("delta")?.get("stop_reason").and_then(Value::as_str)?;
+            Some(Event::Done { finish_reason: Some(reason.to_string()) })
+        }
+        _ => None,
+    }
+}
+
 /// How long a link may say nothing before it is failed over (`M-23`).
 ///
 /// Twenty seconds: longer than a cold model's first token on a slow local rig,
@@ -186,28 +233,55 @@ pub fn read(
     args: &[String],
     stdin: Option<&str>,
     first_token: Duration,
+    interrupt: impl FnMut() -> bool,
+    on_event: impl FnMut(&Event),
+) -> Result<Streamed> {
+    read_from("curl", args, stdin, parse_line, first_token, interrupt, on_event)
+}
+
+/// The same reader, over any program that writes one event per line.
+///
+/// Split out because `claude-cli` is not an address and cannot be reached with
+/// `curl`, but everything that makes streaming *safe* — the first-token
+/// deadline, the interrupt poll, killing the child and keeping what arrived —
+/// has nothing to do with which program produced the lines. Left specialised,
+/// the subprocess link had no streaming path at all: it asked for a `base_url`
+/// it does not have, failed, and every chat call printed the failure before
+/// falling back.
+///
+/// `parse` turns one line into an event, or `None` for a line that carries
+/// nothing — framing, keep-alives, and in the CLI's case the several event
+/// kinds that are not the answer.
+pub fn read_from(
+    program: &str,
+    args: &[String],
+    stdin: Option<&str>,
+    parse: fn(&str) -> Option<Event>,
+    first_token: Duration,
     mut interrupt: impl FnMut() -> bool,
     mut on_event: impl FnMut(&Event),
 ) -> Result<Streamed> {
-    let mut child = Command::new("curl")
+    let mut child = Command::new(crate::process::program_path(program))
         .args(args)
         .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| Error::io("curl", e))?;
+        .map_err(|e| Error::io(program, e))?;
 
     if let (Some(text), Some(pipe)) = (stdin, child.stdin.as_mut()) {
         use std::io::Write;
         // The credential goes here and nowhere else (`S-2`): not argv, not a
-        // file, not the journal.
-        pipe.write_all(text.as_bytes()).map_err(|e| Error::io("curl stdin", e))?;
+        // file, not the journal. For the CLI it is the prompt rather than a
+        // credential, and the same reasoning applies for the same reason.
+        pipe.write_all(text.as_bytes())
+            .map_err(|e| Error::io(format!("{program} stdin"), e))?;
     }
     drop(child.stdin.take());
 
     let Some(stdout) = child.stdout.take() else {
         let _ = child.kill();
-        return Err(Error::unbound("curl", "produced no stdout pipe"));
+        return Err(Error::unbound(program, "produced no stdout pipe"));
     };
 
     // The reader thread exists only so the deadline can be enforced: a blocking
@@ -252,7 +326,7 @@ pub fn read(
 
         match rx.recv_timeout(budget.min(Duration::from_millis(250))) {
             Ok(line) => {
-                let Some(event) = parse_line(&line) else { continue };
+                let Some(event) = parse(&line) else { continue };
                 if out.first_token.is_none() {
                     out.first_token = Some(started.elapsed());
                 }
@@ -303,6 +377,75 @@ pub fn streaming_args(base: Vec<String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The CLI's stream is not SSE — one JSON object per line, with the
+    /// Messages API's own events wrapped a level down.
+    #[test]
+    fn a_cli_delta_is_read_as_content() {
+        let line = r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi there"}},"session_id":"x"}"#;
+        assert_eq!(parse_cli_line(line), Some(Event::Delta("hi there".into())));
+    }
+
+    /// `M-22`: reasoning is journalled apart and never replayed, so it must not
+    /// arrive as content on the way in either.
+    #[test]
+    fn cli_thinking_is_kept_apart_from_the_message() {
+        let line = r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"let me see"}}}"#;
+        assert_eq!(parse_cli_line(line), Some(Event::Reasoning("let me see".into())));
+    }
+
+    /// The ledger has to agree with the buffered path (`M-11`). A read is a
+    /// hit; creation costs more than a miss and is not counted as one.
+    #[test]
+    fn the_cli_result_line_carries_the_usage() {
+        let line = r#"{"type":"result","is_error":false,"total_cost_usd":0.012,"usage":{"input_tokens":1,"cache_creation_input_tokens":1799,"cache_read_input_tokens":3289,"output_tokens":5}}"#;
+        assert_eq!(
+            parse_cli_line(line),
+            Some(Event::Usage { prompt: 1, completion: 5, cached: 3289 })
+        );
+    }
+
+    #[test]
+    fn a_cli_stop_reason_finishes_the_stream() {
+        let line = r#"{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}}"#;
+        assert_eq!(
+            parse_cli_line(line),
+            Some(Event::Done { finish_reason: Some("end_turn".into()) })
+        );
+    }
+
+    /// The CLI emits several kinds that are not the answer. Reading one as
+    /// content would put its own bookkeeping into the reply.
+    #[test]
+    fn the_cli_lines_that_are_not_the_answer_are_ignored() {
+        for line in [
+            r#"{"type":"system","subtype":"init","session_id":"x"}"#,
+            r#"{"type":"rate_limit_event","rate_limit":{}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_start","index":0}}"#,
+            r#"{"type":"stream_event","event":{"type":"message_stop"}}"#,
+            "",
+            "not json at all",
+        ] {
+            assert_eq!(parse_cli_line(line), None, "{line}");
+        }
+    }
+
+    /// The flag that makes the deltas appear. Without it the CLI answers once
+    /// at the end, which reads as a working stream and is not one (`M-23`).
+    #[test]
+    fn the_streaming_invocation_asks_for_partial_messages() {
+        let (args, _) =
+            crate::anthropic::cli_streaming_invocation("claude", "sonnet", None, "hello");
+        assert!(args.iter().any(|a| a == "--include-partial-messages"), "{args:?}");
+        assert!(args.iter().any(|a| a == "stream-json"), "{args:?}");
+        assert!(!args.iter().any(|a| a == "json"), "and not the buffered form: {args:?}");
+        // `stream-json` is refused without it.
+        assert!(args.iter().any(|a| a == "--verbose"), "{args:?}");
+        // Everything the buffered form established still holds.
+        let at = args.iter().position(|a| a == "--tools").expect("{args:?}");
+        assert_eq!(args.get(at + 1).map(String::as_str), Some(""), "{args:?}");
+        assert!(args.iter().any(|a| a == "--safe-mode"), "{args:?}");
+    }
 
     #[test]
     fn a_content_chunk_becomes_a_delta() {

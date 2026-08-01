@@ -567,6 +567,12 @@ impl<'a> Client<'a> {
         interrupt: impl FnMut() -> bool,
         on_event: impl FnMut(&crate::stream::Event),
     ) -> Result<crate::stream::Streamed> {
+        // A command is not an address, and asking one for a `base_url` is how
+        // every chat call to a `claude-cli` link came to print a failure before
+        // falling back to the buffered path.
+        if link.kind.is_subprocess() {
+            return self.stream_command(link, request, interrupt, on_event);
+        }
         let base = Self::base(link)?.trim_end_matches('/');
         let url = format!("{base}/v1/chat/completions");
         self.check_egress(&url)?;
@@ -581,6 +587,54 @@ impl<'a> Client<'a> {
         crate::stream::read(
             &crate::stream::streaming_args(args),
             stdin.as_deref(),
+            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            interrupt,
+            on_event,
+        )
+    }
+
+    /// Stream from the `claude` command (`M-23`).
+    ///
+    /// The buffered path's sibling, and it has to exist rather than the caller
+    /// falling back: a subprocess link asked for a `base_url` it does not have,
+    /// so the failure was printed and the buffered path ran anyway. Correct
+    /// output, an error on every call, and no streaming for the one surface
+    /// that requires it (`C-4`).
+    ///
+    /// `--output-format stream-json` writes one JSON object per line, which is
+    /// not SSE but is line-oriented, so the deadline and interrupt machinery is
+    /// the same and only the parser differs.
+    ///
+    /// No egress check, for the same reason as the buffered path: there is no
+    /// URL to check. The CLI reaches Anthropic on its own account.
+    fn stream_command(
+        &self,
+        link: &Link,
+        request: &ChatRequest,
+        interrupt: impl FnMut() -> bool,
+        on_event: impl FnMut(&crate::stream::Event),
+    ) -> Result<crate::stream::Streamed> {
+        let program = std::env::var("PERP_CLAUDE_BIN").unwrap_or_else(|_| "claude".to_string());
+        let prompt = crate::anthropic::cli_prompt(request);
+        let stdin = crate::security::outbound(&prompt, link, &self.redact).text;
+        let system = crate::anthropic::cli_system(request)
+            .map(|text| crate::security::outbound(&text, link, &self.redact).text);
+        let handed = system.as_deref().map(SystemFile::write).transpose()?;
+
+        let (args, stdin) = crate::anthropic::cli_streaming_invocation(
+            &program,
+            &link.model,
+            handed.as_ref().map(SystemFile::path),
+            &stdin,
+        );
+
+        crate::stream::read_from(
+            &program,
+            // The program leads the list the buffered path builds; the reader
+            // takes it separately, so it is not also an argument to itself.
+            &args[1..],
+            Some(&stdin),
+            crate::stream::parse_cli_line,
             std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
             interrupt,
             on_event,
