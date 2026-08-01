@@ -6,11 +6,11 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with five open.** This document is the requirements source for the
+**Status: built, with four open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 9: **157 of 163 requirements are done**, 5 open, 1 external-gated
+As of cycle 9: **158 of 163 requirements are done**, 4 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
@@ -48,12 +48,16 @@ in the one place a reader would look. `V-13` did not catch it, because the step
 Closed for real in `a6b4ff0` and marked in `c10/x13/s03`, on a test that writes
 a file outside the root and fails when the guard is taken out.
 
-`X-14` is the exception to the heading above, and is filed under it only because
-it belongs beside `X-13`. It came from reading the shell arm while closing
-`X-13`, not from a cycle, and there is no transcript behind it — `grep`'s `path`
-argument turned out to reach a command line without being resolved, which is the
-same hole one tool along. It is recorded that way rather than dressed up as
-something running the loop found.
+`X-14` was the exception to the heading above, and sat under it only because it
+belonged beside `X-13`. It came from reading the shell arm while closing `X-13`,
+not from a cycle, and had no transcript behind it. It is closed in `62732ae` and
+marked in `c10/x14/s03`: `grep`'s `path` reached `git grep`'s command line
+without ever being resolved, and what kept it from reading anything was git
+declining to look outside its work tree. The disarmed run is the clearest
+statement of the difference — with the resolve removed the test fails on `it
+ran:` with an empty result, nothing having escaped and nothing having been
+refused either. A tool the harness happens to call is not a boundary the harness
+keeps.
 
 `V-12` and `V-13` were the uncomfortable pair, and are closed. `V-2` — no
 self-reported success — is the clause this document is built around, and cycle 8
@@ -427,7 +431,7 @@ The loop runs on a real machine, and half of "exercise the real artefact"
 | ✅ ~~`X-11`~~ | GUI automation — driving the mouse and keyboard of other applications — is out of scope. If ever added, it is `never` while unattended. |
 | ✅ ~~`X-13`~~ | The `shell` tool is confined to the workspace root the way the file tools are (`X-2`). A command whose working directory is outside it, or that names an absolute path outside it, is refused before it runs. `X-2` was written about file tools and reads as covering everything; `shell` is the hole in it, and `cd` is one argument. |
 | ✅ ~~`X-12`~~ | Gates run with a declared environment, not the ambient shell's. The unattended run and the operator's terminal must not disagree about `PATH`. |
-| `X-14` | Every path a tool accepts is resolved before it is used, including the ones that are not called `path`. `grep`'s `path` argument goes into a command line unresolved, so a search rooted outside the workspace is not refused by the harness — only by `git grep` declining to look outside its work tree, which is git's behaviour and not a boundary the harness keeps. `X-13` closed the same hole for `shell`; this is the rest of it. |
+| ✅ ~~`X-14`~~ | Every path a tool accepts is resolved before it is used, including the ones that are not called `path`. `grep`'s `path` argument goes into a command line unresolved, so a search rooted outside the workspace is not refused by the harness — only by `git grep` declining to look outside its work tree, which is git's behaviour and not a boundary the harness keeps. `X-13` closed the same hole for `shell`; this is the rest of it. |
 
 ---
 
