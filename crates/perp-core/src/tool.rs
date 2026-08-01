@@ -1,6 +1,6 @@
-//! The tool host (`T-1`, `T-2`, `T-5`, `T-6`, `T-7`, `T-12`).
+//! The tool host (`T-1`, `T-2`, `T-5`, `T-6`, `T-7`, `T-12`, `X-13`).
 //!
-//! What the loop can actually do. Four rules shape it more than the catalog
+//! What the loop can actually do. Five rules shape it more than the catalog
 //! does:
 //!
 //! - **Every call is classified before it runs** ([`classify`]). The host has
@@ -14,6 +14,11 @@
 //! - **Results are data** (`T-7`). [`Output::render`] wraps them in a fenced
 //!   envelope that names the tool and the byte count, so text inside can be
 //!   read as content and never as a new instruction.
+//! - **A command line is confined too** (`X-13`). `X-2` checks the `path`
+//!   argument of a file tool; `shell` has no `path` argument, so the boundary
+//!   every other tool respected stopped at the one tool that can run anything.
+//!   [`Host::confined`] splits the line with the executor's own tokeniser and
+//!   resolves what looks like a path, refusing what lands outside the root.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -663,9 +668,14 @@ impl Host {
             }
             Tool::Shell => {
                 let command = call.need("command")?;
+                self.confined(command)?;
                 self.shell_within(command, self.asked_timeout(call))?
             }
-            Tool::Git => self.shell(&format!("git {}", call.need("args")?))?,
+            Tool::Git => {
+                let args = call.need("args")?;
+                self.confined(args)?;
+                self.shell(&format!("git {args}"))?
+            }
             Tool::Gate => {
                 return Err(Error::refused(
                     "gate",
@@ -713,10 +723,54 @@ impl Host {
             .unwrap_or(self.timeout)
     }
 
+    /// Refuse a command line that reaches outside the workspace (`X-13`).
+    ///
+    /// `X-2` checks the `path` argument of a file tool. `shell` has no `path`
+    /// argument — its paths sit inside a command line, and nothing was looking
+    /// at them, so the boundary every other tool respected stopped at the one
+    /// tool that can run anything.
+    ///
+    /// The line is split with the same [`process::split_command`] the executor
+    /// uses. That matters more than the checking does: a guard that tokenises
+    /// differently from the thing it guards is a guard with a documented way
+    /// around it.
+    ///
+    /// Blunt on purpose, in the manner of [`shell_looks_like`]. A token is
+    /// worth resolving if it holds a separator, is `..`, or carries a drive
+    /// letter; a bare word cannot escape, because `root.join("warnings")` is
+    /// inside the root by construction. A commit message opening with a slash
+    /// is refused alongside the real escapes. That costs a rephrase, and the
+    /// other direction costs the workspace.
+    fn confined(&self, command: &str) -> Result<()> {
+        for token in process::split_command(command)? {
+            // `--out=/etc/hosts` carries its path to the right of the sign.
+            let candidate = match token.split_once('=') {
+                Some((flag, value)) if flag.starts_with('-') => value,
+                _ => token.as_str(),
+            };
+            if !looks_like_path(candidate) {
+                continue;
+            }
+            if self.resolve(candidate).is_err() {
+                return Err(Error::refused(
+                    format!("shell {command}"),
+                    format!(
+                        "`{candidate}` is outside the workspace, which needs an approval (`X-13`)"
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn shell(&self, command: &str) -> Result<String> {
         self.shell_within(command, self.timeout)
     }
 
+    /// Runs a command as given. A caller passing a command line the loop wrote
+    /// puts it through [`Host::confined`] first (`X-13`); `grep` and `glob`
+    /// build their own line, where the loop supplies a search pattern and not a
+    /// path, and a pattern is not confined to anywhere.
     fn shell_within(&self, command: &str, timeout: Duration) -> Result<String> {
         let spec = Spec::new(command, &self.root, timeout).with_env(Env::declared());
         let run = process::run(&spec)?;
@@ -728,6 +782,19 @@ impl Host {
         text.push_str(&format!("\n[{}]", run.exit.describe()));
         Ok(text)
     }
+}
+
+/// Whether a token is worth resolving as a path (`X-13`).
+///
+/// A bare word is skipped because it cannot escape: joining it to the root
+/// lands inside the root. Only tokens that could name somewhere else are
+/// resolved.
+fn looks_like_path(token: &str) -> bool {
+    token.contains('/')
+        || token.contains('\\')
+        || token == ".."
+        // `C:`, and `C:\…` — a drive letter, which `join` swaps the root for.
+        || matches!(token.as_bytes(), [b'a'..=b'z' | b'A'..=b'Z', b':', ..])
 }
 
 /// Replace `expect` with `replace`, refusing if the pre-image is not there
@@ -865,6 +932,111 @@ mod tests {
     /// Diagnostic for the staging test: writing into a directory that does not
     /// exist yet should work — `write_atomic` creates parents — and the path
     /// should be reported as touched.
+    /// `X-13`: the boundary reaches inside a command line, not just a `path`.
+    #[test]
+    fn a_shell_command_may_not_reach_outside_the_workspace() {
+        let (host, _root) = host();
+
+        // An absolute path as an argument. The tool ran happily before this:
+        // `classify` looked only for deploy markers, and `process::run` set the
+        // working directory and executed whatever it was handed.
+        for command in [
+            "cat /etc/passwd",
+            "cat ../../etc/passwd",
+            "ls ..",
+            "/usr/bin/env",
+            "cat C:\\Windows\\win.ini",
+            "grep -r secret /home",
+            "sh --rcfile=/etc/profile",
+        ] {
+            let err = host
+                .run(&Call::new(Tool::Shell).arg("command", command))
+                .expect_err("must refuse");
+            let text = format!("{err}");
+            assert!(text.contains("X-13"), "{command}: {text}");
+            assert!(text.contains("outside the workspace"), "{command}: {text}");
+        }
+    }
+
+    /// The escape must not survive being quoted, because the guard and the
+    /// executor split the line the same way.
+    #[test]
+    fn quoting_an_outside_path_does_not_get_it_past_the_guard() {
+        let (host, _root) = host();
+
+        for command in ["cat \"/etc/passwd\"", "cat '/etc/passwd'", "cd \"..\""] {
+            let err = host
+                .run(&Call::new(Tool::Shell).arg("command", command))
+                .expect_err("must refuse");
+            assert!(format!("{err}").contains("X-13"), "{command}: {err}");
+        }
+    }
+
+    /// `cd` is one argument like any other — there is no shell here to make it
+    /// anything else.
+    #[test]
+    fn cd_out_of_the_workspace_is_one_argument_and_is_refused() {
+        let (host, _root) = host();
+
+        let err = host
+            .run(&Call::new(Tool::Shell).arg("command", "cd /etc"))
+            .expect_err("must refuse");
+        assert!(format!("{err}").contains("X-13"), "{err}");
+    }
+
+    /// `git` carries a command line too, and the loop writes it.
+    #[test]
+    fn git_arguments_are_confined_as_well() {
+        let (host, _root) = host();
+
+        let err = host
+            .run(&Call::new(Tool::Git).arg("args", "add /etc/passwd"))
+            .expect_err("must refuse");
+        assert!(format!("{err}").contains("X-13"), "{err}");
+    }
+
+    /// The one that proves confinement rather than the shape of an error: a
+    /// real file outside the root, which the command would have read.
+    #[test]
+    fn the_contents_of_a_file_outside_the_workspace_never_come_back() {
+        let (host, root) = host();
+        let outside = root.parent().expect("a parent").join("outside-the-root.txt");
+        std::fs::write(&outside, "PLAINTEXT-THAT-MUST-NOT-ESCAPE").expect("write");
+
+        let asked = format!("cat {}", outside.display());
+        let outcome = host.run(&Call::new(Tool::Shell).arg("command", &asked));
+
+        let text = match &outcome {
+            Ok(output) => output.text.clone(),
+            Err(err) => format!("{err}"),
+        };
+        assert!(!text.contains("PLAINTEXT-THAT-MUST-NOT-ESCAPE"), "it escaped: {text}");
+        assert!(outcome.is_err(), "it ran: {text}");
+        assert!(text.contains("X-13"), "{text}");
+
+        std::fs::remove_file(&outside).ok();
+    }
+
+    /// The guard has to leave ordinary work alone, or it gets turned off.
+    #[test]
+    fn a_command_inside_the_workspace_is_not_refused() {
+        let (host, root) = host();
+        std::fs::create_dir_all(root.join("src")).expect("mkdir");
+        std::fs::write(root.join("src/main.rs"), "fn main() {}").expect("write");
+
+        // Bare words cannot escape: joined to the root they are inside it.
+        // A relative path that exists, and one that does not yet, both stay.
+        for command in [
+            "cargo clippy --workspace -- -D warnings",
+            "cat src/main.rs",
+            "cat ./src/main.rs",
+            "mkdir -p src/new/deeper",
+            "git commit -m \"a message with no path in it\"",
+        ] {
+            assert!(host.confined(command).is_ok(), "wrongly refused: {command}");
+        }
+    }
+
     #[test]
     fn a_write_into_a_new_directory_is_allowed() {
         let dir = tmpdir("tool-new-dir");
