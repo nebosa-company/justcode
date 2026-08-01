@@ -8,8 +8,22 @@
 //!   never sweep up a change it did not make (`G-3`).
 //! - `--no-verify` is **refused**; a hook failure is a gate failure (`G-4`).
 //! - Force-push and history rewriting are **refused** (`G-10`).
+//! - Anything that throws away uncommitted work is **refused** — `reset
+//!   --hard`, `clean`, `restore`, `checkout -- <path>`, a forced switch, and
+//!   emptying the stash the others send it to (`G-10`).
 //! - Push, tag and merge need an explicit approval argument, which the CLI
 //!   cannot supply on its own (`G-5`).
+//!
+//! ## The line is recoverability
+//!
+//! `G-3` was written about staging and read as being about staging, so the
+//! refusals grew one loud spelling at a time — `reset --hard` and `clean` were
+//! listed, and `restore` was not. A cycle then ran `git restore -- lib/…` and
+//! uncommitted work stopped existing, with nothing in the way.
+//!
+//! A commit is recoverable, a stash is recoverable, and a working-tree change
+//! is the one thing git holds no copy of. That is the test a new subcommand has
+//! to be put to, rather than whether it resembles one already on the list.
 //!
 //! Every one of those is enforced by [`classify`] before the process is
 //! spawned, so there is no path where a command runs and the policy is
@@ -120,6 +134,39 @@ pub fn classify(args: &[&str]) -> Policy {
         // is no combination of letters worth allow-listing.
         "clean" if !(short('n') || has("--dry-run")) => {
             never("`git clean` deletes untracked work (`G-10`)")
+        }
+        // `restore` is `reset --hard` for named paths, and was reached first:
+        // a cycle ran `git restore -- lib/…` and uncommitted work stopped
+        // existing, with nothing refusing it because only the loud spellings
+        // were listed. The line is recoverability, not the subcommand.
+        //
+        // `--staged` alone only unstages — the content stays in the working
+        // tree and git still has it — so that form is left alone. Adding
+        // `--worktree` to it is the destructive one again.
+        // Spelled out rather than as a negation: `-S` is `--staged` and `-W` is
+        // `--worktree`, and a condition that checks only the long forms reads
+        // as correct while letting the short ones through.
+        "restore"
+            if has("--worktree")
+                || short('W')
+                || !(has("--staged") || short('S')) =>
+        {
+            never("`git restore` discards uncommitted work; commit or stash it first (`G-10`)")
+        }
+        // The same act in the older spelling. `checkout -- <path>` throws away
+        // the working tree copy; `checkout <branch>` does not, and git refuses
+        // it by itself when it would clobber something.
+        "checkout" if has("--") => {
+            never("`checkout -- <path>` discards uncommitted work; use `git restore --staged` \
+                   to unstage, or commit first (`G-10`)")
+        }
+        "checkout" | "switch" if short('f') || has("--force") || has("--discard-changes") => {
+            never("forcing a switch discards uncommitted work (`G-10`)")
+        }
+        // A stash is where the other refusals send the loop. Emptying it is
+        // where that work stops being recoverable.
+        "stash" if rest.first().is_some_and(|a| *a == "drop" || *a == "clear") => {
+            never("dropping a stash discards the work it was holding (`G-10`)")
         }
         "update-ref" if short('d') => never("deleting a ref by hand (`G-10`)"),
         _ => Policy::Auto,
@@ -586,10 +633,61 @@ mod tests {
             vec!["clean", "-fdx"],
             vec!["clean", "-fd"],
             vec!["clean", "-f"],
+            // The one a real cycle actually ran, verbatim. It was `Auto`, and
+            // the uncommitted work it named stopped existing.
+            vec!["restore", "--", "lib/object_spec.dart", "lib/object_spec_form_screen.dart"],
+            vec!["restore", "lib/main.dart"],
+            vec!["restore", "--worktree", "lib/main.dart"],
+            // `--staged` alone is fine; adding the working tree back is not.
+            vec!["restore", "--staged", "--worktree", "lib/main.dart"],
+            vec!["restore", "-SW", "lib/main.dart"],
+            // The same act, older spelling.
+            vec!["checkout", "--", "lib/main.dart"],
+            vec!["checkout", "HEAD", "--", "lib/main.dart"],
+            vec!["checkout", "-f", "main"],
+            vec!["checkout", "--force", "main"],
+            vec!["switch", "--discard-changes", "main"],
+            vec!["switch", "-f", "main"],
+            // Where the other refusals send the loop, so emptying it ends the
+            // recoverability the advice depends on.
+            vec!["stash", "drop"],
+            vec!["stash", "clear"],
         ] {
             assert!(
                 classify(&args).is_never(),
                 "git {args:?} must be refused outright"
+            );
+        }
+    }
+
+    /// The refusals have to stop at destruction. A loop that cannot unstage,
+    /// switch branches or read its own history is a loop that cannot work, and
+    /// the way a rule like this fails in practice is by growing until it does.
+    #[test]
+    fn what_git_still_holds_a_copy_of_is_not_refused() {
+        for args in [
+            // Unstaging only: the content stays in the working tree.
+            vec!["restore", "--staged", "lib/main.dart"],
+            vec!["restore", "-S", "lib/main.dart"],
+            // Moving between branches. Git refuses this itself when it would
+            // clobber something, which is the check this would be duplicating.
+            vec!["checkout", "main"],
+            vec!["checkout", "-b", "perp/c1/b2"],
+            vec!["switch", "main"],
+            // Stashing is the advice the refusals give; taking it back is too.
+            vec!["stash"],
+            vec!["stash", "push", "-m", "before the risky bit"],
+            vec!["stash", "pop"],
+            vec!["stash", "list"],
+            // Reading changes nothing.
+            vec!["status", "--porcelain"],
+            vec!["diff", "--cached"],
+            vec!["log", "-1"],
+            vec!["clean", "--dry-run"],
+        ] {
+            assert!(
+                !classify(&args).is_never(),
+                "git {args:?} destroys nothing and must not be refused"
             );
         }
     }
