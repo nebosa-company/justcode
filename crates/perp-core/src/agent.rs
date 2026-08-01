@@ -221,6 +221,9 @@ impl<'a> Agent<'a> {
         let mut quiet = 0;
         // Every call signature this step has already made (`L-12`).
         let mut asked: std::collections::HashSet<String> = std::collections::HashSet::new();
+        // What the workspace looked like before this step wrote anything, so
+        // the end of it can tell whether it did (`V-13`).
+        let touched_before = self.touched.len();
 
         loop {
             turns += 1;
@@ -317,7 +320,36 @@ impl<'a> Agent<'a> {
                     if !called_anything {
                         return Done::Failed {
                             summary: format!(
-                                "{}: answered without calling a single tool —                                  nothing was read, run or changed",
+                                "{}: answered without calling a single tool — \
+                                 nothing was read, run or changed",
+                                item.requirement
+                            ),
+                            detail: transcript,
+                        };
+                    }
+
+                    // Reading is not doing (`V-13`). The check above catches a
+                    // model that called nothing at all; this one catches the
+                    // commoner and quieter case — a step that read fifty files,
+                    // grepped fifty more, wrote none of them, and signed off
+                    // with a summary of what it found.
+                    //
+                    // Cycle 8 closed three such steps green. The gates passed
+                    // afterwards because nothing had been touched, which is the
+                    // most convincing green there is and the least informative,
+                    // and the cycle reported eleven steps and two failures
+                    // having changed not one byte.
+                    //
+                    // A step that genuinely had nothing to change ends here
+                    // too, and that is the intended answer rather than a cost
+                    // of it: it produced no evidence, so it is not the loop's
+                    // to call done. A person reads the transcript and marks
+                    // (`V-2`).
+                    if self.touched.len() == touched_before {
+                        return Done::Failed {
+                            summary: format!(
+                                "{}: read and reported, but changed nothing — \
+                                 no file was written, patched or deleted",
                                 item.requirement
                             ),
                             detail: transcript,
@@ -388,16 +420,18 @@ impl<'a> Agent<'a> {
     fn run_calls(&mut self, calls: &[Call]) -> String {
         let mut out = String::new();
         for call in calls {
-            if matches!(call.tool, crate::tool::Tool::Write | crate::tool::Tool::Patch) {
-                if let Some(path) = call.get("path") {
-                    let path = path.trim().to_string();
-                    if !path.is_empty() && !self.touched.contains(&path) {
-                        self.touched.push(path);
-                    }
-                }
-            }
             let rendered = match self.host.run(call) {
-                Ok(output) => output.render(),
+                Ok(output) => {
+                    // Recorded *after* it ran, and only then. Pushed before,
+                    // a refused write still counted as a touched path — so
+                    // `G-3` would stage a file the loop never wrote, and
+                    // `V-13` would read the refusal as progress. `V-12` makes
+                    // that reachable on purpose: writes to the requirements
+                    // source are refused, and a refusal must not look like
+                    // work.
+                    self.record_touched(call);
+                    output.render()
+                }
                 // A refusal is a result, not an error. The model needs to see
                 // that it was refused and why, or it will try again — which is
                 // how a loop burns a budget arguing with its own classifier.
@@ -406,6 +440,20 @@ impl<'a> Agent<'a> {
             out.push_str(&format!("\n{}\n{rendered}\n", call.signature()));
         }
         out
+    }
+
+    /// Note a path a call actually changed, for staging (`G-3`) and for the
+    /// "did this step do anything" question (`V-13`).
+    fn record_touched(&mut self, call: &Call) {
+        use crate::tool::Tool;
+        if !matches!(call.tool, Tool::Write | Tool::Patch | Tool::Delete) {
+            return;
+        }
+        let Some(path) = call.get("path") else { return };
+        let path = path.trim().to_string();
+        if !path.is_empty() && !self.touched.contains(&path) {
+            self.touched.push(path);
+        }
     }
 }
 
@@ -690,7 +738,10 @@ mod tests {
 
         let task = Work::next(&mut agent).expect("one item");
         let done = agent.perform(&task);
-        assert!(matches!(done, Done::Ok { .. }), "{done:?}");
+        // A read and nothing else, so `V-13` refuses to call it green. The rung
+        // and the call count are the subject here, and both survive the step
+        // ending not-ok — which is the point of asserting them separately.
+        assert!(matches!(done, Done::Failed { .. }), "{done:?}");
         assert_eq!(agent.turns[0].rung, "native", "the top rung was actually used");
         assert_eq!(agent.turns[0].calls, 1, "and the call came out of the raw body");
     }
@@ -855,11 +906,103 @@ path: f.txt
 
         let task = Work::next(&mut agent).expect("one item");
         let done = agent.perform(&task);
-        let Done::Ok { detail: Some(detail), .. } = &done else { panic!("{done:?}") };
+        // Not `Ok`: the step's only call was refused, so it changed nothing and
+        // `V-13` will not call that green. What this test is about is the
+        // *detail* — the refusal came back as a readable result rather than an
+        // error that ends the turn.
+        let Done::Failed { detail, .. } = &done else { panic!("{done:?}") };
         assert!(detail.contains("Never list") || detail.contains("refused"), "{detail}");
         // And the refusal reached the model, which is what the second reply
         // proves — it only exists because the first turn came back.
         assert_eq!(agent.turns.len(), 2);
+    }
+
+    /// `V-13`. The case cycle 8 actually produced, three times: a step that
+    /// reads, greps, reports what it found, and closes green having written
+    /// nothing. The gates then pass — because nothing was touched — which is
+    /// the most convincing green there is and the least informative.
+    ///
+    /// The existing guard asked only whether *any* tool was called, and a step
+    /// that read fifty files satisfied it.
+    #[test]
+    fn a_step_that_only_read_does_not_end_green() {
+        let dir = tmpdir("agent-read-only");
+        std::fs::write(dir.join("f.txt"), "content\n").expect("write");
+
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: read\npath: f.txt\n```",
+            "Findings: this repository contains f.txt, which holds some content.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("V-13", "look into it", "report").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        let Done::Failed { summary, .. } = &done else {
+            panic!("reading is not doing: {done:?}")
+        };
+        assert!(summary.contains("changed nothing"), "{summary}");
+        assert!(Work::touched(&agent).is_empty(), "and it staged nothing");
+    }
+
+    /// The other side of it, so the rule does not simply fail everything: a
+    /// step that wrote something ends green on the same path.
+    #[test]
+    fn a_step_that_wrote_something_still_ends_green() {
+        let dir = tmpdir("agent-wrote");
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: write\npath: out.txt\ncontent: <<EOF\nhello\nEOF\n```",
+            "Wrote it.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("V-13", "write it", "write out.txt").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+        assert!(matches!(done, Done::Ok { .. }), "{done:?}");
+        assert_eq!(Work::touched(&agent), vec!["out.txt".to_string()]);
+    }
+
+    /// A refused write is not a write. `V-12` refuses the requirements source,
+    /// and if that refusal counted as progress the loop could close a step
+    /// green by trying to mark itself done — which is the exact move `V-12`
+    /// exists to stop.
+    #[test]
+    fn a_refused_write_is_not_progress() {
+        let dir = tmpdir("agent-refused-write");
+        std::fs::create_dir_all(dir.join(".harness")).expect("dirs");
+        std::fs::write(dir.join(".harness/perpetum.md"), "| `V-13` | open |\n").expect("reqs");
+
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: write\npath: .harness/perpetum.md\ncontent: <<EOF\n| done |\nEOF\n```",
+            "Marked it.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("V-13", "mark it", "mark it done").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+        assert!(matches!(done, Done::Failed { .. }), "a refusal is not work: {done:?}");
+        assert!(Work::touched(&agent).is_empty(), "and nothing was staged: {:?}", Work::touched(&agent));
     }
 
     /// `V-12`, through the constructor the loop actually uses.

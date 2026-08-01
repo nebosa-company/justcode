@@ -558,13 +558,31 @@ impl Host {
     }
 
     /// Resolve a path inside the workspace, refusing to leave it (`X-2`).
+    ///
+    /// The comparison is between two *canonicalised* paths, and that is the
+    /// whole difficulty: only an existing path can be canonicalised. Checking
+    /// the immediate parent was enough for a new file beside an existing one
+    /// and wrong for a new file in a new directory — the parent did not exist
+    /// either, so it stayed in its unprefixed form while the root became
+    /// `\\?\D:\…` on Windows, `starts_with` failed, and writing `src/new.py`
+    /// into a workspace with no `src/` was refused as leaving the workspace.
+    ///
+    /// It went unnoticed because the path was recorded as touched before the
+    /// call ran, so a refused write looked exactly like a completed one.
+    ///
+    /// Walking up to the nearest ancestor that *does* exist gives something
+    /// canonicalisable at any depth. The root itself always exists, so the
+    /// walk terminates.
     fn resolve(&self, relative: &str) -> Result<PathBuf> {
         let joined = self.root.join(relative);
         let root = self.root.canonicalize().unwrap_or_else(|_| self.root.clone());
-        // Canonicalize what exists; for a new file, check its parent.
-        let probe = if joined.exists() { joined.clone() } else {
-            joined.parent().map(Path::to_path_buf).unwrap_or_else(|| joined.clone())
-        };
+        let mut probe = joined.clone();
+        while !probe.exists() {
+            match probe.parent() {
+                Some(parent) => probe = parent.to_path_buf(),
+                None => break,
+            }
+        }
         let real = probe.canonicalize().unwrap_or(probe);
         if !real.starts_with(&root) {
             return Err(Error::refused(
@@ -842,6 +860,20 @@ mod tests {
             .run(&Call::new(Tool::Read).arg("path", "../../etc/passwd"))
             .expect_err("must refuse");
         assert!(format!("{err}").contains("outside the workspace"), "{err}");
+    }
+
+    /// Diagnostic for the staging test: writing into a directory that does not
+    /// exist yet should work — `write_atomic` creates parents — and the path
+    /// should be reported as touched.
+    #[test]
+    fn a_write_into_a_new_directory_is_allowed() {
+        let dir = tmpdir("tool-new-dir");
+        let host = Host::new(&dir);
+        let out = host
+            .run(&Call::new(Tool::Write).arg("path", "src/new.py").arg("content", "x = 1\n"))
+            .expect("a new directory inside the workspace is not outside it");
+        assert!(out.text.contains("wrote"), "{}", out.text);
+        assert!(dir.join("src/new.py").exists(), "and the file is there");
     }
 
     /// `V-12`. The loop holds `patch` and a workspace-relative path, and the
