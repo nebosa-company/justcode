@@ -6,18 +6,18 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with five open.** This document is the requirements source for the
+**Status: built, with four open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 9: **156 of 162 requirements are done**, 5 open, 1 external-gated
+As of cycle 9: **157 of 162 requirements are done**, 4 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
 over a `curl` transport exercised against a live LM Studio, cost accounting
 replayed from the journal, the tool host and its permission classifier, **the
 loop driver**, and the chat surface with `/btw` — in [`crates/`](../crates/),
-590 tests, at version 0.2.0.
+606 tests, at version 0.2.0.
 
 **The harness runs a batch on its own, against a real model.** `perp run
 --requirement <id>` asks a link, parses tool calls through the degradation
@@ -37,8 +37,16 @@ workspace, and each has a transcript behind it. Still open:
 - `M-29` — a link that cannot cache reports zeroes indistinguishable from a
   broken ledger.
 - `L-23` — thirteen tool calls before the first edit, on a one-file batch.
-- `X-13` — `shell` is not confined to the workspace, and `X-2` reads as if
-  everything is.
+
+`X-13` is closed, and took three attempts to notice it was not. The loop filed
+it done in cycles 6, 8 and 9, and each time the step closed green with three
+green gates behind it. Cycle 9's attempt was the instructive one: nine lines,
+all of them prose, adding a paragraph asserting `shell` was confined and putting
+`X-13` in the module header, with no code and no test. The hole read as sealed
+in the one place a reader would look. `V-13` did not catch it, because the step
+*had* written — it wrote only the description of the change it had not made.
+Closed for real in `a6b4ff0` and marked in `c10/x13/s03`, on a test that writes
+a file outside the root and fails when the guard is taken out.
 
 `V-12` and `V-13` were the uncomfortable pair, and are closed. `V-2` — no
 self-reported success — is the clause this document is built around, and cycle 8
@@ -410,7 +418,7 @@ The loop runs on a real machine, and half of "exercise the real artefact"
 | ✅ ~~`X-9`~~ | The harness can register itself with the OS scheduler (Task Scheduler, systemd, launchd) so a cycle resumes after a reboot. Registration is `approve`; resumption then reconciles per `L-7`. |
 | ✅ ~~`X-10`~~ | Sleep and resume are survivable: a loop that wakes to a stale peer, an expired token or a moved clock reconciles rather than continuing on stale assumptions. |
 | ✅ ~~`X-11`~~ | GUI automation — driving the mouse and keyboard of other applications — is out of scope. If ever added, it is `never` while unattended. |
-| `X-13` | The `shell` tool is confined to the workspace root the way the file tools are (`X-2`). A command whose working directory is outside it, or that names an absolute path outside it, is refused before it runs. `X-2` was written about file tools and reads as covering everything; `shell` is the hole in it, and `cd` is one argument. |
+| ✅ ~~`X-13`~~ | The `shell` tool is confined to the workspace root the way the file tools are (`X-2`). A command whose working directory is outside it, or that names an absolute path outside it, is refused before it runs. `X-2` was written about file tools and reads as covering everything; `shell` is the hole in it, and `cd` is one argument. |
 | ✅ ~~`X-12`~~ | Gates run with a declared environment, not the ambient shell's. The unattended run and the operator's terminal must not disagree about `PATH`. |
 
 ---
