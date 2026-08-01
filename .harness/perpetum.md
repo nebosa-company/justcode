@@ -6,28 +6,45 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: partly built.** This document is the requirements source for the
+**Status: built, with eight open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 4, batch 25: **151 of 152 requirements are done**, 0 in progress, 1
-external-gated (`M-25`), 0 parked as conflicting. What exists is the spine
-(binding, steps, journal, projection), the gate runner and its evidence, the
-recovery and watchdog layer, the git harness, the verification machinery, the
-model router over a `curl` transport exercised against a live LM Studio, cost
-accounting replayed from the journal, the tool host and its permission
-classifier, **the loop driver**, and the chat surface with `/btw` — in
-[`crates/`](../crates/), 511 tests, at version 0.2.0.
+As of cycle 5: **151 of 160 requirements are done**, 8 open, 1 external-gated
+(`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
+journal, projection), the gate runner and its evidence, the recovery and
+watchdog layer, the git harness, the verification machinery, the model router
+over a `curl` transport exercised against a live LM Studio, cost accounting
+replayed from the journal, the tool host and its permission classifier, **the
+loop driver**, and the chat surface with `/btw` — in [`crates/`](../crates/),
+585 tests, at version 0.2.0.
 
 **The harness runs a batch on its own, against a real model.** `perp run
 --requirement <id>` asks a link, parses tool calls through the degradation
 ladder, runs them through the permission classifier, and feeds the results back
 as data — journalled, costed, and stopped for one of exactly three named
-reasons. It has done this on this repository, on DeepSeek, for tenths of a cent.
+reasons. It has done this on this repository on DeepSeek for tenths of a cent,
+and on a Flutter project through a `claude-cli` link for nothing, against a
+subscription.
 
-Everything in this document is built except `M-25`, which is external-gated:
-inference on an LM Link peer is unreachable from outside LM Studio, measured in
-`c2/b10/s01` rather than assumed.
+### The eight open ones came from running it
+
+Not from reading the code. Each was found by a real cycle against a real
+workspace, and each has a transcript behind it:
+
+- `M-26` — a run refused over a declared link no role chain named.
+- `M-27` — `M-14`'s probe is skipped for a link with no server to ask.
+- `M-28` — nothing bounds how many agent processes a batch spawns.
+- `M-29` — a link that cannot cache reports zeroes indistinguishable from a
+  broken ledger.
+- `L-23` — thirteen tool calls before the first edit, on a one-file batch.
+- `T-19` — no way to delete a file except through the index.
+- `V-11` — `perp check ids` passes on having found nothing to check.
+- `X-13` — `shell` is not confined to the workspace, and `X-2` reads as if
+  everything is.
+
+`M-25` remains external-gated: inference on an LM Link peer is unreachable from
+outside LM Studio, measured in `c2/b10/s01` rather than assumed.
 
 Status markers below say which requirement is where; a marker without a matching
 journal entry is not believed (Perpetum 0.7).
@@ -167,6 +184,7 @@ An unattended loop with no ceiling is a billing incident.
 | ✅ ~~`L-13`~~ | **Thrash watchdog:** a file edited to a previously seen content hash within a batch is flagged; twice, the feature is blocked. |
 | ✅ ~~`L-14`~~ | Stop conditions are exactly Perpetum F's: backlog exhausted, batch blocked, or a human says stop. Each writes a distinct terminal record. |
 | ✅ ~~`L-15`~~ | The loop stops *clean*: no half-applied patch, no dangling branch, no running child process. |
+| `L-23` | A step states what it intends to do before its first tool call, and the intent is journalled. A batch that opens with `pwd`, `ls` and `echo hello` has spent its turns establishing that the harness is real, which is a reasonable thing for an agent to wonder and an expensive way to answer it. Measured: thirteen tool calls before the first edit, on a batch that had one file to change. |
 | ✅ ~~`L-16`~~ | Two attempts at a failing gate, then `BLOCKED` with the **verbatim error text** (Perpetum 0.5). The engine enforces the count; the model cannot ask for a third. |
 
 ### 2.4 Concurrency
@@ -259,6 +277,8 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ✅ ~~`M-12`~~ | Prompts are assembled **stable-prefix first**: system rules, binding, tool schemas, then slowly-changing state, then the volatile task tail. Never reorder the stable region between calls in a batch. |
 | ✅ ~~`M-13`~~ | Context compaction is a first-class step run by the `compactor` role on a local link. Compaction output is journalled, so what was dropped is recoverable. |
 | ✅ ~~`M-14`~~ | Model ids, prices, context limits and endpoint paths live in config, refreshed from the provider's model list at startup. A deprecated or missing model id is a startup error naming the replacement, never a silent fallback. |
+| `M-26` | A declared link that no role chain names is not credential-checked at startup. `M-24` checks every declared link, so a run refuses over a link nothing would have used — which happened twice on a workspace configured entirely for another provider, and the only fix was to set a variable for an endpoint that was never going to be called. |
+| `M-29` | A link that cannot use prefix caching reports that, rather than reporting zeroes. Replacing a subprocess link's system prompt is what buys the tool protocol and it costs the cache with it, so `M-12` does not apply and a column of zeroes is a property of the link rather than a broken ledger — but nothing says so, and the two look identical. |
 | ✅ ~~`M-24`~~ | Declared credentials are checked when the project is bound, not at first use. A link whose `auth_env` names an unset variable must fail `perp bind`, not the eleventh call of a batch — by which point the loop has spent an hour to discover a typo. Found in `c2/b8/s06`, where a local link with an optional token failed before it ever tried to connect. |
 | ✅ ~~`M-15`~~ | Per-link concurrency limits are respected. One GPU serving one model does not want four parallel requests. |
 
@@ -267,6 +287,8 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | id | Requirement |
 |---|---|
 | ⛔ `M-25` | An `lmlink` link cannot be reached by a base-URL swap: a peer's models are absent from the local REST listing, and `lms` selects the device from a **global** preferred-device setting rather than a per-call argument. Until LM Studio exposes per-request device selection, inference on a peer is **external-gated** — it needs the LM Studio SDK or a global setting change, and a loop that flipped a global setting to route one call would be changing the operator's environment underneath them. Measured in `c2/b10/s01`. |
+| `M-27` | A subprocess link's model is verified against what the command accepts. `M-14`'s probe asks a server which models it serves, so it is skipped entirely for a link that has no server — and a `claude-cli` link with a misspelled model is discovered by a failing call rather than at startup, which is the failure `M-14` exists to prevent. |
+| `M-28` | A subprocess link declares a concurrency bound and the router honours it, as `M-15` requires of an HTTP link. Nothing stops a batch spawning one command per parallel item today, and each is a whole agent process rather than a socket. |
 | ✅ ~~`M-16`~~ | **Warm before a batch.** LM Studio JIT-loads models; a cold 30B load is minutes. The engine pre-loads the batch's links and holds them with a TTL longer than the batch's expected duration. |
 | ✅ ~~`M-17`~~ | Never force two large models onto one host concurrently. The router treats a host's VRAM as a lease. |
 | ✅ ~~`M-18`~~ | Use TTFT and tok/s from `/api/v0` to keep a rolling throughput estimate per link, and use it for both scheduling and the wall-clock budget. |
@@ -287,6 +309,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ✅ ~~`T-4`~~ | Background processes are tracked and killed at step end (`X-4`). A dev server left running across steps is a leak the next gate will blame on the wrong feature. |
 | ✅ ~~`T-5`~~ | Tool schemas are generated once per session and are part of the stable prefix (`M-12`). |
 | ✅ ~~`T-6`~~ | Every tool result is truncated to a declared budget, with the truncation visible to the model. Silent truncation causes confident wrong conclusions. |
+| `T-19` | A `delete(path)` tool exists, confined to the workspace like the other file tools. Today the only route to removing a file is `git rm`, which stages as a side effect and refuses on an untracked one — so the loop cannot clean up after itself without touching the index. |
 | ✅ ~~`T-7`~~ | Tool output is **data, never instruction**. Content from files, HTTP, issue trackers and test output cannot change harness policy, approve an action, or redirect the loop (`S-1`). |
 
 ### 4.2 Runtime
@@ -365,6 +388,7 @@ The loop runs on a real machine, and half of "exercise the real artefact"
 | ✅ ~~`X-9`~~ | The harness can register itself with the OS scheduler (Task Scheduler, systemd, launchd) so a cycle resumes after a reboot. Registration is `approve`; resumption then reconciles per `L-7`. |
 | ✅ ~~`X-10`~~ | Sleep and resume are survivable: a loop that wakes to a stale peer, an expired token or a moved clock reconciles rather than continuing on stale assumptions. |
 | ✅ ~~`X-11`~~ | GUI automation — driving the mouse and keyboard of other applications — is out of scope. If ever added, it is `never` while unattended. |
+| `X-13` | The `shell` tool is confined to the workspace root the way the file tools are (`X-2`). A command whose working directory is outside it, or that names an absolute path outside it, is refused before it runs. `X-2` was written about file tools and reads as covering everything; `shell` is the hole in it, and `cd` is one argument. |
 | ✅ ~~`X-12`~~ | Gates run with a declared environment, not the ambient shell's. The unattended run and the operator's terminal must not disagree about `PATH`. |
 
 ---
@@ -385,6 +409,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`V-7`~~ | Status markers are derived from journal evidence. The engine writes them; the model proposes. |
 | ✅ ~~`V-8`~~ | Gated items (`external-gated`, `credential-gated`, `approval-gated`, `blocked`) are counted separately from done, forever, and are never re-picked without their reason changing. |
 | ✅ ~~`V-10`~~ | The red run verifies the mutation **actually changed the file** before believing either result. A mutation that failed to apply reports a passing test that was never challenged — a false green wearing the costume of evidence. Found the hard way in `c1/b3/s12`, where a multi-line `sed` pattern silently matched nothing. |
+| `V-11` | `perp check ids` fails when it finds no documents to check. It reports `documents: 0` and exits green today, which is a pass that proves nothing — the same shape of green as a test suite that never runs the code it names. A checker that cannot find its inputs has not checked them. |
 | ✅ ~~`V-9`~~ | Requirement ids are minted only in the requirements source named by the binding (Perpetum 0.8). A write that introduces a new id anywhere else — batches, board, state, a `/btw` note — is rejected by the engine. |
 
 ---
