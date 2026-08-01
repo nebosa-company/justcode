@@ -583,14 +583,23 @@ fn blocked_why(failed: u32, gates_green: Option<bool>) -> String {
 /// The board is not looked up through `out.board`. That key named a file
 /// nothing ever wrote; [`crate::artifact::DIR`] is where artifacts actually
 /// go, and it is the authority.
+///
+/// The journal, and not the state file. `out.state` was staged here too, and
+/// `L-4` is the reason it should not be: the state file is a *projection*, and
+/// when it and the journal disagree the journal wins. Committing it puts a
+/// second copy of the truth in the history that this project's own rule says is
+/// not authoritative — and being derived, it rewrites after every outcome, so
+/// two batch branches conflict on it every time. `perp state` renders it back
+/// byte for byte from the journal, which is what makes leaving it out safe.
+///
+/// Artifacts went the same way earlier and for the weaker version of the same
+/// reason; the state file is the one the rule was actually written about.
 fn evidence_paths(root: &std::path::Path, binding: &crate::Binding) -> Vec<String> {
     let mut paths = Vec::new();
-    for key in ["out.journal", "out.state"] {
-        if let Ok(path) = binding.get(key) {
-            let path = path.to_string();
-            if root.join(&path).exists() && !paths.contains(&path) {
-                paths.push(path);
-            }
+    if let Ok(path) = binding.get("out.journal") {
+        let path = path.to_string();
+        if root.join(&path).exists() {
+            paths.push(path);
         }
     }
     let artifacts = crate::artifact::DIR.to_string();
@@ -966,6 +975,24 @@ out.state = .harness/state.md
         let ids: Vec<String> =
             remaining(SOURCE, &records, 1, 10).into_iter().map(|i| i.requirement).collect();
         assert!(!ids.contains(&"L-2".to_string()), "{ids:?}");
+    }
+
+    /// `L-4`: the journal is the record and the state file is a projection of
+    /// it. Staging the projection commits a second copy of the truth that the
+    /// rule itself says loses any disagreement — and nothing tested that it was
+    /// being staged, which is how it stayed that way.
+    #[test]
+    fn a_leg_commits_the_journal_and_not_the_projection_of_it() {
+        let (dir, binding) = bound("out.journal = .harness/journal.jsonl\nout.state = .harness/state.md\n");
+        std::fs::write(dir.join(".harness/journal.jsonl"), "{}\n").expect("journal");
+        std::fs::write(dir.join(".harness/state.md"), "# state\n").expect("state");
+
+        let paths = evidence_paths(&dir, &binding);
+        assert!(paths.iter().any(|p| p.contains("journal")), "the record is staged: {paths:?}");
+        assert!(
+            !paths.iter().any(|p| p.contains("state.md")),
+            "the projection is not: {paths:?}"
+        );
     }
 
     /// The defect verbatim. Cycle 5 of a real project reported this with both

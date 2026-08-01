@@ -32,6 +32,7 @@ pub enum Tool {
     Grep,
     Write,
     Patch,
+    Delete,
     Shell,
     Git,
     Gate,
@@ -45,6 +46,7 @@ impl Tool {
         Tool::Grep,
         Tool::Write,
         Tool::Patch,
+        Tool::Delete,
         Tool::Shell,
         Tool::Git,
         Tool::Gate,
@@ -58,6 +60,7 @@ impl Tool {
             Tool::Grep => "grep",
             Tool::Write => "write",
             Tool::Patch => "patch",
+            Tool::Delete => "delete",
             Tool::Shell => "shell",
             Tool::Git => "git",
             Tool::Gate => "gate",
@@ -81,6 +84,7 @@ impl Tool {
             Tool::Grep => (&["pattern"], &["pattern", "path"]),
             Tool::Write => (&["path", "content"], &["path", "content"]),
             Tool::Patch => (&["path", "expect", "replace"], &["path", "expect", "replace"]),
+            Tool::Delete => (&["path"], &["path"]),
             Tool::Shell => (&["command"], &["command", "timeout"]),
             Tool::Git => (&["args"], &["args"]),
             Tool::Gate => (&[], &["name"]),
@@ -96,6 +100,7 @@ impl Tool {
             Tool::Grep => "grep(pattern, [path]) — lines matching a regular expression",
             Tool::Write => "write(path, content) — create or replace a whole file",
             Tool::Patch => "patch(path, expect, replace) — replace `expect` with `replace`; fails if `expect` is not there exactly once",
+            Tool::Delete => "delete(path) — remove a file inside the workspace; refuses outside it, same as the other file tools",
             Tool::Shell => "shell(command, [timeout]) — run a command with a declared environment; `timeout` is in seconds and may only lower the host's bound, never raise it",
             Tool::Git => "git(args) — a git command, classified before it runs",
             Tool::Gate => "gate([name]) — run the project's gates and keep the transcript",
@@ -312,6 +317,22 @@ pub fn classify(call: &Call) -> Policy {
         // Writing inside the workspace is the loop's own business; the
         // workspace boundary itself is checked at execution (`X-2`).
         Tool::Write | Tool::Patch => Policy::Auto,
+
+        // Deleting is not writing. A written file is still there and its
+        // previous content is recoverable from the index or the last commit
+        // whenever git had a copy; a deleted untracked one leaves nothing at
+        // all, which is the exact act `git clean` is refused for (`G-10`).
+        //
+        // This cannot be settled by looking at the path. `T-19` exists because
+        // `git rm` refuses an untracked file, so refusing untracked deletion
+        // here would reimplement the problem the tool was added to solve — and
+        // nothing distinguishes a scratch file the loop wrote this step from
+        // one a person left in the tree. Asking is the only honest answer to a
+        // question the harness cannot decide.
+        Tool::Delete => Policy::approve(
+            "deleting a file leaves nothing behind when git has no copy of it, \
+             and the harness cannot tell whose file it is",
+        ),
 
         Tool::Git => {
             let args: Vec<&str> = call.get("args").unwrap_or_default().split_whitespace().collect();
@@ -543,6 +564,17 @@ impl Host {
                 let applied = patch(&path, call.need("expect")?, call.need("replace")?)?;
                 applied
             }
+            Tool::Delete => {
+                let path = self.resolve(call.need("path")?)?;
+                if !path.exists() {
+                    return Err(Error::refused(
+                        format!("delete {}", path.display()),
+                        "no such file",
+                    ));
+                }
+                std::fs::remove_file(&path).map_err(|e| Error::io(&path, e))?;
+                format!("deleted {}", path.display())
+            }
             Tool::Grep => {
                 let pattern = call.need("pattern")?;
                 let where_ = call.get("path").unwrap_or(".");
@@ -670,7 +702,7 @@ mod tests {
         assert!(!wire.contains("\"name\":\"gate\""), "nor the wire schema: {wire}");
 
         // Everything else is still offered, and both surfaces agree.
-        for tool in [Tool::Read, Tool::Write, Tool::Patch, Tool::Shell, Tool::Grep] {
+        for tool in [Tool::Read, Tool::Write, Tool::Patch, Tool::Delete, Tool::Shell, Tool::Grep] {
             assert!(offered().contains(&tool), "{tool:?}");
             assert!(wire.contains(&format!("\"name\":\"{}\"", tool.as_str())));
         }
@@ -752,6 +784,57 @@ mod tests {
             .run(&Call::new(Tool::Read).arg("path", "../../etc/passwd"))
             .expect_err("must refuse");
         assert!(format!("{err}").contains("outside the workspace"), "{err}");
+    }
+
+    /// `T-19`: the only route before this was `git rm`, which stages as a side
+    /// effect and refuses on a file git has never heard of. `delete` does
+    /// neither — but it asks first, because a deleted untracked file is gone
+    /// and nothing here can tell whose it was.
+    #[test]
+    fn delete_removes_an_untracked_file_without_touching_the_index() {
+        let (host, root) = host();
+        let path = root.join("scratch.txt");
+        std::fs::write(&path, "temporary").expect("write");
+
+        let out = host
+            .run_approved(&Call::new(Tool::Delete).arg("path", "scratch.txt"), "operator")
+            .expect("delete");
+        assert!(out.text.contains("deleted"), "{}", out.text);
+        assert!(!path.exists(), "the file is gone");
+    }
+
+    /// The half that makes the tool safe to have. `git clean` is refused for
+    /// deleting untracked work (`G-10`); a `delete` that ran unattended would
+    /// be the same act through a different door.
+    #[test]
+    fn delete_is_not_something_the_loop_does_on_its_own() {
+        let (host, root) = host();
+        let path = root.join("someone-elses.txt");
+        std::fs::write(&path, "not the loop's").expect("write");
+
+        let err = host
+            .run(&Call::new(Tool::Delete).arg("path", "someone-elses.txt"))
+            .expect_err("must ask");
+        assert!(format!("{err}").contains("needs approval"), "{err}");
+        assert!(path.exists(), "and the file is still there");
+    }
+
+    #[test]
+    fn delete_refuses_a_missing_file_and_a_path_outside_the_workspace() {
+        let (host, root) = host();
+
+        let err = host
+            .run_approved(&Call::new(Tool::Delete).arg("path", "nowhere.txt"), "operator")
+            .expect_err("nothing to delete");
+        assert!(format!("{err}").contains("no such file"), "{err}");
+
+        std::fs::write(root.join("in.txt"), "inside").expect("write");
+        // An approval is not a way out of the workspace (`X-2`).
+        let err = host
+            .run_approved(&Call::new(Tool::Delete).arg("path", "../../etc/passwd"), "operator")
+            .expect_err("must refuse");
+        assert!(format!("{err}").contains("outside the workspace"), "{err}");
+        assert!(root.join("in.txt").exists(), "untouched");
     }
 
     #[test]

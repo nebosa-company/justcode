@@ -70,6 +70,14 @@ control
 # them means seven files churning on every closed step for no information the
 # journal does not already hold.
 artifacts/
+
+# The state file, for the same reason and a sharper one. `L-4` makes it a
+# projection of the journal and says the journal wins when they disagree — so a
+# committed copy is a second source of truth that this project's own rule
+# declares non-authoritative. `perp state` replays the journal and renders it
+# byte for byte, and it is rewritten after every outcome, so keeping it here
+# means a guaranteed conflict between any two batch branches.
+state.md
 ";
 
 /// Where requirements live when a project keeps more than one file of them.

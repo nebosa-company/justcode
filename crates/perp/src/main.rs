@@ -613,6 +613,17 @@ fn cmd_check(args: &[&str]) -> std::result::Result<(), String> {
     let mut documents = Vec::new();
     collect_markdown(&binding.root().join("docs"), &source_path, &mut documents)?;
 
+    // `V-11`: zero documents is not a clean bill of health, it is a checker
+    // that never ran. Exiting green here would look identical to a run that
+    // scanned every document and found nothing wrong — the same shape of
+    // green as a test suite that never executed the code it names.
+    if documents.is_empty() {
+        return Err(format!(
+            "{}: no documents found to check — a checker that finds no input has not checked anything",
+            binding.root().join("docs").display()
+        ));
+    }
+
     let borrowed: Vec<(&str, &str)> =
         documents.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
     let stray = verify::stray_ids(&source, &borrowed);

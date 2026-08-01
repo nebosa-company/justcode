@@ -502,17 +502,26 @@ impl Links {
     /// which is right for a local one and a visible zero for a cloud one —
     /// a bill of nothing next to a cloud link is a configuration bug you can
     /// see, rather than a guess at what DeepSeek costs this week.
-    /// Every link whose `auth_env` names a variable that is not set (`M-24`).
+    /// Every link whose `auth_env` names a variable that is not set (`M-24`),
+    /// **among the links a role chain could actually reach** (`M-26`).
     ///
     /// Checked when the project is bound, not at first use. A typo in a
     /// variable name that surfaces on the eleventh call of a batch has already
     /// cost an hour, and the 401 it produces then blames the request rather
-    /// than the configuration. Found in `c2/b8/s06`.
+    /// than the configuration.
+    ///
+    /// A link nothing names is not in this list. A workspace configured
+    /// entirely for one provider commonly declares a link for another that no
+    /// chain ever mentions — kept around, unused, maybe for later. `M-24`
+    /// checking it anyway refused two runs over a variable that was never
+    /// going to be read, and the only fix was to set it for an endpoint that
+    /// was never going to be called.
     ///
     /// Returns the **variable names**, never their values (`S-2`).
     pub fn missing_credentials(&self) -> Vec<(String, String)> {
         self.links
             .iter()
+            .filter(|link| self.chains.iter().any(|(_, chain)| chain.contains(&link.name)))
             .filter_map(|link| {
                 let name = link.auth_env.as_ref()?;
                 std::env::var(name).is_err().then(|| (link.name.clone(), name.clone()))
@@ -827,6 +836,11 @@ mod tests {
         // `M-24`. A typo that surfaces on the eleventh call has already cost an
         // hour, and the 401 it produces then blames the request rather than the
         // configuration.
+        //
+        // `cloud` is in the chain here. It was not when this test was written,
+        // because `M-24` checked every declared link and the distinction did
+        // not exist; `M-26` made it exist, and the unreachable case moved to
+        // the test below rather than being deleted along with the assertion.
         std::env::remove_var("PERP_DEFINITELY_UNSET_KEY");
         let links = Links::parse(
             "```perp-links
@@ -837,7 +851,7 @@ mod tests {
              link.cloud.base_url = https://api.deepseek.com
              link.cloud.model = m
              link.cloud.auth_env = PERP_DEFINITELY_UNSET_KEY
-             role.chat = here
+             role.chat = here, cloud
 ```
 ",
         )
@@ -851,6 +865,41 @@ mod tests {
         std::env::set_var("PERP_DEFINITELY_UNSET_KEY", "sk-should-never-appear");
         assert!(links.missing_credentials().is_empty(), "set is not missing");
         std::env::remove_var("PERP_DEFINITELY_UNSET_KEY");
+    }
+
+    /// `M-26`. The narrowing, stated as its own contract rather than left as
+    /// the absence of an assertion somewhere else.
+    ///
+    /// A workspace configured for one provider commonly declares a link for
+    /// another that no chain names — kept for later, or left behind. Refusing
+    /// to start over its unset variable stops a run that was never going to
+    /// call it, and the only way through is to set a credential for an endpoint
+    /// nothing would have reached.
+    #[test]
+    fn a_link_no_role_chain_names_is_not_credential_checked() {
+        std::env::remove_var("PERP_DEFINITELY_UNSET_KEY");
+        let links = Links::parse(
+            "```perp-links
+             link.here.kind = lmstudio
+             link.here.base_url = http://localhost:1234
+             link.here.model = small
+             link.unused.kind = deepseek
+             link.unused.base_url = https://api.deepseek.com
+             link.unused.model = m
+             link.unused.auth_env = PERP_DEFINITELY_UNSET_KEY
+             role.chat = here
+```
+",
+        )
+        .expect("parse");
+
+        assert!(
+            links.missing_credentials().is_empty(),
+            "a link nothing can reach is not a reason to refuse the run: {:?}",
+            links.missing_credentials()
+        );
+        // And it is still a declared link — narrowed, not dropped.
+        assert!(links.get("unused").is_ok(), "the link is still configured");
     }
 
     const CONFIG: &str = "\

@@ -16,3 +16,12 @@
 
 # The control channel: pause, step and stop, read at the next step boundary.
 control
+
+# Added by `perp`, which manages this file and adds rules it is missing.
+artifacts/
+
+# The state file. `L-4` makes it a projection of the journal and says the
+# journal wins when they disagree, so a committed copy is a second source of
+# truth this project already calls non-authoritative. `perp state` renders it
+# back byte for byte.
+state.md

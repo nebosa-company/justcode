@@ -200,6 +200,29 @@ fn check_ids_fails_when_a_document_invents_a_requirement() {
     assert!(run(&root, &["check", "ids"]).ok(), "and citing a real id must pass");
 }
 
+#[test]
+fn check_ids_fails_rather_than_pass_on_finding_nothing_to_check() {
+    // `V-11`: no `docs/` at all — the fixture never creates one unless a test
+    // asks for it, which is exactly the state a workspace is in before anyone
+    // has written a document. A checker that reports `documents: 0` and exits
+    // 0 has not checked anything; it must fail loudly instead.
+    let root = fixture("no-documents");
+    let out = run(&root, &["check", "ids"]);
+    assert!(!out.ok(), "zero documents must not be a passing check");
+    assert!(out.says("no documents"), "{}{}", out.stdout, out.stderr);
+}
+
+#[test]
+fn check_ids_fails_on_an_empty_docs_directory_too() {
+    // The directory existing but holding nothing is the same emptiness by a
+    // different path — an empty `docs/` must fail exactly like a missing one.
+    let root = fixture("empty-docs");
+    std::fs::create_dir_all(root.join("docs")).expect("docs");
+    let out = run(&root, &["check", "ids"]);
+    assert!(!out.ok(), "an empty docs directory must not be a passing check");
+    assert!(out.says("no documents"), "{}{}", out.stdout, out.stderr);
+}
+
 // ── the router (M-2, M-4, M-5) ─────────────────────────────────────────────
 
 fn with_links(tag: &str, block: &str) -> PathBuf {
