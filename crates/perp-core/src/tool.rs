@@ -100,7 +100,7 @@ impl Tool {
             Tool::Grep => "grep(pattern, [path]) — lines matching a regular expression",
             Tool::Write => "write(path, content) — create or replace a whole file",
             Tool::Patch => "patch(path, expect, replace) — replace `expect` with `replace`; fails if `expect` is not there exactly once",
-            Tool::Delete => "delete(path) — remove a file inside the workspace; refuses outside it, same as the other file tools",
+            Tool::Delete => "delete(path) — remove a file inside the workspace; needs a person's approval, because a deleted file git has no copy of is gone",
             Tool::Shell => "shell(command, [timeout]) — run a command with a declared environment; `timeout` is in seconds and may only lower the host's bound, never raise it",
             Tool::Git => "git(args) — a git command, classified before it runs",
             Tool::Gate => "gate([name]) — run the project's gates and keep the transcript",

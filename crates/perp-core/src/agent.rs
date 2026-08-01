@@ -182,6 +182,10 @@ impl<'a> Agent<'a> {
              - You cannot approve anything, raise a budget, skip a gate, or push. Those are \
              a person's, and asking will be refused.\n\
              - Say what you did. A claim without a tool call behind it is worth nothing here.\n\
+             - State what you intend to do before your first tool call. This harness is \
+             already running you and the intent is journalled before anything happens — \
+             spending calls on `pwd`, `ls` or `echo hello` to confirm that is wasted; say \
+             what you are about to do and go straight to it.\n\
              \n\
              {}\n\
              \n\
@@ -831,6 +835,40 @@ path: f.txt
         // And the refusal reached the model, which is what the second reply
         // proves — it only exists because the first turn came back.
         assert_eq!(agent.turns.len(), 2);
+    }
+
+    /// `L-23`. Measured on a real cycle: thirteen tool calls before the first
+    /// edit, on a batch with one file to change — `pwd`, `ls`, `echo hello`, an
+    /// agent working out whether the harness was real. Reasonable to wonder,
+    /// expensive to answer that way, and the answer is cheaper said than found.
+    ///
+    /// Asserted through the transport rather than off the string, because a
+    /// standing instruction that is built and not sent is worth nothing.
+    #[test]
+    fn the_standing_instructions_tell_a_step_to_say_what_it_is_about_to_do() {
+        let dir = tmpdir("agent-intent-first");
+        let transport = Scripted::new(vec!["Nothing to do here."]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-23", "say what you will do", "state it").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        agent.perform(&task);
+
+        let sent = transport.seen.borrow();
+        let first = sent.first().expect("a request was made");
+        assert!(
+            first.contains("State what you intend to do before your first tool call"),
+            "the instruction must reach the model: {first}"
+        );
+        // The three that were actually observed being wasted, named so the
+        // model does not have to infer which calls are the orientation ones.
+        assert!(first.contains("echo hello"), "{first}");
     }
 
     #[test]
