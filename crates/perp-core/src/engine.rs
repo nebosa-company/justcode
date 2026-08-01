@@ -155,6 +155,15 @@ pub struct Report {
     pub controls: Vec<String>,
     /// Things that went wrong without failing anything (`A-7`).
     pub warnings: Vec<String>,
+    /// Whether the gates ran green — `None` when none ran.
+    ///
+    /// A failed step and a red gate are different things, and a report that
+    /// carries only the first cannot tell the difference. The driver said "1
+    /// step(s) failed and the gate is red" on a cycle whose last two gate runs
+    /// both exited 0; the step had failed on a tool error. The stop reason is
+    /// the one line an operator reads to decide whether to look, so a run that
+    /// ends green while announcing red teaches them to stop reading it.
+    pub gates_green: Option<bool>,
 }
 
 impl Report {
@@ -285,6 +294,7 @@ impl Engine {
             failed: 0,
             stop: None,
             park: None,
+            gates_green: None,
             spend: Spend::default(),
             took_over,
             first_step: None,
@@ -526,6 +536,19 @@ impl Gates {
 
     pub fn all_green(&self) -> bool {
         !self.results.is_empty() && self.results.iter().all(gate::GateResult::is_green)
+    }
+
+    /// Green, red, or never ran — as three answers rather than two.
+    ///
+    /// [`Gates::all_green`] folds "no gate ran" in with "a gate failed", which
+    /// is right for deciding whether to commit and wrong for saying what
+    /// happened. A caller that reports the second as the first tells an
+    /// operator the gate is red when nothing was ever run.
+    pub fn verdict(&self) -> Option<bool> {
+        if self.results.is_empty() {
+            return None;
+        }
+        Some(self.results.iter().all(gate::GateResult::is_green))
     }
 }
 

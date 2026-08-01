@@ -390,15 +390,18 @@ impl Driver<'_> {
                 }
             }
 
-            // A red gate means the batch was not delivered. Starting the next
-            // one would be piling work on a tree whose tests do not pass, and
-            // the gate that then goes red belongs to nobody.
+            // A failed step means the batch was not delivered. Starting the next
+            // one would be piling work on a tree whose last batch did not land,
+            // and the gate that then goes red belongs to nobody.
+            //
+            // What is said about the gate is what the gate said. A step fails on
+            // a tool error, an unparseable reply or a refusal just as readily as
+            // on a red gate, and this used to report the last of those whatever
+            // had happened — on a cycle whose gates both exited 0.
             if let Some(leg) = outcome.legs.last() {
                 if leg.report.failed > 0 && leg.report.stop.is_none() {
-                    let blocked = Stop::BatchBlocked {
-                        batch: format!("b{batches_done}"),
-                        why: format!("{} step(s) failed and the gate is red", leg.report.failed),
-                    };
+                    let why = blocked_why(leg.report.failed, leg.report.gates_green);
+                    let blocked = Stop::BatchBlocked { batch: format!("b{batches_done}"), why };
                     outcome.stop = Some(blocked);
                     break;
                 }
@@ -473,7 +476,11 @@ impl Driver<'_> {
         let gates = Gates::from_binding(engine.session().binding(), &target)?
             .covering(covered.clone());
         let mut leg = Then::new(agent, gates);
-        let report = engine.run(cycle, &stage, &mut leg, 0)?;
+        let mut report = engine.run(cycle, &stage, &mut leg, 0)?;
+        // Asked of the gates themselves rather than inferred from the step
+        // count, which is a different fact about a different thing.
+        report.gates_green = leg.second().verdict();
+        let report = report;
 
         // Green gate, and only then. A red one leaves the tree exactly as it is
         // for someone to look at — the driver stops the cycle on it anyway.
@@ -518,7 +525,9 @@ impl Driver<'_> {
         let mut engine = Engine::open(&self.root)?;
         let target = self.root.join("crates/target");
         let mut gates = Gates::from_binding(engine.session().binding(), &target)?;
-        let report = engine.run(cycle, &phase.letter().to_string(), &mut gates, 0)?;
+        let mut report = engine.run(cycle, &phase.letter().to_string(), &mut gates, 0)?;
+        report.gates_green = gates.verdict();
+        let report = report;
 
         // A leg that writes evidence and does not commit it leaves the tree
         // dirty, and the next run starts on someone else's mess. A three-batch
@@ -544,6 +553,24 @@ impl Driver<'_> {
             return Ok(report);
         }
         Ok(report)
+    }
+}
+
+/// Why a batch is blocked, saying only what is known.
+///
+/// A failed step and a red gate are two facts, and this used to report the
+/// second whenever it saw the first. Cycle 5 of a real project ended
+/// `1 step(s) failed and the gate is red` with both gates at exit 0 — the step
+/// had failed on a tool error. `V-2` says only a gate may call something green;
+/// the same discipline applies to calling it red, and a stop reason that gets it
+/// wrong is worse than one that says less, because it is the one line an
+/// operator reads to decide whether to look.
+fn blocked_why(failed: u32, gates_green: Option<bool>) -> String {
+    let steps = format!("{failed} step(s) failed");
+    match gates_green {
+        Some(false) => format!("{steps} and the gate is red"),
+        Some(true) => format!("{steps}, though the gate is green"),
+        None => format!("{steps} and no gate ran"),
     }
 }
 
@@ -939,6 +966,43 @@ out.state = .harness/state.md
         let ids: Vec<String> =
             remaining(SOURCE, &records, 1, 10).into_iter().map(|i| i.requirement).collect();
         assert!(!ids.contains(&"L-2".to_string()), "{ids:?}");
+    }
+
+    /// The defect verbatim. Cycle 5 of a real project reported this with both
+    /// gates at exit 0, because the claim was read off the step count.
+    #[test]
+    fn a_green_gate_is_never_reported_as_red() {
+        let said = blocked_why(1, Some(true));
+        assert!(!said.contains("the gate is red"), "{said}");
+        assert!(said.contains("green"), "it says what was actually true: {said}");
+        assert!(said.contains("1 step(s) failed"), "and still says the step failed: {said}");
+    }
+
+    #[test]
+    fn a_red_gate_is_still_reported_as_red() {
+        let said = blocked_why(2, Some(false));
+        assert_eq!(said, "2 step(s) failed and the gate is red");
+    }
+
+    /// Not the same as red, and worth saying: a batch that never reached its
+    /// gate failed somewhere earlier, which is where the operator should look.
+    #[test]
+    fn a_gate_that_never_ran_is_not_reported_as_red_either() {
+        let said = blocked_why(1, None);
+        assert!(!said.contains("red"), "{said}");
+        assert!(said.contains("no gate ran"), "{said}");
+    }
+
+    /// The tri-state the message is built from. [`Gates::all_green`] answers
+    /// `false` for an empty run, which is right for deciding whether to commit
+    /// and wrong for saying what happened.
+    #[test]
+    fn gates_that_never_ran_have_no_verdict_rather_than_a_red_one() {
+        let (dir, binding) = bound("gate.test = true\n");
+        let gates = crate::engine::Gates::from_binding(&binding, &dir).expect("gates");
+        assert!(gates.results.is_empty(), "nothing has run yet");
+        assert_eq!(gates.verdict(), None, "no results is not a red verdict");
+        assert!(!gates.all_green(), "and all_green still answers false, as its callers expect");
     }
 
     #[test]
