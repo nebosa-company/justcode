@@ -1,4 +1,4 @@
-//! The tool host (`T-1`, `T-2`, `T-5`, `T-6`, `T-7`, `T-12`, `X-13`).
+//! The tool host (`T-1`, `T-2`, `T-5`, `T-6`, `T-7`, `T-12`, `X-13`, `X-14`).
 //!
 //! What the loop can actually do. Five rules shape it more than the catalog
 //! does:
@@ -19,6 +19,10 @@
 //!   every other tool respected stopped at the one tool that can run anything.
 //!   [`Host::confined`] splits the line with the executor's own tokeniser and
 //!   resolves what looks like a path, refusing what lands outside the root.
+//!   Its other half is `X-14`: `grep`'s path reached a command line without
+//!   ever being resolved, and what kept it from reading anything was `git grep`
+//!   declining to look outside its work tree. A tool the harness happens to
+//!   call is not a boundary the harness keeps.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -659,11 +663,21 @@ impl Host {
             Tool::Grep => {
                 let pattern = call.need("pattern")?;
                 let where_ = call.get("path").unwrap_or(".");
-                let run = self.shell(&format!("git grep -n -- \"{pattern}\" {where_}"))?;
-                run
+                // `X-14`: a path is a path whatever the argument is called and
+                // wherever it is going. This one is not opened, so nothing here
+                // needs the resolved form — it is resolved to be refused.
+                self.resolve(where_)?;
+                // Quoted: a directory with a space in it is one argument, and
+                // `split_command` is what decides that.
+                self.shell(&format!("git grep -n -- \"{pattern}\" \"{where_}\""))?
             }
             Tool::Glob => {
                 let pattern = call.need("pattern")?;
+                // No `resolve` here, deliberately. `glob` takes a pattern and
+                // not a path: `src/**/*.rs` names no file, and resolving it
+                // would refuse the patterns the tool exists to accept.
+                // `git ls-files` lists what the repository has, which is inside
+                // the workspace by construction.
                 self.shell(&format!("git ls-files -- \"{pattern}\""))?
             }
             Tool::Shell => {
@@ -932,6 +946,80 @@ mod tests {
     /// Diagnostic for the staging test: writing into a directory that does not
     /// exist yet should work — `write_atomic` creates parents — and the path
     /// should be reported as touched.
+    /// `X-14`: `grep`'s path is a path, though it never reached [`Host::resolve`].
+    ///
+    /// It went into `git grep`'s command line as written. What kept it from
+    /// reading anything was `git grep` refusing to look outside its work tree —
+    /// git's behaviour, not a boundary this harness kept, and true only for as
+    /// long as the command underneath stays `git grep`.
+    #[test]
+    fn greps_path_is_resolved_like_any_other() {
+        let (host, _root) = host();
+
+        for outside in ["/etc", "../../etc", "..", "C:\\Windows"] {
+            let err = host
+                .run(&Call::new(Tool::Grep).arg("pattern", "secret").arg("path", outside))
+                .expect_err("must refuse");
+            let text = format!("{err}");
+            assert!(text.contains("outside the workspace"), "{outside}: {text}");
+            // The harness refused it, not git declining afterwards.
+            assert!(!text.contains("fatal:"), "git refused it, the harness did not: {text}");
+        }
+    }
+
+    /// The refusal has to come before the command, not from reading its output.
+    #[test]
+    fn a_grep_outside_the_workspace_never_runs_the_command() {
+        let (host, root) = host();
+        let outside = root.parent().expect("a parent").join("outside-grep.txt");
+        std::fs::write(&outside, "NEEDLE-THAT-MUST-NOT-BE-FOUND").expect("write");
+
+        let outcome = host.run(
+            &Call::new(Tool::Grep)
+                .arg("pattern", "NEEDLE-THAT-MUST-NOT-BE-FOUND")
+                .arg("path", outside.parent().expect("a parent").to_str().expect("utf-8")),
+        );
+        let text = match &outcome {
+            Ok(output) => output.text.clone(),
+            Err(err) => format!("{err}"),
+        };
+        assert!(!text.contains("NEEDLE-THAT-MUST-NOT-BE-FOUND"), "it escaped: {text}");
+        assert!(outcome.is_err(), "it ran: {text}");
+
+        std::fs::remove_file(&outside).ok();
+    }
+
+    /// A pattern is not a path, and `glob` would be useless if it were.
+    #[test]
+    fn glob_still_takes_the_patterns_it_exists_for() {
+        let (host, root) = host();
+        std::fs::create_dir_all(root.join("src")).expect("mkdir");
+
+        // Not refused: these name no file, and resolving them would be wrong.
+        for pattern in ["src/**/*.rs", "*.toml", "**/mod.rs"] {
+            let outcome = host.run(&Call::new(Tool::Glob).arg("pattern", pattern));
+            if let Err(err) = &outcome {
+                let text = format!("{err}");
+                assert!(!text.contains("outside the workspace"), "{pattern}: {text}");
+            }
+        }
+    }
+
+    /// Grep inside the workspace keeps working, including where there is a space.
+    #[test]
+    fn grep_inside_the_workspace_is_not_refused() {
+        let (host, root) = host();
+        std::fs::create_dir_all(root.join("a dir")).expect("mkdir");
+
+        for inside in [".", "src", "a dir", "./src"] {
+            let outcome = host.run(&Call::new(Tool::Grep).arg("pattern", "x").arg("path", inside));
+            if let Err(err) = &outcome {
+                let text = format!("{err}");
+                assert!(!text.contains("outside the workspace"), "wrongly refused {inside}: {text}");
+            }
+        }
+    }
+
     /// `X-13`: the boundary reaches inside a command line, not just a `path`.
     #[test]
     fn a_shell_command_may_not_reach_outside_the_workspace() {
