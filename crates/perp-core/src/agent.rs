@@ -130,6 +130,13 @@ pub struct Agent<'a> {
     /// The step the current item is running under, so its calls are attributed
     /// to it rather than to nothing.
     at_step: Option<crate::step::StepId>,
+    /// Requirements whose step changed something, in the order they finished
+    /// (`V-14`).
+    ///
+    /// The same measure `V-13` ends a step on, kept rather than discarded: the
+    /// gate that runs afterwards cites these and not the batch's whole list, so
+    /// a requirement that delivered nothing cannot collect the green.
+    delivered: Vec<String>,
     now: fn() -> i64,
 }
 
@@ -155,6 +162,7 @@ impl<'a> Agent<'a> {
             pending: Vec::new(),
             touched: Vec::new(),
             at_step: None,
+            delivered: Vec::new(),
             now: crate::time::now,
         }
     }
@@ -356,6 +364,12 @@ impl<'a> Agent<'a> {
                         };
                     }
 
+                    // It changed something, so the gate that follows may cite it
+                    // (`V-14`). Recorded here, at the one place that has already
+                    // decided the step delivered, rather than re-derived later
+                    // from a summary.
+                    self.delivered.push(item.requirement.clone());
+
                     return Done::ok_with(
                         format!("{}: {}", item.requirement, first_line(&content)),
                         transcript,
@@ -495,6 +509,10 @@ impl Work for Agent<'_> {
 
     fn touched(&self) -> Vec<String> {
         self.touched.clone()
+    }
+
+    fn delivered(&self) -> Vec<String> {
+        self.delivered.clone()
     }
 
     fn drain_records(&mut self) -> Vec<crate::journal::Record> {

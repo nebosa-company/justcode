@@ -137,6 +137,25 @@ pub trait Work {
     /// Told rather than guessed: a work that mints its own step ids would be a
     /// second source of them, and every surface cites the same string (`L-22`).
     fn at_step(&mut self, _step: &StepId) {}
+
+    /// The requirements this work actually delivered something for (`V-14`).
+    ///
+    /// Delivered, not attempted. A requirement whose step read forty files and
+    /// wrote none of them is not in this list, and so collects no gate.
+    ///
+    /// Default: none. A work that cannot say what it delivered attributes no
+    /// evidence, which is the safe direction — the failure this exists for is
+    /// a requirement wearing a green gate it did nothing to earn.
+    fn delivered(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Told what the preceding work delivered, before this one runs (`V-14`).
+    ///
+    /// The gate is built before the agent runs, so it cannot know at
+    /// construction which requirements will still be standing by the time it
+    /// runs. [`crate::cycle::Then`] tells it at the hand-over.
+    fn covers(&mut self, _delivered: Vec<String>) {}
 }
 
 /// What a run did.
@@ -615,6 +634,17 @@ impl Work for Gates {
             }
             Err(e) => Done::Blocked { why: format!("gate {} could not run: {e}", gate.name) },
         }
+    }
+
+    /// Cite what the work delivered, not what it was handed (`V-14`).
+    ///
+    /// The batch's whole list goes in at construction, because the branch needs
+    /// it before anything runs. By the time the gate itself runs the agent has
+    /// finished, and the honest list is usually shorter. Cycle 10 filed three
+    /// green gates against three requirements that changed nothing: the gates
+    /// were real and green, and had measured a tree none of them had touched.
+    fn covers(&mut self, delivered: Vec<String>) {
+        self.covering = delivered;
     }
 }
 

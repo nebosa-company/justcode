@@ -181,6 +181,11 @@ impl<A: crate::engine::Work, B: crate::engine::Work> crate::engine::Work for The
             // The first is spent. Not a stop — the second half of the leg has
             // not run yet.
             self.on_second = true;
+            // The hand-over is the only moment both halves are in one place and
+            // the first has finished: the gate learns which requirements it may
+            // stand as evidence for (`V-14`).
+            let delivered = self.first.delivered();
+            self.second.covers(delivered);
         }
         self.second.next()
     }
@@ -209,6 +214,22 @@ impl<A: crate::engine::Work, B: crate::engine::Work> crate::engine::Work for The
             }
         }
         paths
+    }
+
+    fn delivered(&self) -> Vec<String> {
+        let mut ids = self.first.delivered();
+        for id in self.second.delivered() {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        ids
+    }
+
+    fn covers(&mut self, delivered: Vec<String>) {
+        // A `Then` nested in another passes it on to whichever half has not run.
+        self.first.covers(delivered.clone());
+        self.second.covers(delivered);
     }
 
     fn drain_records(&mut self) -> Vec<crate::journal::Record> {
@@ -703,6 +724,74 @@ path.requirements = .harness/perpetum.md
         .expect("binding");
         let binding = crate::Binding::load(&dir).expect("load");
         (dir, binding)
+    }
+
+    /// `V-14`: the gate is told what the work delivered, not what it was given.
+    ///
+    /// Cycle 10 filed three green gates against `L-23`, `M-29` and `M-27` on a
+    /// cycle that changed no source at all. The gates were real and green; they
+    /// had measured a tree none of those requirements had touched.
+    #[test]
+    fn a_gate_cites_only_the_requirements_that_delivered() {
+        use crate::engine::{Done, Task, Work};
+
+        /// A first half that was handed three requirements and delivered one.
+        #[derive(Default)]
+        struct Half {
+            done: bool,
+        }
+        impl Work for Half {
+            fn next(&mut self) -> Option<Task> {
+                if self.done {
+                    return None;
+                }
+                Some(Task::new("work"))
+            }
+            fn perform(&mut self, _task: &Task) -> Done {
+                self.done = true;
+                Done::ok("delivered M-29 only")
+            }
+            fn spend(&self) -> Spend {
+                Spend::default()
+            }
+            fn delivered(&self) -> Vec<String> {
+                vec!["M-29".to_string()]
+            }
+        }
+
+        /// A second half that records what it was told to cover.
+        #[derive(Default)]
+        struct Recorder {
+            covering: Vec<String>,
+            asked: bool,
+        }
+        impl Work for Recorder {
+            fn next(&mut self) -> Option<Task> {
+                if self.asked {
+                    return None;
+                }
+                Some(Task::new("gate"))
+            }
+            fn perform(&mut self, _task: &Task) -> Done {
+                self.asked = true;
+                Done::ok("gate is green")
+            }
+            fn spend(&self) -> Spend {
+                Spend::default()
+            }
+            fn covers(&mut self, delivered: Vec<String>) {
+                self.covering = delivered;
+            }
+        }
+
+        let mut leg = Then::new(Half::default(), Recorder::default());
+        // Drive it the way the engine does: next/perform until it is spent.
+        while let Some(task) = leg.next() {
+            leg.perform(&task);
+        }
+
+        // Not the batch's three. The one that changed something.
+        assert_eq!(leg.second().covering, vec!["M-29".to_string()]);
     }
 
     #[test]
