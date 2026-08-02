@@ -6,11 +6,11 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built. Nothing open but `M-25`, which waits on someone else.** This document is the requirements source for the
+**Status: built, with one open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 13: **168 of 169 requirements are done**, 0 open, 1 external-gated
+As of cycle 14: **168 of 170 requirements are done**, 1 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
@@ -637,6 +637,7 @@ Speculative, and the reason this document lives in this repo.
 | ✅ ~~`I-3`~~ | The panel hosts chat, the approvals queue, the current diff, the artifact view and a journal timeline. Approving from the panel opens the diff first. |
 | ✅ ~~`I-4`~~ | Existing editor surfaces are reused where they fit: the Problems panel for gate failures, the terminal dock for gate transcripts, tabs for the files under edit. |
 | ✅ ~~`I-5`~~ | The panel is a view onto the journal, not a second source of truth. Closing the editor does not stop the loop; reopening re-attaches. |
+| `I-6` | The panel reads like the editor beside it: same typeface, same size, and it follows zoom. It sat at a fixed `0.85rem` in the editor's proportional stack while everything around it grew — the one surface that ignored View → Zoom, docked against the one surface that defines what the current size is. Named once as `--editor-font` and `--editor-font-size` rather than copied, because a second list of fallbacks is a second thing to keep in step, and set from `setFontSize` on every zoom and on load so the panel is right before the first zoom rather than only after one. |
 
 ---
 
