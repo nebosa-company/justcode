@@ -541,6 +541,24 @@ pub fn unbacked_citations(diff: &str, open: &BTreeSet<String>) -> Vec<Unbacked> 
             state.harvest(&mut claims, &file, &mut tested, &mut already);
             file = path.trim().to_string();
             state = Judging::default();
+            // Only where a test could live. Two separate failures argued for
+            // this and neither was predicted.
+            //
+            // Prose is not a claim about behaviour, and the requirements source
+            // least of all: `V-9` makes it the one place ids are *minted*, so
+            // every new requirement arrives as an id nothing implements yet.
+            // The first run reported the commit that filed `T-20` and `M-30` as
+            // two lies, which is what defining a requirement looks like to a
+            // checker that cannot tell a definition from an assertion.
+            //
+            // Worse, and quieter: the journal is a transcript of runs, and a
+            // run's output contains the literal `#[test]`. Reading it flipped
+            // this into "inside a test" and put every id after that into the
+            // backed set — so a change carrying a journal entry could clear any
+            // claim at all. A checker that reads its own logs believes them.
+            if !file.ends_with(".rs") {
+                file.clear();
+            }
             continue;
         }
         if line.starts_with("---") || line.starts_with("+++") {
@@ -777,6 +795,42 @@ mod tests {
         let ids: Vec<String> =
             unbacked_citations(diff, &open(&["X-13"])).into_iter().map(|u| u.id).collect();
         assert_eq!(ids, vec!["X-13".to_string()]);
+    }
+
+    /// Defining a requirement is not claiming to have built it.
+    ///
+    /// `V-9` makes the requirements source the one place ids are minted, so a
+    /// new row is always an id nothing implements yet. The first run of this
+    /// rule reported the very commit that filed `T-20` and `M-30` as two lies.
+    #[test]
+    fn a_requirement_being_defined_is_not_a_claim() {
+        let diff = "--- a/.harness/perpetum.md
++++ b/.harness/perpetum.md
++| `T-20` | A caller that needs a command's whole output can get it. |
++| `M-30` | The concurrency bound holds on every path that reaches a link. |
+";
+        assert_eq!(unbacked_citations(diff, &open(&["T-20", "M-30"])), vec![]);
+    }
+
+    /// A transcript that quotes `#[test]` does not make a claim true.
+    ///
+    /// The journal records what runs printed, and a run prints test names. The
+    /// probe against real commits caught this: reading `journal.jsonl` flipped
+    /// the scanner into "inside a test", and every id after it went into the
+    /// backed set — so a change that happened to carry a journal entry could
+    /// clear any claim at all. Only `.rs` is read now.
+    #[test]
+    fn a_journal_quoting_a_test_does_not_back_anything() {
+        let diff = "--- a/crates/perp-core/src/thing.rs
++++ b/crates/perp-core/src/thing.rs
++//! Implements `L-24`.
+--- a/.harness/journal.jsonl
++++ b/.harness/journal.jsonl
++{\"detail\":\"running #[test] about `L-24` ... ok\"}
+";
+        let ids: Vec<String> =
+            unbacked_citations(diff, &open(&["L-24"])).into_iter().map(|u| u.id).collect();
+        assert_eq!(ids, vec!["L-24".to_string()], "a log is not a test");
     }
 
     /// A change is judged whole, not file by file.
