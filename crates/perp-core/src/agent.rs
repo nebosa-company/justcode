@@ -66,6 +66,37 @@ pub const MAX_TURNS: u32 = 100;
 /// that keeps finding new things to read forever.
 pub const MAX_QUIET_TURNS: u32 = 4;
 
+/// Turns a step may spend changing nothing before it is told so (`L-25`).
+///
+/// `V-13` decides the same thing, at scoring time — which is after the model
+/// has stopped and can do nothing with the answer. Cycle 12 raised the ceiling
+/// to a hundred and no step reached it: three of them read for 47, 59 and 56
+/// turns, concluded they understood the problem, and wrote a summary. Nothing
+/// had told them the job was an edit.
+///
+/// Eight rather than two. Reading before editing is what a careful step does,
+/// and a notice on the second turn would fire on every competent one; by the
+/// eighth, a step is reading instead of working. It repeats every turn after
+/// that, because a notice delivered once at turn eight is a long way back in
+/// the context by turn fifty, and it stops the moment anything is written.
+pub const TELL_AFTER_TURNS: u32 = 8;
+
+/// What a step that has changed nothing is told (`L-25`).
+///
+/// States the count, the consequence and nothing else. It does not say *make an
+/// edit*: a step that genuinely has nothing to change should still end having
+/// changed nothing, and `V-13` is explicit that this is the intended answer
+/// rather than a cost of the rule. Telling it the outcome and leaving the
+/// decision where it belongs is the difference between informing a model and
+/// steering it into writing something to get past a check.
+fn notice(requirement: &str, turns: u32) -> String {
+    format!(
+        "\n[`L-25`] {turns} turns on {requirement}, and nothing has been written, \
+         patched or deleted yet. A step that ends having changed nothing is \
+         recorded as failed whatever its summary says (`V-13`).\n"
+    )
+}
+
 /// Whether a call changes the workspace, and so counts as progress (`L-11`).
 fn is_progress(call: &Call) -> bool {
     matches!(call.tool, crate::tool::Tool::Write | crate::tool::Tool::Patch | crate::tool::Tool::Shell)
@@ -401,7 +432,16 @@ impl<'a> Agent<'a> {
                         link: served.link.clone(),
                         tokens: self.spend.tokens,
                     });
-                    let results = self.run_calls(&calls);
+                    let mut results = self.run_calls(&calls);
+                    // `L-25`: told while it can still act. The same measure
+                    // `V-13` ends the step on, read one turn at a time instead
+                    // of once at the end, and appended to the results because
+                    // that is the message the model reads before deciding what
+                    // to do next. It goes into the transcript too, so a reader
+                    // can see the step was told and what it did about it.
+                    if turns >= TELL_AFTER_TURNS && self.touched.len() == touched_before {
+                        results.push_str(&notice(&item.requirement, turns));
+                    }
                     transcript.push_str(&results);
                     messages.push(Message::assistant(content));
                     // The results go back as a *user* message, wrapped. There is
@@ -1328,6 +1368,79 @@ command: echo hi
             vec!["src/new.py".to_string(), "f.txt".to_string()],
             "writes and patches, in first-touch order, deduplicated — and reads and              shells are not files this step wrote"
         );
+    }
+
+    /// `L-25`: the step is told while it can still act, not at scoring time.
+    ///
+    /// Cycle 12 is the case. Three steps read for 47, 59 and 56 turns, decided
+    /// they understood the problem and wrote a summary; `V-13` failed them
+    /// afterwards, which is correct and far too late to be useful to them.
+    #[test]
+    fn a_step_that_has_written_nothing_is_told_while_it_can_still_act() {
+        let dir = tmpdir("agent-l25");
+        for n in 0..30 {
+            std::fs::write(dir.join(format!("f{n}.txt")), "x\n").expect("write");
+        }
+        // Every reply is a good call, and every one only reads: distinct paths,
+        // so `L-12`'s repetition rule never fires and the ceiling is the only
+        // other thing that could stop it.
+        let reads: Vec<String> = (0..30)
+            .map(|n| format!("```perp-call\ntool: read\npath: f{n}.txt\n```"))
+            .collect();
+        let transport = Scripted::new(reads.iter().map(String::as_str).collect());
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-25", "read and read", "try").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let _ = agent.perform(&task);
+
+        // What the model was actually sent, which is the only thing that
+        // matters: a notice the loop keeps to itself is not a notice.
+        let sent = transport.seen.borrow().join("\n");
+        // Not `contains("L-25")`. That passes with the notice removed, because
+        // `L-25` is the requirement id and rides along in the brief — the
+        // disarmed run said so. Only text the notice alone produces is evidence
+        // that the notice arrived.
+        assert!(
+            sent.contains("nothing has been written"),
+            "the notice did not reach the wire: {}",
+            &sent[sent.len().saturating_sub(400)..]
+        );
+        assert!(sent.contains("recorded as failed"), "the consequence was not stated");
+    }
+
+    /// And it stops the moment the step writes, or it is just noise.
+    #[test]
+    fn the_notice_stops_once_the_step_has_written_something() {
+        let dir = tmpdir("agent-l25-quiet");
+        std::fs::write(dir.join("f.txt"), "x\n").expect("write");
+        // Writes on the first turn, then reads distinct paths for a long time.
+        let mut script = vec!["```perp-call\ntool: write\npath: out.txt\ncontent: hi\n```".to_string()];
+        for n in 0..20 {
+            std::fs::write(dir.join(format!("g{n}.txt")), "x\n").expect("write");
+            script.push(format!("```perp-call\ntool: read\npath: g{n}.txt\n```"));
+        }
+        let transport = Scripted::new(script.iter().map(String::as_str).collect());
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-25", "write then read", "try").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let _ = agent.perform(&task);
+
+        let sent = transport.seen.borrow().join("\n");
+        assert!(!sent.contains("nothing has been written"), "it nagged a step that had written");
     }
 
     #[test]
