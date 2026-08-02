@@ -1481,6 +1481,46 @@ mod tests {
         assert!(text.contains("sonnet-misspelled"), "{text}");
     }
 
+    /// `M-27` through the path the loop actually takes.
+    ///
+    /// The two tests above prove `capabilities` answers correctly when asked
+    /// directly. Nothing asks it directly: `Agent::work` calls it and discards
+    /// the error with `.ok()`, deliberately, because a failed probe says
+    /// nothing about a model's abilities. So the requirement's claim — that a
+    /// misspelled model is caught rather than discovered by a failing call —
+    /// rests entirely on `call()` falling the link through, and that is what
+    /// this checks.
+    #[test]
+    fn a_misspelled_subprocess_model_falls_the_link_through_in_the_real_path() {
+        let dir = tmpdir("subprocess-model-fallthrough");
+        let stub = stub_claude(&dir, false);
+        let _bin = ClaudeBin::set(&stub);
+
+        let transport = Canned::new(vec![]);
+        let mut client = Client::new(&transport);
+        let links = claude_cli_link("sonnet-misspelled");
+
+        let err = client
+            .call(
+                &links,
+                Role::Coder,
+                &ChatRequest::new(vec![Message::user("hi")]),
+                &AssumeHealthy,
+                Mode::Any,
+                1000,
+            )
+            .expect_err("the only link names a model the command rejects");
+
+        let text = format!("{err}");
+        // Named as configuration, not as a bare exit code — the whole point of
+        // `M-14`, which `M-27` extends to the link kind it could not reach.
+        assert!(text.contains("link.cli.model"), "{text}");
+        assert!(text.contains("sonnet-misspelled"), "{text}");
+        // And it never reached the wire: no server was asked, because there is
+        // no server to ask.
+        assert!(transport.seen.borrow().is_empty(), "{:?}", transport.seen.borrow());
+    }
+
     #[test]
     fn a_subprocess_links_concurrency_bound_is_honoured_by_the_router() {
         // `M-28`: `M-15`'s permit is acquired in `call()` before it dispatches

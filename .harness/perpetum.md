@@ -6,11 +6,11 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with six open.** This document is the requirements source for the
+**Status: built, with four open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 12: **160 of 167 requirements are done**, 6 open, 1 external-gated
+As of cycle 13: **162 of 167 requirements are done**, 4 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
@@ -32,8 +32,6 @@ subscription.
 Not from reading the code. Each was found by a real cycle against a real
 workspace, and each has a transcript behind it. Still open:
 
-- `M-27` — `M-14`'s probe is skipped for a link with no server to ask.
-- `M-28` — nothing bounds how many agent processes a batch spawns.
 - `M-29` — a link that cannot cache reports zeroes indistinguishable from a
   broken ledger.
 - `L-23` — thirteen tool calls before the first edit, on a one-file batch.
@@ -47,9 +45,21 @@ They are the first entries here proposed rather than asked for.
 `L-25` was the one that named a cause rather than a detection, and is closed in
 `f106fe2`. The measure `V-13` keeps is now read one turn at a time and appended
 to the tool results, so a step that has written nothing by its eighth turn is
-told so while there is still something it can do about it. Whether that changes
-what a cycle delivers is not yet known: sixteen attempts across cycles 9 to 12
-produced no code, and the next cycle is the first test of it.
+told so while there is still something it can do about it.
+
+**Cycle 13 wrote code.** `M-27` and `M-28` are marked from it — 132 lines, seven
+functions and three tests, the loop's first delivery after sixteen attempts
+across cycles 9 to 12 that produced no bytes at all. `L-25` is the only thing
+that changed, which is one run and not proof, and it is the one variable.
+
+It arrived with a defect its own gate caught. The three new tests each set
+`PERP_CLAUDE_BIN`, a process-global, and cargo runs tests as threads in one
+process: each passed alone twelve times out of twelve, and the full suite went
+red in three runs out of six. The gate went red at `c13/b2/s194`, every step
+failed, and nothing was marked — real code arrived, was found broken, and
+claimed nothing, which is the whole apparatus behaving correctly on the first
+run where it had something to judge. Fixed in `0ef08b5` and marked in
+`c13/verify/s02`, on the requirement text rather than on the green suite.
 
 `V-14` came out of cycle 10 and is closed in `8936558`. The batch took its ids
 before the agent ran, because the branch needs them, so the gate filed its
@@ -362,8 +372,8 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | id | Requirement |
 |---|---|
 | ⛔ `M-25` | An `lmlink` link cannot be reached by a base-URL swap: a peer's models are absent from the local REST listing, and `lms` selects the device from a **global** preferred-device setting rather than a per-call argument. Until LM Studio exposes per-request device selection, inference on a peer is **external-gated** — it needs the LM Studio SDK or a global setting change, and a loop that flipped a global setting to route one call would be changing the operator's environment underneath them. Measured in `c2/b10/s01`. |
-| `M-27` | A subprocess link's model is verified against what the command accepts. `M-14`'s probe asks a server which models it serves, so it is skipped entirely for a link that has no server — and a `claude-cli` link with a misspelled model is discovered by a failing call rather than at startup, which is the failure `M-14` exists to prevent. |
-| `M-28` | A subprocess link declares a concurrency bound and the router honours it, as `M-15` requires of an HTTP link. Nothing stops a batch spawning one command per parallel item today, and each is a whole agent process rather than a socket. |
+| ✅ ~~`M-27`~~ | A subprocess link's model is verified against what the command accepts. `M-14`'s probe asks a server which models it serves, so it is skipped entirely for a link that has no server — and a `claude-cli` link with a misspelled model is discovered by a failing call rather than at startup, which is the failure `M-14` exists to prevent. |
+| ✅ ~~`M-28`~~ | A subprocess link declares a concurrency bound and the router honours it, as `M-15` requires of an HTTP link. Nothing stops a batch spawning one command per parallel item today, and each is a whole agent process rather than a socket. |
 | ✅ ~~`M-16`~~ | **Warm before a batch.** LM Studio JIT-loads models; a cold 30B load is minutes. The engine pre-loads the batch's links and holds them with a TTL longer than the batch's expected duration. |
 | ✅ ~~`M-17`~~ | Never force two large models onto one host concurrently. The router treats a host's VRAM as a lease. |
 | ✅ ~~`M-18`~~ | Use TTFT and tok/s from `/api/v0` to keep a rolling throughput estimate per link, and use it for both scheduling and the wall-clock budget. |
