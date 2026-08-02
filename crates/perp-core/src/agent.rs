@@ -264,6 +264,8 @@ impl<'a> Agent<'a> {
         let mut quiet = 0;
         // Every call signature this step has already made (`L-12`).
         let mut asked: std::collections::HashSet<String> = std::collections::HashSet::new();
+        // `L-23`: journalled once, on the turn that makes the first call.
+        let mut stated = false;
         // What the workspace looked like before this step wrote anything, so
         // the end of it can tell whether it did (`V-13`).
         let touched_before = self.touched.len();
@@ -411,6 +413,24 @@ impl<'a> Agent<'a> {
                     );
                 }
                 Next::Calls(calls) => {
+                    // `L-23`: what the step said it was going to do, recorded
+                    // before the calls it said it about. The system prompt has
+                    // asked for this since `1dc3884`; nothing kept it, so a
+                    // batch that opened with `pwd`, `ls` and `echo hello` left
+                    // no trace of having been asked not to. Journalled from the
+                    // same reply that carries the first call, because the prose
+                    // precedes the call inside it and a separate round trip to
+                    // collect an intent would cost the turn `L-23` is about.
+                    if !stated {
+                        stated = true;
+                        if let Some(step) = self.at_step.clone() {
+                            self.pending.push(crate::journal::Record::intent(
+                                step,
+                                (self.now)(),
+                                intent_from(&content, &item.requirement),
+                            ));
+                        }
+                    }
                     // New information counts as progress: a call whose
                     // signature has not been made before in this step told the
                     // model something it did not have (`L-11`, `L-12`).
@@ -530,6 +550,36 @@ impl<'a> Agent<'a> {
             self.touched.push(path);
         }
     }
+}
+
+/// What the step said it was about to do, for the journal (`L-23`).
+///
+/// The first line of the reply that carried the first call. One line because
+/// this is an index entry and not a transcript — the whole reply is already in
+/// the step's detail, and a journal nobody can skim is a journal nobody reads.
+///
+/// A step that stated nothing is recorded as having stated nothing, rather than
+/// left out. `L-23` was filed on a batch that opened with `pwd`, `ls` and `echo
+/// hello`, and the useful record of that is not silence: it is a line saying
+/// the step went straight to its tools, which is the behaviour the requirement
+/// exists to make visible.
+fn intent_from(content: &str, requirement: &str) -> String {
+    // Only what comes *before* the call. On the fenced rungs the call is part
+    // of the same message, so reading the first line of the whole reply
+    // returned "```perp-call" and recorded the tool block as the plan — a step
+    // that said nothing and one that said something would both have been
+    // journalled as having spoken.
+    let prose: String = content
+        .lines()
+        .take_while(|line| !line.trim_start().starts_with("```"))
+        .collect::<Vec<&str>>()
+        .join("
+");
+    let said = first_line(&prose);
+    if said.trim().is_empty() {
+        return format!("{requirement}: stated no intent before its first tool call");
+    }
+    format!("{requirement}: {said}")
 }
 
 fn first_line(text: &str) -> String {
@@ -915,6 +965,87 @@ replace: after
         assert!(matches!(agent.perform(&task), Done::Ok { .. }));
     }
 
+    /// `L-23`: what a step said it was about to do is on the record.
+    ///
+    /// The system prompt has asked for this since `1dc3884`, and nothing kept
+    /// the answer — so a batch that opened with `pwd`, `ls` and `echo hello`
+    /// left no trace of having been asked not to.
+    #[test]
+    fn what_a_step_intended_is_journalled_before_its_calls() {
+        let dir = tmpdir("agent-l23");
+        std::fs::write(dir.join("f.txt"), "x
+").expect("write");
+        let transport = Scripted::new(vec![
+            "I am going to read f.txt and then patch it.
+
+```perp-call
+tool: read
+path: f.txt
+```",
+            "Read it.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-23", "say first", "try").expect("item")],
+        );
+        let step = crate::step::StepId::new(1, "b1", 1).expect("step");
+        Work::at_step(&mut agent, &step);
+        let task = Work::next(&mut agent).expect("one item");
+        agent.perform(&task);
+
+        let records = Work::drain_records(&mut agent);
+        let intents: Vec<_> =
+            records.iter().filter(|r| r.kind == crate::journal::Kind::Intent).collect();
+        assert_eq!(intents.len(), 1, "once per step: {records:?}");
+        assert!(intents[0].summary.contains("read f.txt"), "{}", intents[0].summary);
+        assert!(intents[0].summary.contains("L-23"), "{}", intents[0].summary);
+    }
+
+    /// The case it was filed on: straight to the tools, saying nothing.
+    ///
+    /// Recorded as having stated nothing rather than left out. Silence in the
+    /// journal is indistinguishable from a step that was never asked, and the
+    /// whole point is to make this behaviour visible.
+    #[test]
+    fn a_step_that_states_nothing_is_recorded_as_having_stated_nothing() {
+        let dir = tmpdir("agent-l23-silent");
+        std::fs::write(dir.join("f.txt"), "x
+").expect("write");
+        let transport = Scripted::new(vec![
+            "```perp-call
+tool: read
+path: f.txt
+```",
+            "Done.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-23", "say nothing", "try").expect("item")],
+        );
+        let step = crate::step::StepId::new(1, "b1", 1).expect("step");
+        Work::at_step(&mut agent, &step);
+        let task = Work::next(&mut agent).expect("one item");
+        agent.perform(&task);
+
+        let records = Work::drain_records(&mut agent);
+        let intents: Vec<_> =
+            records.iter().filter(|r| r.kind == crate::journal::Kind::Intent).collect();
+        assert_eq!(intents.len(), 1, "still exactly one: {records:?}");
+        assert!(
+            intents[0].summary.contains("stated no intent"),
+            "the silence is the record: {}",
+            intents[0].summary
+        );
+    }
+
     #[test]
     fn every_model_call_reaches_the_journal() {
         // `M-11`, found by the first unattended cycle. The run reported
@@ -950,13 +1081,22 @@ path: f.txt
         agent.perform(&task);
 
         let records = Work::drain_records(&mut agent);
-        assert_eq!(records.len(), 2, "one per call, both turns: {records:?}");
-        for record in &records {
+        // Split by kind rather than loosened to a range: `M-11` wants one cost
+        // record per call and `L-23` wants exactly one intent, and "three
+        // records of some sort" would satisfy neither.
+        let costed: Vec<_> =
+            records.iter().filter(|r| r.kind == crate::journal::Kind::Outcome).collect();
+        let intents: Vec<_> =
+            records.iter().filter(|r| r.kind == crate::journal::Kind::Intent).collect();
+        assert_eq!(costed.len(), 2, "one per call, both turns: {records:?}");
+        assert_eq!(intents.len(), 1, "`L-23`: stated once, not once a turn: {records:?}");
+        for record in &costed {
             assert_eq!(record.step, step, "attributed to the step that made it");
             let entry = crate::cost::from_record(record).expect("a ledger entry");
             assert_eq!(entry.link, "here");
             assert!(entry.usage.total() > 0, "with real token counts");
         }
+        assert_eq!(intents[0].step, step, "the intent is attributed too");
 
         // And the ledger — which is what `perp cost` reads — now sees them.
         let ledger = crate::cost::Ledger::replay(&records);

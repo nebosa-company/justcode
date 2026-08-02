@@ -6,18 +6,18 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with two open.** This document is the requirements source for the
+**Status: built, with one open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 13: **166 of 169 requirements are done**, 2 open, 1 external-gated
+As of cycle 13: **167 of 169 requirements are done**, 1 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
 over a `curl` transport exercised against a live LM Studio, cost accounting
 replayed from the journal, the tool host and its permission classifier, **the
 loop driver**, and the chat surface with `/btw` — in [`crates/`](../crates/),
-628 tests, at version 0.2.0.
+630 tests, at version 0.2.0.
 
 **The harness runs a batch on its own, against a real model.** `perp run
 --requirement <id>` asks a link, parses tool calls through the degradation
@@ -34,7 +34,16 @@ workspace, and each has a transcript behind it. Still open:
 
 - `M-29` — a link that cannot cache reports zeroes indistinguishable from a
   broken ledger.
-- `L-23` — thirteen tool calls before the first edit, on a one-file batch.
+
+`L-23` is closed, and half of it had been done for some time without anyone
+noticing the other half was not. The system prompt has told a step to state its
+intent before its first tool call since `1dc3884`; nothing kept the answer, so a
+batch that opened with `pwd`, `ls` and `echo hello` left no trace of having been
+asked not to. The intent is now journalled from the reply that carries the first
+call — from that reply rather than a separate round trip, because asking for it
+in its own turn would spend exactly the turn `L-23` exists to save. A step that
+states nothing is recorded as having stated nothing, which is the case the
+requirement was filed on and the one worth being able to find.
 
 `T-20` and `M-30` were both found while verifying something else — the first by
 planting a claim to see whether `V-15` would catch it, and it did not, because
@@ -312,7 +321,7 @@ An unattended loop with no ceiling is a billing incident.
 | ✅ ~~`L-13`~~ | **Thrash watchdog:** a file edited to a previously seen content hash within a batch is flagged; twice, the feature is blocked. |
 | ✅ ~~`L-14`~~ | Stop conditions are exactly Perpetum F's: backlog exhausted, batch blocked, or a human says stop. Each writes a distinct terminal record. |
 | ✅ ~~`L-15`~~ | The loop stops *clean*: no half-applied patch, no dangling branch, no running child process. |
-| `L-23` | A step states what it intends to do before its first tool call, and the intent is journalled. A batch that opens with `pwd`, `ls` and `echo hello` has spent its turns establishing that the harness is real, which is a reasonable thing for an agent to wonder and an expensive way to answer it. Measured: thirteen tool calls before the first edit, on a batch that had one file to change. |
+| ✅ ~~`L-23`~~ | A step states what it intends to do before its first tool call, and the intent is journalled. A batch that opens with `pwd`, `ls` and `echo hello` has spent its turns establishing that the harness is real, which is a reasonable thing for an agent to wonder and an expensive way to answer it. Measured: thirteen tool calls before the first edit, on a batch that had one file to change. |
 | ✅ ~~`L-24`~~ | Progress means the workspace changed, measured and not guessed from the tool name. `is_progress` counts `shell` as progress on the grounds that it "changes the workspace", and mostly it does not: twenty of cycle 12's twenty-three `shell` calls were `grep`. So `L-11`'s quiet-turn watchdog is unreachable — a step that greps through `shell` every fourth turn resets the counter forever, and cycles 10 to 12 never once fired it across steps of 40, 47, 56 and 59 turns. `V-13` already computes the honest measure, which is whether the touched set grew. |
 | ✅ ~~`L-25`~~ | A step is told, while it can still act, that it has changed nothing. `V-13` decides a step wrote nothing at scoring time, which is after the model has stopped and cannot do anything about it. Cycle 12 raised the ceiling to 100 and no step reached it: `M-29`, `M-27` and `M-28` read for 47, 59 and 56 turns, concluded they understood the problem, and wrote a summary. Nothing had told them the job was an edit. The measure `V-13` keeps is the one to feed back, and the tool result is where it reaches the model. |
 | ✅ ~~`L-16`~~ | Two attempts at a failing gate, then `BLOCKED` with the **verbatim error text** (Perpetum 0.5). The engine enforces the count; the model cannot ask for a third. |
