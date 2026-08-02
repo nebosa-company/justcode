@@ -6,11 +6,11 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with seven open.** This document is the requirements source for the
+**Status: built, with six open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 12: **159 of 167 requirements are done**, 7 open, 1 external-gated
+As of cycle 12: **160 of 167 requirements are done**, 6 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
@@ -39,14 +39,17 @@ workspace, and each has a transcript behind it. Still open:
 - `L-23` — thirteen tool calls before the first edit, on a one-file batch.
 - `L-24` — `is_progress` counts `shell` as changing the workspace, so `L-11`'s
   watchdog has never once fired.
-- `L-25` — nothing tells a step it has changed nothing until after it has
-  stopped.
 - `V-15` — a step may cite a requirement without a test, and cycle 9 did.
 
-The last three came out of cycles 10 to 12, and out of reading what those cycles
-did. They are the first entries here proposed rather than asked for. `L-25` is
-the one that names a cause: the other two catch a failure after it has happened,
-and that one is about the step knowing while it can still act.
+These came out of cycles 10 to 12, and out of reading what those cycles did.
+They are the first entries here proposed rather than asked for.
+
+`L-25` was the one that named a cause rather than a detection, and is closed in
+`f106fe2`. The measure `V-13` keeps is now read one turn at a time and appended
+to the tool results, so a step that has written nothing by its eighth turn is
+told so while there is still something it can do about it. Whether that changes
+what a cycle delivers is not yet known: sixteen attempts across cycles 9 to 12
+produced no code, and the next cycle is the first test of it.
 
 `V-14` came out of cycle 10 and is closed in `8936558`. The batch took its ids
 before the agent ran, because the branch needs them, so the gate filed its
@@ -256,7 +259,7 @@ An unattended loop with no ceiling is a billing incident.
 | ✅ ~~`L-15`~~ | The loop stops *clean*: no half-applied patch, no dangling branch, no running child process. |
 | `L-23` | A step states what it intends to do before its first tool call, and the intent is journalled. A batch that opens with `pwd`, `ls` and `echo hello` has spent its turns establishing that the harness is real, which is a reasonable thing for an agent to wonder and an expensive way to answer it. Measured: thirteen tool calls before the first edit, on a batch that had one file to change. |
 | `L-24` | Progress means the workspace changed, measured and not guessed from the tool name. `is_progress` counts `shell` as progress on the grounds that it "changes the workspace", and mostly it does not: twenty of cycle 12's twenty-three `shell` calls were `grep`. So `L-11`'s quiet-turn watchdog is unreachable — a step that greps through `shell` every fourth turn resets the counter forever, and cycles 10 to 12 never once fired it across steps of 40, 47, 56 and 59 turns. `V-13` already computes the honest measure, which is whether the touched set grew. |
-| `L-25` | A step is told, while it can still act, that it has changed nothing. `V-13` decides a step wrote nothing at scoring time, which is after the model has stopped and cannot do anything about it. Cycle 12 raised the ceiling to 100 and no step reached it: `M-29`, `M-27` and `M-28` read for 47, 59 and 56 turns, concluded they understood the problem, and wrote a summary. Nothing had told them the job was an edit. The measure `V-13` keeps is the one to feed back, and the tool result is where it reaches the model. |
+| ✅ ~~`L-25`~~ | A step is told, while it can still act, that it has changed nothing. `V-13` decides a step wrote nothing at scoring time, which is after the model has stopped and cannot do anything about it. Cycle 12 raised the ceiling to 100 and no step reached it: `M-29`, `M-27` and `M-28` read for 47, 59 and 56 turns, concluded they understood the problem, and wrote a summary. Nothing had told them the job was an edit. The measure `V-13` keeps is the one to feed back, and the tool result is where it reaches the model. |
 | ✅ ~~`L-16`~~ | Two attempts at a failing gate, then `BLOCKED` with the **verbatim error text** (Perpetum 0.5). The engine enforces the count; the model cannot ask for a third. |
 
 ### 2.4 Concurrency
