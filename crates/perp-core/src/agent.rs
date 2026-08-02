@@ -1455,6 +1455,45 @@ command: echo hi
         assert!(!sent.contains("nothing has been written"), "it nagged a step that had written");
     }
 
+    /// `L-24`: progress is what happened, not which tool was named.
+    ///
+    /// `is_progress` counted `Tool::Shell` on the grounds that it "changes the
+    /// workspace". Twenty of cycle 12's twenty-three `shell` calls were `grep`,
+    /// so every one reset the quiet counter, and `L-11`'s watchdog never fired
+    /// once across steps of 40, 47, 56 and 59 turns — the turn ceiling was the
+    /// only thing that ever stopped a step.
+    ///
+    /// The code arrived from cycle 13 with no test, which is `V-15`'s case
+    /// exactly: the citation was in two comments and nothing would have noticed
+    /// if it stopped being true.
+    #[test]
+    fn repeating_a_shell_command_is_not_progress_merely_for_being_shell() {
+        let dir = tmpdir("agent-l24");
+        // The same command every turn. It changes nothing whether it runs or is
+        // refused, which is the point — neither outcome is a workspace change.
+        let same = "```perp-call\ntool: shell\ncommand: cargo --version\n```";
+        let forever: Vec<&str> = vec![same; 40];
+
+        let transport = Scripted::new(forever);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-24", "grep forever", "try").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+        let Done::Failed { summary, .. } = &done else { panic!("{done:?}") };
+        assert!(summary.contains("changed nothing"), "the watchdog fired: {summary}");
+        // Five: the first is a signature never made before and so is
+        // information; the four after it are repeats that changed nothing. With
+        // `shell` counted as progress this ran to the ceiling instead.
+        assert_eq!(agent.turns.len(), 5, "one informative turn, then four that were not");
+    }
+
     #[test]
     fn a_step_that_argues_with_itself_fails_rather_than_looping() {
         // Not a budget — `L-9` owns those. A step that has asked a model twelve
