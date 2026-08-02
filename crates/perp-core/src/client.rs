@@ -509,27 +509,51 @@ impl<'a> Client<'a> {
 
     /// The link's facts, re-fetched only when the cached ones go stale.
     fn cached_facts(&mut self, links: &Links, link: &Link, now: i64) -> Result<ModelFacts> {
-        // `M-14` asks a server which models it serves, so that a link naming one
-        // it does not have is skipped rather than earning a 400. A subprocess
-        // has no server to ask: there is no address, no `/v1/models`, and the
-        // command decides its own model from its own configuration.
-        //
-        // Probing it anyway is what made a `claude-cli` link unusable. The probe
-        // needed a `base_url`, a subprocess has none, so the link failed here —
-        // *before* it was ever run — and the chain quietly fell through to the
-        // paid link behind it. The run worked, which is what made it hard to
-        // notice: the only sign was the provenance line naming the wrong model.
-        if link.kind.is_subprocess() {
-            return Ok(ModelFacts::of(&link.model));
-        }
         let fresh = now - self.ttl_secs;
         self.facts.retain(|(_, _, at)| *at > fresh);
         if let Some((_, facts, _)) = self.facts.iter().find(|(name, _, _)| name == &link.name) {
             return Ok(facts.clone());
         }
-        let facts = self.verify_model(links, link)?;
+        // `M-14` asks a server which models it serves, so that a link naming one
+        // it does not have is skipped rather than earning a 400. A subprocess
+        // has no server to ask: there is no address, no `/v1/models`, and the
+        // command decides its own model from its own configuration — so the
+        // command itself is what gets asked instead (`M-27`), rather than
+        // nothing.
+        //
+        // Probing it with the HTTP machinery is what made a `claude-cli` link
+        // unusable before this existed: the probe needed a `base_url`, a
+        // subprocess has none, so the link failed here — *before* it was ever
+        // run — and the chain quietly fell through to the paid link behind it.
+        // The run worked, which is what made it hard to notice: the only sign
+        // was the provenance line naming the wrong model.
+        let facts = if link.kind.is_subprocess() {
+            self.verify_subprocess_model(link)?
+        } else {
+            self.verify_model(links, link)?
+        };
         self.facts.push((link.name.clone(), facts.clone(), now));
         Ok(facts)
+    }
+
+    /// Check a subprocess link's model against what the command itself accepts
+    /// (`M-27`).
+    ///
+    /// There is no server to list models against, so the command's own answer
+    /// to the smallest real request *is* the fact — nothing else can verify a
+    /// `claude-cli` link's model without inventing a list nobody maintains.
+    /// Run once per link per TTL window, cached alongside every other link's
+    /// facts, so a misspelled model surfaces as a startup-shaped error naming
+    /// `link.<name>.model` — the failure `M-14` exists to prevent — rather than
+    /// a failing call found deep inside a batch.
+    fn verify_subprocess_model(&self, link: &Link) -> Result<ModelFacts> {
+        let probe = ChatRequest::new(vec![Message::user("Reply with the single word OK.")]);
+        self.command(link, &probe).map(|_| ModelFacts::of(&link.model)).map_err(|error| {
+            Error::unbound(
+                format!("link.{}.model", link.name),
+                format!("`{}` was not accepted by the command: {error}", link.model),
+            )
+        })
     }
 
     /// Probe capabilities, cached against link + model + quantization (`M-6`).
@@ -1040,6 +1064,7 @@ pub fn models_method() -> Method {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testutil::tmpdir;
 
     #[test]
     fn the_tools_array_reaches_the_wire() {
@@ -1333,6 +1358,174 @@ mod tests {
             .verify_model(&links, links.get("here").expect("here"))
             .expect_err("must refuse");
         assert!(format!("{err}").contains("Available: something-else"), "{err}");
+    }
+
+    /// A `claude` stand-in for tests: no Anthropic account, no real CLI, just
+    /// something `command()` can actually spawn and read a JSON answer back
+    /// from. `success = false` fails the way a real `claude` fails on a model
+    /// name it does not recognise — non-zero exit, a complaint on stderr.
+    fn stub_claude(dir: &std::path::Path, success: bool) -> std::path::PathBuf {
+        if cfg!(windows) {
+            let path = dir.join("claude-stub.bat");
+            let body = if success {
+                "@echo off\r\necho {\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"OK\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\r\n"
+            } else {
+                "@echo off\r\necho model not found: no such model 1>&2\r\nexit /b 1\r\n"
+            };
+            std::fs::write(&path, body).expect("write stub");
+            path
+        } else {
+            let path = dir.join("claude-stub.sh");
+            let body = if success {
+                "#!/bin/sh\necho '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"OK\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}'\n"
+            } else {
+                "#!/bin/sh\necho 'model not found: no such model' 1>&2\nexit 1\n"
+            };
+            std::fs::write(&path, body).expect("write stub");
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = std::fs::metadata(&path).expect("meta").permissions();
+                perms.set_mode(0o755);
+                std::fs::set_permissions(&path, perms).expect("chmod");
+            }
+            path
+        }
+    }
+
+    fn claude_cli_link(model: &str) -> Links {
+        let b = '`';
+        let fence = format!("{b}{b}{b}");
+        let src = format!(
+            "{fence}perp-links\nlink.cli.kind = claude-cli\nlink.cli.model = {model}\nrole.coder = cli\n{fence}\n"
+        );
+        Links::parse(&src).expect("parse")
+    }
+
+    /// Serialises the tests that need `PERP_CLAUDE_BIN`, and puts it back.
+    ///
+    /// `set_var` writes a process-global and cargo runs tests as threads in one
+    /// process, so three tests setting the same variable raced each other:
+    /// every one passed alone, twelve times out of twelve, and the full suite
+    /// went red in three runs out of six. A test that passes in isolation and
+    /// fails in company is the shape of shared mutable state, and this is the
+    /// state it was sharing.
+    ///
+    /// Restoring on drop matters as much as the lock does. The three tests each
+    /// removed the variable on their last line, which never runs when an
+    /// assertion above it fails — so one real failure left the variable set and
+    /// the next test failed for a reason belonging to another test.
+    struct ClaudeBin(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
+
+    static CLAUDE_BIN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    impl ClaudeBin {
+        fn set(path: &std::path::Path) -> ClaudeBin {
+            // A panicking test poisons the lock. Taking it anyway is right
+            // here: the variable is restored on drop either way, and cascading
+            // one failure into every later test reports the wrong thing.
+            let guard = CLAUDE_BIN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            std::env::set_var("PERP_CLAUDE_BIN", path);
+            ClaudeBin(guard)
+        }
+    }
+
+    impl Drop for ClaudeBin {
+        fn drop(&mut self) {
+            std::env::remove_var("PERP_CLAUDE_BIN");
+        }
+    }
+
+    #[test]
+    fn a_subprocess_links_model_is_actually_checked_against_the_command() {
+        // `M-27`. Before this, a subprocess link's facts were manufactured
+        // (`ModelFacts::of`) without ever running the command — so a working
+        // model looked exactly like a misspelled one at this point, and the
+        // only real check was the first live call, deep inside a batch.
+        let dir = tmpdir("subprocess-model-ok");
+        let stub = stub_claude(&dir, true);
+        let _bin = ClaudeBin::set(&stub);
+
+        let transport = Canned::new(vec![]);
+        let mut client = Client::new(&transport);
+        let links = claude_cli_link("sonnet");
+        let link = links.get("cli").expect("cli");
+
+        client.capabilities(&links, link, 1000).expect("a command that accepts the model");
+        // The whole check went through the subprocess; no HTTP call at all,
+        // which is the point of `M-27` — there is no server to ask.
+        assert!(transport.seen.borrow().is_empty(), "{:?}", transport.seen.borrow());
+    }
+
+    #[test]
+    fn a_subprocess_links_misspelled_model_is_caught_before_a_call_is_scheduled() {
+        // The failure `M-14` exists to prevent, reproduced on the link kind
+        // `M-14`'s own probe cannot reach: a `claude-cli` link naming a model
+        // the command rejects must fail here, named as `link.<name>.model`,
+        // rather than surface as a bare 1-exit-code failure the first time the
+        // role is actually called.
+        let dir = tmpdir("subprocess-model-bad");
+        let stub = stub_claude(&dir, false);
+        let _bin = ClaudeBin::set(&stub);
+
+        let transport = Canned::new(vec![]);
+        let mut client = Client::new(&transport);
+        let links = claude_cli_link("sonnet-misspelled");
+        let link = links.get("cli").expect("cli");
+
+        let err = client
+            .capabilities(&links, link, 1000)
+            .expect_err("the command rejected the model");
+        let text = format!("{err}");
+        assert!(text.contains("link.cli.model"), "{text}");
+        assert!(text.contains("sonnet-misspelled"), "{text}");
+    }
+
+    #[test]
+    fn a_subprocess_links_concurrency_bound_is_honoured_by_the_router() {
+        // `M-28`: `M-15`'s permit is acquired in `call()` before it dispatches
+        // by kind, but `chat_raw` and `speak` both special-case
+        // `is_subprocess()` ahead of the generic HTTP path — the same shape
+        // that let a `claude-cli` link slip past `M-14`'s probe until `M-27`
+        // proved otherwise. Nothing proved the concurrency bound survived that
+        // same special case; this is that proof, for a router that will one
+        // day spawn one command per parallel batch item.
+        let dir = tmpdir("subprocess-concurrency");
+        let stub = stub_claude(&dir, true);
+        let _bin = ClaudeBin::set(&stub);
+
+        let transport = Canned::new(vec![]);
+        let mut client = Client::new(&transport);
+        let links = claude_cli_link("sonnet");
+        let link = links.get("cli").expect("cli");
+        assert_eq!(link.concurrency, 1, "the default, undeclared bound");
+
+        let permits = std::sync::Arc::clone(&client.permits);
+        let held = permits.acquire(link).expect("hold the link's one slot");
+
+        let err = client
+            .call(
+                &links,
+                Role::Coder,
+                &ChatRequest::new(vec![Message::user("hi")]),
+                &AssumeHealthy,
+                Mode::Any,
+                1000,
+            )
+            .expect_err("the subprocess link is already at its limit");
+        assert!(format!("{err}").contains("concurrency limit"), "{err}");
+
+        drop(held);
+        client
+            .call(
+                &links,
+                Role::Coder,
+                &ChatRequest::new(vec![Message::user("hi")]),
+                &AssumeHealthy,
+                Mode::Any,
+                1000,
+            )
+            .expect("released, the command is spawned and answers");
     }
 
     #[test]

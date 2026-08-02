@@ -97,11 +97,6 @@ fn notice(requirement: &str, turns: u32) -> String {
     )
 }
 
-/// Whether a call changes the workspace, and so counts as progress (`L-11`).
-fn is_progress(call: &Call) -> bool {
-    matches!(call.tool, crate::tool::Tool::Write | crate::tool::Tool::Patch | crate::tool::Tool::Shell)
-}
-
 /// One unit of work a model is asked to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
@@ -416,23 +411,27 @@ impl<'a> Agent<'a> {
                     );
                 }
                 Next::Calls(calls) => {
-                    // A turn that wrote, patched or ran something is progress.
-                    // New information counts the same as a change: a call whose
+                    // New information counts as progress: a call whose
                     // signature has not been made before in this step told the
                     // model something it did not have (`L-11`, `L-12`).
                     let learned = calls.iter().any(|call| asked.insert(call.signature()));
-                    if learned || calls.iter().any(is_progress) {
-                        quiet = 0;
-                    } else {
-                        quiet += 1;
-                    }
                     self.turns.push(Turn {
                         rung: ladder.rung().as_str().to_string(),
                         calls: calls.len(),
                         link: served.link.clone(),
                         tokens: self.spend.tokens,
                     });
-                    let mut results = self.run_calls(&calls);
+                    // `L-24`: progress is whether a call actually mutated the
+                    // workspace this turn, not which tool was named. `shell`
+                    // mostly greps; guessing from the enum made every
+                    // fourth-turn grep reset the quiet counter and made
+                    // `L-11`'s watchdog unreachable.
+                    let (mut results, progressed) = self.run_calls(&calls);
+                    if learned || progressed {
+                        quiet = 0;
+                    } else {
+                        quiet += 1;
+                    }
                     // `L-25`: told while it can still act. The same measure
                     // `V-13` ends the step on, read one turn at a time instead
                     // of once at the end, and appended to the results because
@@ -479,9 +478,16 @@ impl<'a> Agent<'a> {
         }
     }
 
-    /// Run the calls and render the results as data (`T-7`, `S-1`).
-    fn run_calls(&mut self, calls: &[Call]) -> String {
+    /// Run the calls and render the results as data (`T-7`, `S-1`). The
+    /// second return is whether any call this turn actually mutated the
+    /// workspace (`L-24`) — a fact taken from what happened, not guessed from
+    /// the tool named. `self.touched` cannot answer that alone: it is a
+    /// deduplicated set kept for staging (`G-3`), so a second write to a path
+    /// already in it — exactly what a careful model does when it verifies and
+    /// re-writes — would not grow it and would wrongly read as a quiet turn.
+    fn run_calls(&mut self, calls: &[Call]) -> (String, bool) {
         let mut out = String::new();
+        let mut progressed = false;
         for call in calls {
             let rendered = match self.host.run(call) {
                 Ok(output) => {
@@ -492,6 +498,12 @@ impl<'a> Agent<'a> {
                     // that reachable on purpose: writes to the requirements
                     // source are refused, and a refusal must not look like
                     // work.
+                    if matches!(
+                        call.tool,
+                        crate::tool::Tool::Write | crate::tool::Tool::Patch | crate::tool::Tool::Delete
+                    ) {
+                        progressed = true;
+                    }
                     self.record_touched(call);
                     output.render()
                 }
@@ -502,7 +514,7 @@ impl<'a> Agent<'a> {
             };
             out.push_str(&format!("\n{}\n{rendered}\n", call.signature()));
         }
-        out
+        (out, progressed)
     }
 
     /// Note a path a call actually changed, for staging (`G-3`) and for the
