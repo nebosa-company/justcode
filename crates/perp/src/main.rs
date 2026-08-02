@@ -501,11 +501,40 @@ fn cmd_cost(args: &[&str]) -> std::result::Result<(), String> {
     }
 
     let total = ledger.total();
+    // `M-29`: a total is only allowed to say "no prefix cache" when that is
+    // true of every link in it. One caching link among them makes the number
+    // meaningful again, and a mixed run reported as uncacheable would be the
+    // same lie in the other direction.
+    // `M-29`: how much of this ledger could not have cached, rather than a
+    // number that looks like a broken one. Counted rather than reduced to a
+    // yes/no — a ledger is rarely all one link, and this repository's own is
+    // 1519 subprocess calls out of 1523.
+    let uncacheable = match binding
+        .resolve("path.links")
+        .map_err(|e| e.to_string())
+        .and_then(|path| Links::load(&path).map_err(|e| e.to_string()))
+    {
+        Ok(links) => ledger
+            .entries
+            .iter()
+            .filter(|entry| {
+                links.get(&entry.link).ok().is_some_and(|link| !link.kind.prefix_caches())
+            })
+            .count(),
+        // Unknown links are not spoken for: an unreadable config is a reason to
+        // report the number and say nothing more.
+        Err(_) => 0,
+    };
+    let cached = perp_core::cost::cached_total_as_text(
+        total.usage.cache_hit_tokens,
+        uncacheable,
+        ledger.entries.len(),
+    );
     println!(
-        "{} calls · {} tokens in ({} cached) · {} out · {:.1}s · {:.6}",
+        "{} calls · {} tokens in ({}) · {} out · {:.1}s · {:.6}",
         total.calls,
         total.usage.input_tokens(),
-        total.usage.cache_hit_tokens,
+        cached,
         total.usage.output_tokens,
         total.latency_ms as f64 / 1000.0,
         // Six places, not four: a single call costs tens of millionths, and a
@@ -580,9 +609,12 @@ fn cmd_ask(args: &[&str]) -> std::result::Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
     println!(
-        "tokens: {} in ({} cached) / {} out",
+        "tokens: {} in ({}) / {} out",
         served.reply.usage.prompt_tokens,
-        served.reply.usage.cache_hit_tokens,
+        perp_core::cost::cached_as_text(
+            links.get(&served.link).ok().map(|link| link.kind),
+            served.reply.usage.cache_hit_tokens,
+        ),
         served.reply.usage.completion_tokens
     );
     Ok(())

@@ -6,18 +6,18 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with one open.** This document is the requirements source for the
+**Status: built. Nothing open but `M-25`, which waits on someone else.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 13: **167 of 169 requirements are done**, 1 open, 1 external-gated
+As of cycle 13: **168 of 169 requirements are done**, 0 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
 over a `curl` transport exercised against a live LM Studio, cost accounting
 replayed from the journal, the tool host and its permission classifier, **the
 loop driver**, and the chat surface with `/btw` — in [`crates/`](../crates/),
-630 tests, at version 0.2.0.
+633 tests, at version 0.2.0.
 
 **The harness runs a batch on its own, against a real model.** `perp run
 --requirement <id>` asks a link, parses tool calls through the degradation
@@ -30,10 +30,19 @@ subscription.
 ### These came from running it
 
 Not from reading the code. Each was found by a real cycle against a real
-workspace, and each has a transcript behind it. Still open:
+workspace, and each has a transcript behind it. All of them are closed now; what
+follows is what each one turned out to be.
 
-- `M-29` — a link that cannot cache reports zeroes indistinguishable from a
-  broken ledger.
+`M-29` is the last of them. A subprocess link replaces its system prompt every
+call, which is what buys the tool protocol, so `M-12`'s stable prefix is not
+stable and there is nothing for a cache to hit. The zero it reports is correct
+and reads exactly like a ledger that stopped counting — the indistinguishability
+was the defect, not the zero. The first implementation only spoke up when *every*
+link in a ledger was uncacheable, which is useless: this repository's own is 1519
+`claude-cli` calls out of 1523, and the stragglers made it fall back to a bare
+`0 cached`. Running it against the real journal is what showed that; the tests
+passed either way.
+
 
 `L-23` is closed, and half of it had been done for some time without anyone
 noticing the other half was not. The system prompt has told a step to state its
@@ -417,7 +426,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ✅ ~~`M-13`~~ | Context compaction is a first-class step run by the `compactor` role on a local link. Compaction output is journalled, so what was dropped is recoverable. |
 | ✅ ~~`M-14`~~ | Model ids, prices, context limits and endpoint paths live in config, refreshed from the provider's model list at startup. A deprecated or missing model id is a startup error naming the replacement, never a silent fallback. |
 | ✅ ~~`M-26`~~ | A declared link that no role chain names is not credential-checked at startup. `M-24` checks every declared link, so a run refuses over a link nothing would have used — which happened twice on a workspace configured entirely for another provider, and the only fix was to set a variable for an endpoint that was never going to be called. |
-| `M-29` | A link that cannot use prefix caching reports that, rather than reporting zeroes. Replacing a subprocess link's system prompt is what buys the tool protocol and it costs the cache with it, so `M-12` does not apply and a column of zeroes is a property of the link rather than a broken ledger — but nothing says so, and the two look identical. |
+| ✅ ~~`M-29`~~ | A link that cannot use prefix caching reports that, rather than reporting zeroes. Replacing a subprocess link's system prompt is what buys the tool protocol and it costs the cache with it, so `M-12` does not apply and a column of zeroes is a property of the link rather than a broken ledger — but nothing says so, and the two look identical. |
 | ✅ ~~`M-24`~~ | Declared credentials are checked when the project is bound, not at first use. A link whose `auth_env` names an unset variable must fail `perp bind`, not the eleventh call of a batch — by which point the loop has spent an hour to discover a typo. Found in `c2/b8/s06`, where a local link with an optional token failed before it ever tried to connect. |
 | ✅ ~~`M-15`~~ | Per-link concurrency limits are respected. One GPU serving one model does not want four parallel requests. |
 

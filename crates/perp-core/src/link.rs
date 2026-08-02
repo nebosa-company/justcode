@@ -102,6 +102,25 @@ impl Kind {
         matches!(self, Kind::ClaudeCli)
     }
 
+    /// Whether a prefix cache can help this kind at all (`M-29`).
+    ///
+    /// `M-12` assembles a prompt stable-prefix first so the provider can charge
+    /// the unchanged head at the cached rate, and every column of cache figures
+    /// in this harness assumes that is worth doing.
+    ///
+    /// It cannot be, for a subprocess link. The system prompt is replaced on
+    /// every call — that replacement is what buys the tool protocol — so the
+    /// stable region is not stable and there is nothing for a cache to hit.
+    /// `M-12` does not apply, and a run through such a link reports zero cached
+    /// tokens forever.
+    ///
+    /// That number is correct and reads exactly like a broken ledger, which is
+    /// the failure this answers: not the zeroes, but that nothing distinguishes
+    /// *this link cannot cache* from *the accounting is wrong*.
+    pub fn prefix_caches(self) -> bool {
+        !self.is_subprocess()
+    }
+
     pub fn parse(text: &str) -> Result<Kind> {
         match text {
             "lmstudio" => Ok(Kind::LmStudio),

@@ -83,6 +83,48 @@ impl Usage {
     }
 }
 
+/// How to say what was cached, when zero may not mean what it looks like
+/// (`M-29`).
+///
+/// A subprocess link replaces its system prompt on every call — that is what
+/// buys the tool protocol — so `M-12`'s stable prefix is not stable and there
+/// is nothing for a cache to hit. The zero it reports is a property of the
+/// link, and it reads exactly like a ledger that has stopped counting.
+///
+/// `None` for the kind means the link is not in the current configuration:
+/// a ledger replayed after a link was renamed or removed still has its
+/// entries, and guessing on its behalf would be inventing the one fact this
+/// exists to stop inventing. It reports the number and says nothing more.
+pub fn cached_as_text(kind: Option<crate::link::Kind>, cached: i64) -> String {
+    match kind {
+        Some(kind) if !kind.prefix_caches() => {
+            "no prefix cache on this link — its system prompt changes every call".to_string()
+        }
+        _ => format!("{cached} cached"),
+    }
+}
+
+/// The same for a whole ledger, which is rarely all one link (`M-29`).
+///
+/// All-or-nothing was the first shape and it was useless on real data: this
+/// repository's own ledger is 1519 `claude-cli` calls out of 1523, and the four
+/// stragglers on an older link made it fall back to a bare `0 cached` — the
+/// exact reading `M-29` exists to prevent, on the exact ledger that argued for
+/// it. So a mixed ledger says how much of it could not have cached, and a
+/// reader can tell a quiet cache from an absent one either way.
+pub fn cached_total_as_text(cached: i64, uncacheable: usize, calls: usize) -> String {
+    if calls > 0 && uncacheable == calls {
+        return "no prefix cache on any link here — their system prompts change every call"
+            .to_string();
+    }
+    if uncacheable > 0 {
+        return format!(
+            "{cached} cached; {uncacheable} of {calls} calls on links with no prefix cache"
+        );
+    }
+    format!("{cached} cached")
+}
+
 /// One call, as the ledger sees it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
@@ -359,7 +401,56 @@ impl Split {
 mod tests {
     use super::*;
 
+        /// `M-29`: a zero that is a property of the link says so.
+    ///
+    /// A subprocess link replaces its system prompt every call, which is what
+    /// buys the tool protocol, so `M-12`'s stable prefix is not stable and
+    /// there is nothing to hit. The zero is right and reads exactly like a
+    /// ledger that stopped counting — the two were indistinguishable.
     #[test]
+    fn a_link_that_cannot_cache_says_so_instead_of_reporting_zero() {
+        let said = cached_as_text(Some(crate::link::Kind::ClaudeCli), 0);
+        assert!(said.contains("no prefix cache"), "{said}");
+        assert!(!said.contains("0 cached"), "the zero was the whole problem: {said}");
+
+        // A link that can cache reports the number, including when it is zero:
+        // there, zero means the cache missed, which is a fact about the run.
+        let http = cached_as_text(Some(crate::link::Kind::DeepSeek), 0);
+        assert_eq!(http, "0 cached");
+        assert_eq!(cached_as_text(Some(crate::link::Kind::DeepSeek), 512), "512 cached");
+    }
+
+    /// A ledger is rarely all one link, and the mixed case is the real one.
+    ///
+    /// All-or-nothing was the first shape. This repository's own ledger is 1519
+    /// `claude-cli` calls out of 1523, and the stragglers on an older link made
+    /// it fall back to a bare `0 cached` — the exact reading `M-29` exists to
+    /// prevent, on the exact ledger that argued for it.
+    #[test]
+    fn a_mixed_ledger_says_how_much_of_it_could_not_have_cached() {
+        // All of it.
+        assert!(cached_total_as_text(0, 12, 12).contains("no prefix cache on any link"));
+        // Nearly all of it — the case that was falling through before.
+        let mixed = cached_total_as_text(0, 1522, 1523);
+        assert!(mixed.contains("1522 of 1523"), "{mixed}");
+        assert!(mixed.contains("0 cached"), "the number is still there: {mixed}");
+        // None of it: an ordinary ledger says an ordinary thing.
+        assert_eq!(cached_total_as_text(4096, 0, 20), "4096 cached");
+        // Nothing at all: no calls, no claim about links.
+        assert_eq!(cached_total_as_text(0, 0, 0), "0 cached");
+    }
+
+    /// An unknown link is reported, not guessed about.
+    ///
+    /// A ledger replayed after a link was renamed or removed still has its
+    /// entries. Answering on its behalf would invent the one fact this exists
+    /// to stop inventing.
+    #[test]
+    fn a_link_no_longer_configured_is_not_spoken_for() {
+        assert_eq!(cached_as_text(None, 0), "0 cached");
+    }
+
+#[test]
     fn the_harness_talking_to_itself_is_counted_apart() {
         // `N-7`. A report that folds compaction into "work" makes the loop look
         // more productive per dollar than it is, and hides the number that says
