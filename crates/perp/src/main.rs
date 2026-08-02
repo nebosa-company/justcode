@@ -595,8 +595,10 @@ fn cmd_ask(args: &[&str]) -> std::result::Result<(), String> {
 /// cycle that tries to build it.
 fn cmd_check(args: &[&str]) -> std::result::Result<(), String> {
     let which = positionals(args).first().copied().unwrap_or("ids");
-    if which != "ids" {
-        return Err(format!("unknown check `{which}` — only `ids` so far"));
+    match which {
+        "ids" => {}
+        "citations" => return cmd_check_citations(args),
+        other => return Err(format!("unknown check `{other}` — `ids` or `citations`")),
     }
 
     let binding = load(args).map_err(|e| e.to_string())?;
@@ -643,6 +645,62 @@ fn cmd_check(args: &[&str]) -> std::result::Result<(), String> {
         println!("  stray: {} in {}", item.id, item.file);
     }
     Err(format!("{} id(s) used but never defined", stray.len()))
+}
+
+/// `V-15`: a change may not claim an open requirement without a test naming it.
+///
+/// Reads the working diff against `HEAD`, because that is the change being
+/// judged and the only artefact that distinguishes what this change asserts
+/// from what the file already said.
+///
+/// Only open requirements count. Prose cites done ones constantly as reasons,
+/// and treating those as claims reported three false alarms for every real one
+/// when it was run over the commits that argued for this rule.
+fn cmd_check_citations(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let source_path = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
+    let source = perp_core::layout::requirements_text(&source_path);
+    if source.trim().is_empty() {
+        return Err(format!("{}: no requirements found", source_path.display()));
+    }
+
+    let open: std::collections::BTreeSet<String> = perp_core::cycle::backlog(&source, usize::MAX)
+        .into_iter()
+        .map(|item| item.requirement)
+        .collect();
+
+    let repo = perp_core::git::Repo::at(binding.root());
+    // Not `plumbing`: it returns `stdout_tail`, which `T-6` caps at the last
+    // forty lines. A diff is longer than that whenever it is worth checking, so
+    // the first version of this read the tail, saw no claim in it, and printed
+    // that everything was fine — a false negative inside the rule whose whole
+    // job is catching a claim nobody checked. `--output` is git writing the
+    // whole thing itself, with no pipe to truncate.
+    let scratch = binding.root().join(".perp-citations.diff");
+    let path = scratch.display().to_string();
+    repo.plumbing(&["diff", "HEAD", "--output", &path]).map_err(|e| e.to_string())?;
+    let diff = std::fs::read_to_string(&scratch).unwrap_or_default();
+    let _ = std::fs::remove_file(&scratch);
+
+    println!("open:      {}", open.len());
+    if diff.trim().is_empty() {
+        // `V-11`'s lesson: nothing to check is not a clean bill of health.
+        println!("no change against HEAD — nothing to check");
+        return Ok(());
+    }
+
+    let unbacked = verify::unbacked_citations(&diff, &open);
+    if unbacked.is_empty() {
+        println!("every open requirement this change claims has a test naming it");
+        return Ok(());
+    }
+    for item in &unbacked {
+        println!("  unbacked: {} claimed in {}", item.id, item.file);
+    }
+    Err(format!(
+        "{} citation(s) with no test naming them — a citation is a claim about behaviour (`V-15`)",
+        unbacked.len()
+    ))
 }
 
 fn collect_markdown(

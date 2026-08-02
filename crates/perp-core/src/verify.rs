@@ -484,6 +484,156 @@ fn ids_in(text: &str) -> BTreeSet<String> {
     found
 }
 
+// ── V-15 ───────────────────────────────────────────────────────────────────
+
+/// A requirement a change claimed, with no test standing under it (`V-15`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Unbacked {
+    pub id: String,
+    pub file: String,
+}
+
+/// Citations a change adds without adding a test that cites the same id
+/// (`V-15`).
+///
+/// Cycle 9 closed `X-13` with nine lines of prose: a module-doc paragraph
+/// asserting `shell` was confined to the workspace, and `X-13` added to the
+/// file's requirement header. No code, no test. Every gate went green because a
+/// false docstring compiles, and `perp check ids` passed because the id it
+/// cited is defined. The hole read as sealed in the one place a reader looks.
+/// `V-13` could not catch it — the step *had* written, and what it wrote was
+/// the description of the change it had not made.
+///
+/// Read from the diff rather than the tree, because the question is what this
+/// change claimed and not what the file already said. Ids in removed lines are
+/// ignored for the same reason: moving a citation is not making one.
+///
+/// Only ids in `open` are judged, and that is what makes this usable rather
+/// than merely correct. Prose cites requirements constantly as *reasons* —
+/// "`X-2` checks the `path` argument", "`G-3` refuses `git add .`" — and a rule
+/// that reads those as claims reports three lies for every real one. Run over
+/// this session's own commits it did exactly that. Citing a requirement already
+/// marked done is a reference to behaviour that exists; citing an open one is a
+/// claim to have built it, and only the second kind needs a test underneath it.
+///
+/// **What this proves and what it does not.** It is structural: it says a new
+/// citation arrived with a test that names it. Whether that test would fail
+/// without the change is [`RedRun`]'s question, and `V-3` already owns it. A
+/// test written to name an id and assert nothing satisfies this and not `V-3`,
+/// which is the honest division — one of them reads the diff, and the other has
+/// to run the suite twice.
+pub fn unbacked_citations(diff: &str, open: &BTreeSet<String>) -> Vec<Unbacked> {
+    // Claims are remembered per file, so a report can say where; tests and
+    // prior citations count across the whole change. Judging each file alone
+    // was the first shape and it was wrong — an implementation is routinely
+    // split, and this rule's own wiring lives in `main.rs` while its tests live
+    // in `verify.rs`, which it duly reported as a lie. Requiring the test to
+    // name the same id is what stops a claim riding on an unrelated test; the
+    // file boundary was never what did that.
+    let mut claims: Vec<(String, BTreeSet<String>)> = Vec::new();
+    let mut file = String::new();
+    let mut state = Judging::default();
+    let mut tested: BTreeSet<String> = BTreeSet::new();
+    let mut already: BTreeSet<String> = BTreeSet::new();
+
+    for line in diff.lines() {
+        if let Some(path) = line.strip_prefix("+++ b/") {
+            state.harvest(&mut claims, &file, &mut tested, &mut already);
+            file = path.trim().to_string();
+            state = Judging::default();
+            continue;
+        }
+        if line.starts_with("---") || line.starts_with("+++") {
+            continue;
+        }
+        // A citation the file already had is not a new claim. Editing a module
+        // header re-adds every id on the line, and requiring a fresh test for
+        // each would report a rename as a lie.
+        if let Some(removed) = line.strip_prefix('-') {
+            state.already.extend(ids_in(removed));
+            continue;
+        }
+        let Some(added) = line.strip_prefix('+') else { continue };
+        state.saw(added);
+    }
+    state.harvest(&mut claims, &file, &mut tested, &mut already);
+
+    let mut unbacked = Vec::new();
+    for (file, claimed) in claims {
+        for id in claimed.difference(&tested) {
+            if already.contains(id) || !open.contains(id) {
+                continue;
+            }
+            unbacked.push(Unbacked { id: id.clone(), file: file.clone() });
+        }
+    }
+    unbacked.sort();
+    unbacked.dedup();
+    unbacked
+}
+
+/// One file's worth of added lines, part-read.
+#[derive(Default)]
+struct Judging {
+    /// Ids this change asserts.
+    claimed: BTreeSet<String>,
+    /// Ids a test in this change names.
+    tested: BTreeSet<String>,
+    /// Ids the file already cited before this change.
+    already: BTreeSet<String>,
+    /// A `///` block waiting to find out what it is attached to.
+    ///
+    /// The id a test is *about* is almost always in the doc comment above it
+    /// rather than in its body — every test in this crate is written that way —
+    /// so a scanner that only reads from `#[test]` downward finds nothing and
+    /// calls every honest test a lie.
+    pending: BTreeSet<String>,
+    in_test: bool,
+}
+
+impl Judging {
+    fn saw(&mut self, added: &str) {
+        let text = added.trim();
+        if text.contains("#[test]") {
+            // The doc block above it was describing this test after all.
+            self.tested.append(&mut self.pending);
+            self.in_test = true;
+            return;
+        }
+        let ids = ids_in(added);
+        if self.in_test {
+            self.tested.extend(ids);
+            return;
+        }
+        if text.starts_with("///") {
+            self.pending.extend(ids);
+            return;
+        }
+        // Anything else ends the block: a doc comment attaches to the item
+        // directly beneath it, and this is not one.
+        self.claimed.append(&mut self.pending);
+        self.claimed.extend(ids);
+    }
+
+    /// Hand this file's claims to the caller, and its tests and prior citations
+    /// to the change-wide sets.
+    fn harvest(
+        &mut self,
+        claims: &mut Vec<(String, BTreeSet<String>)>,
+        file: &str,
+        tested: &mut BTreeSet<String>,
+        already: &mut BTreeSet<String>,
+    ) {
+        if file.is_empty() {
+            return;
+        }
+        self.claimed.append(&mut self.pending);
+        tested.append(&mut self.tested);
+        already.append(&mut self.already);
+        claims.push((file.to_string(), std::mem::take(&mut self.claimed)));
+    }
+}
+
 /// Ids defined in the requirements source, for a caller that wants the set.
 pub fn defined_ids(source: &str) -> Result<BTreeSet<String>> {
     let ids = ids_in(source);
@@ -564,6 +714,106 @@ pub fn independence(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The open backlog, for the tests below.
+    fn open(ids: &[&str]) -> BTreeSet<String> {
+        ids.iter().map(|id| (*id).to_string()).collect()
+    }
+
+    /// `V-15`, on the change that argued for it.
+    ///
+    /// This is cycle 9's `X-13` diff, shortened but not otherwise altered: a
+    /// module header gaining an id, a doc paragraph describing a guard, and no
+    /// code and no test anywhere. It passed every gate at the time.
+    #[test]
+    fn a_citation_added_with_only_prose_is_unbacked() {
+        let diff = "\
+--- a/crates/perp-core/src/tool.rs
++++ b/crates/perp-core/src/tool.rs
+-//! The tool host (`T-1`, `T-2`, `T-5`).
++//! The tool host (`T-1`, `T-2`, `T-5`, `X-13`).
++//! Only `X-13` is new here; the rest the file already cited.
++//! - **`shell` is confined to the workspace too** (`X-13`). Every token that
++//!   looks like a path is resolved and refused if it lands outside the root.
+";
+        let found = unbacked_citations(diff, &open(&["X-13"]));
+        let ids: Vec<&str> = found.iter().map(|u| u.id.as_str()).collect();
+        assert_eq!(ids, vec!["X-13"], "only the new claim, not the ones it already made");
+        assert_eq!(found[0].file, "crates/perp-core/src/tool.rs");
+    }
+
+    /// And the same claim with a test under it is not reported.
+    #[test]
+    fn a_citation_with_a_test_naming_it_is_backed() {
+        let diff = "\
+--- a/crates/perp-core/src/tool.rs
++++ b/crates/perp-core/src/tool.rs
+-//! The tool host (`T-1`).
++//! The tool host (`T-1`, `X-13`).
++    fn confined(&self, command: &str) -> Result<()> {
++        Ok(())
++    }
++    /// `X-13`: the boundary reaches inside a command line.
++    #[test]
++    fn a_shell_command_may_not_reach_outside_the_workspace() {
++        assert!(host.confined(\"cat /etc/passwd\").is_err());
++    }
+";
+        assert_eq!(unbacked_citations(diff, &open(&["X-13"])), vec![], "a test names it, so it stands");
+    }
+
+    /// A test naming a *different* requirement does not back this one.
+    #[test]
+    fn a_test_for_another_requirement_does_not_back_the_claim() {
+        let diff = "\
+--- a/src/a.rs
++++ b/src/a.rs
++//! Now also does `X-13`.
++    #[test]
++    fn something_about_t_2() {
++        // `T-2` is what this checks.
++    }
+";
+        let ids: Vec<String> =
+            unbacked_citations(diff, &open(&["X-13"])).into_iter().map(|u| u.id).collect();
+        assert_eq!(ids, vec!["X-13".to_string()]);
+    }
+
+    /// A change is judged whole, not file by file.
+    ///
+    /// Per-file was the first shape, and this rule's own wiring disproved it:
+    /// the CLI half lives in `main.rs` and the tests in `verify.rs`, and a
+    /// per-file reading reported that as a lie. What stops a claim riding on an
+    /// unrelated test is that the test must name the same id — the file
+    /// boundary was never doing that work.
+    #[test]
+    fn a_test_in_another_file_still_backs_the_claim() {
+        let diff = "\
+--- a/src/claim.rs
++++ b/src/claim.rs
++//! Implements `L-24`.
+--- a/src/other.rs
++++ b/src/other.rs
++    /// `L-24` is what this checks.
++    #[test]
++    fn about_the_watchdog() {
++        assert!(true);
++    }
+";
+        assert_eq!(unbacked_citations(diff, &open(&["L-24"])), vec![]);
+    }
+
+    /// Removing a citation is not making one.
+    #[test]
+    fn a_removed_citation_is_not_a_claim() {
+        let diff = "\
+--- a/src/a.rs
++++ b/src/a.rs
+-//! Implements `X-13`.
++//! Implements nothing in particular.
+";
+        assert_eq!(unbacked_citations(diff, &open(&["X-13"])), vec![]);
+    }
 
     #[test]
     fn a_review_by_the_same_link_is_not_a_review() {

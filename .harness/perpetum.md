@@ -6,18 +6,18 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with three open.** This document is the requirements source for the
+**Status: built, with two open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 13: **163 of 167 requirements are done**, 3 open, 1 external-gated
+As of cycle 13: **164 of 167 requirements are done**, 2 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
 over a `curl` transport exercised against a live LM Studio, cost accounting
 replayed from the journal, the tool host and its permission classifier, **the
 loop driver**, and the chat surface with `/btw` — in [`crates/`](../crates/),
-606 tests, at version 0.2.0.
+623 tests, at version 0.2.0.
 
 **The harness runs a batch on its own, against a real model.** `perp run
 --requirement <id>` asks a link, parses tool calls through the degradation
@@ -35,11 +35,20 @@ workspace, and each has a transcript behind it. Still open:
 - `M-29` — a link that cannot cache reports zeroes indistinguishable from a
   broken ledger.
 - `L-23` — thirteen tool calls before the first edit, on a one-file batch.
-- `V-15` — a step may cite a requirement without a test, and cycle 9 did.
 
 `V-15` came out of reading what cycles 10 to 12 did rather than out of a cycle
 failing in a way that filed it, and it was the first entry here proposed rather
-than asked for. Its two companions, `L-24` and `L-25`, are both closed.
+than asked for. It and its two companions, `L-24` and `L-25`, are all closed.
+
+`V-15` is enforced by `perp check citations`, and it was validated against the
+four commits that argued for it — cycle 9's prose-only `X-13`, the two real
+implementations that replaced it, and cycle 13's untested `L-24` — where the
+answer was known independently of the code being tested. It flags the two lies
+and neither of the honest changes. Three design corrections came out of running
+it rather than reasoning about it, and one real defect in its own wiring:
+`Repo::plumbing` returns `stdout_tail`, capped by `T-6` at forty lines, so the
+first version read a truncated diff and reported everything fine — a false
+negative inside the rule whose job is catching claims nobody checked.
 
 `L-25` was the one that named a cause rather than a detection, and is closed in
 `f106fe2`. The measure `V-13` keeps is now read one turn at a time and appended
@@ -514,7 +523,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`V-13`~~ | A step that wrote nothing does not end `ok`. Filed as "made no tool call", which was already guarded and was not the defect: the steps that closed green had called plenty and written none of it. `V-2` refuses self-reported success at the requirement marker; the same claim one level down is currently recorded as a green step. Cycle 8 closed three steps `ok=True` whose summaries were prose, a survey of the repository, and a malformed `<perp-call>` block — the gates then passed because nothing had been touched, and the cycle reported eleven steps with two failures having changed not one byte. |
 | ✅ ~~`V-9`~~ | Requirement ids are minted only in the requirements source named by the binding (Perpetum 0.8). A write that introduces a new id anywhere else — batches, board, state, a `/btw` note — is rejected by the engine. |
 | ✅ ~~`V-14`~~ | A gate outcome is attributed only to requirements whose step changed something. A batch runs its gates once and files the result against every requirement in it, so a requirement whose step wrote nothing collects green gates it did not earn — the gates measured the tree as it already was. Cycle 10 recorded three green gates against `L-23`, `M-29` and `M-27` on a cycle that changed no source at all, and `perp explain` shows that green underneath the failed step. `V-13` stopped prose closing a step; this is the same claim one level up, where the evidence is real and the attribution is not. |
-| `V-15` | A step may not add a requirement's citation without adding a test that fails without it. Cycle 9 closed `X-13` with nine lines of prose: a module-doc paragraph asserting `shell` was confined to the workspace, and `X-13` added to the file's requirement header, with no code and no test. Every gate went green, because a false docstring compiles, and `perp check ids` passed, because the id it cited is defined. The hole read as sealed in the one place a reader would look. `V-13` did not catch it — the step *had* written, and what it wrote was the description of the change it had not made. A citation is a claim about behaviour, and the test that fails without it is the only thing that distinguishes the claim from a sentence. |
+| ✅ ~~`V-15`~~ | A step may not add a requirement's citation without adding a test that fails without it. Enforced structurally by `perp check citations`, which reports open requirements a change cites with no test naming them; whether that test would fail without the change is `V-3`'s question and `RedRun` already answers it. Cycle 9 closed `X-13` with nine lines of prose: a module-doc paragraph asserting `shell` was confined to the workspace, and `X-13` added to the file's requirement header, with no code and no test. Every gate went green, because a false docstring compiles, and `perp check ids` passed, because the id it cited is defined. The hole read as sealed in the one place a reader would look. `V-13` did not catch it — the step *had* written, and what it wrote was the description of the change it had not made. A citation is a claim about behaviour, and the test that fails without it is the only thing that distinguishes the claim from a sentence. |
 
 ---
 
