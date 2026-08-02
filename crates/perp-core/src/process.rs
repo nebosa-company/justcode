@@ -130,7 +130,16 @@ pub struct Run {
     pub duration_ms: u128,
     pub stdout_tail: String,
     pub stderr_tail: String,
+    /// Either stream was cut — what the transcript needs to know.
     pub truncated: bool,
+    /// Which stream was cut, for a caller reading one of them (`T-20`).
+    ///
+    /// The combined flag is right for a transcript and wrong for anything
+    /// else. `Repo::plumbing` returns stdout and labelled it from `truncated`,
+    /// so a command with a long *stderr* and an empty stdout came back as the
+    /// label alone — a caller told it had been handed a tail of nothing.
+    pub stdout_truncated: bool,
+    pub stderr_truncated: bool,
 }
 
 impl Run {
@@ -181,6 +190,15 @@ pub struct Spec {
     /// any other user on the machine can read out of a process listing, or the
     /// filesystem, which outlives the call (`S-2`).
     pub stdin: Option<String>,
+    /// Keep every byte of both streams rather than the last [`TAIL_LINES`]
+    /// (`T-20`).
+    ///
+    /// Off by default, because the reason the tail exists is good: a gate that
+    /// printed ten thousand lines should not put ten thousand lines in a
+    /// journal record. It is for the caller that needs the output as *data* —
+    /// a diff to parse rather than a transcript to read — where a silent tail
+    /// is not a smaller answer but a wrong one.
+    pub keep_all: bool,
     /// The arguments to run, when the caller already has them as a list.
     ///
     /// A gate is a line a person wrote and has to be split. A call we assemble
@@ -206,6 +224,7 @@ impl Spec {
             timeout,
             stdin: None,
             argv: None,
+            keep_all: false,
         }
     }
 
@@ -217,6 +236,12 @@ impl Spec {
 
     pub fn with_env(mut self, env: Env) -> Spec {
         self.env = env;
+        self
+    }
+
+    /// Keep both streams whole rather than the last [`TAIL_LINES`] (`T-20`).
+    pub fn keeping_all(mut self) -> Spec {
+        self.keep_all = true;
         self
     }
 
@@ -404,8 +429,11 @@ pub fn run(spec: &Spec) -> Result<Run> {
 
     let stdout = out_reader.map(join).unwrap_or_default();
     let stderr = err_reader.map(join).unwrap_or_default();
-    let (stdout_tail, out_cut) = tail(&stdout);
-    let (stderr_tail, err_cut) = tail(&stderr);
+    // `T-20`: a caller that asked for the whole thing gets the whole thing.
+    let (stdout_tail, out_cut) =
+        if spec.keep_all { (stdout, false) } else { tail(&stdout) };
+    let (stderr_tail, err_cut) =
+        if spec.keep_all { (stderr, false) } else { tail(&stderr) };
 
     Ok(Run {
         command: spec.command.clone(),
@@ -416,6 +444,8 @@ pub fn run(spec: &Spec) -> Result<Run> {
         stdout_tail,
         stderr_tail,
         truncated: out_cut || err_cut,
+        stdout_truncated: out_cut,
+        stderr_truncated: err_cut,
     })
 }
 

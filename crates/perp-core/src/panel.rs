@@ -344,6 +344,11 @@ impl View {
         approvals: &Approvals,
         now: i64,
     ) -> View {
+        // `plumbing`, not `plumbing_all`, on purpose (`T-20`). This is a
+        // panel: a person does not want five thousand lines of diff in it, and
+        // the tail is the right answer. What was wrong was that the tail
+        // arrived unlabelled, so a truncated diff and a short one looked
+        // identical — `plumbing` now says which it handed back.
         self.diff = repo.plumbing(&["diff", "--stat", "--", "."]).ok().filter(|d| !d.trim().is_empty());
         let file_diff = repo.plumbing(&["diff", "--", "."]).ok().filter(|d| !d.trim().is_empty());
 

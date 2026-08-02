@@ -670,17 +670,12 @@ fn cmd_check_citations(args: &[&str]) -> std::result::Result<(), String> {
         .collect();
 
     let repo = perp_core::git::Repo::at(binding.root());
-    // Not `plumbing`: it returns `stdout_tail`, which `T-6` caps at the last
-    // forty lines. A diff is longer than that whenever it is worth checking, so
-    // the first version of this read the tail, saw no claim in it, and printed
-    // that everything was fine — a false negative inside the rule whose whole
-    // job is catching a claim nobody checked. `--output` is git writing the
-    // whole thing itself, with no pipe to truncate.
-    let scratch = binding.root().join(".perp-citations.diff");
-    let path = scratch.display().to_string();
-    repo.plumbing(&["diff", "HEAD", "--output", &path]).map_err(|e| e.to_string())?;
-    let diff = std::fs::read_to_string(&scratch).unwrap_or_default();
-    let _ = std::fs::remove_file(&scratch);
+    // `plumbing_all`, not `plumbing`: the latter caps each stream at forty
+    // lines (`T-6`), and the first version of this read that tail, found no
+    // claim in it, and reported the change clean — a false negative inside the
+    // rule whose job is catching a claim nobody checked. `T-20` exists because
+    // of it, and this is the caller it was written for.
+    let diff = repo.plumbing_all(&["diff", "HEAD"]).map_err(|e| e.to_string())?;
 
     println!("open:      {}", open.len());
     if diff.trim().is_empty() {

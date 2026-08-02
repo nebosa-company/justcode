@@ -299,6 +299,8 @@ mod tests {
             stdout_tail: String::new(),
             stderr_tail: stderr.to_string(),
             truncated: false,
+            stdout_truncated: false,
+            stderr_truncated: false,
         }
     }
 

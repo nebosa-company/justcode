@@ -216,7 +216,7 @@ impl Repo {
     }
 
     /// Run git, with the policy checked first.
-    pub fn run(&self, args: &[&str], approval: &Approval) -> Result<Run> {
+    fn run_inner(&self, args: &[&str], approval: &Approval, keep_all: bool) -> Result<Run> {
         match classify(args) {
             Policy::Never { reason } => {
                 return Err(Error::unbound(format!("git {}", args.join(" ")), reason))
@@ -231,7 +231,14 @@ impl Repo {
             }
             Policy::Auto => {}
         }
+        if keep_all {
+            return self.run_unchecked_keeping_all(args);
+        }
         self.run_unchecked(args)
+    }
+
+    fn run(&self, args: &[&str], approval: &Approval) -> Result<Run> {
+        self.run_inner(args, approval, false)
     }
 
     /// Undo everything since `sha` by **reverting**, not resetting (`O-4`,
@@ -268,13 +275,37 @@ impl Repo {
         })
     }
 
-    /// For read-only plumbing the classifier already treats as `Auto`.
     /// Read-only plumbing whose output is wanted as text. Classified like
     /// everything else — these are all `Auto`, and going through `run` keeps it
     /// that way if one ever stops being.
+    ///
+    /// **This can hand back a tail, and it says so when it does** (`T-20`).
+    /// `T-6` caps each stream at [`process::TAIL_LINES`], which is right for a
+    /// transcript and wrong for output being read as data. This returned the
+    /// tail silently: `V-15`'s first wiring parsed a forty-line slice of a
+    /// long diff, found no claim in it, and reported the change clean. A
+    /// caller that needs every byte wants [`Repo::plumbing_all`]; a caller that
+    /// only displays this now has a line telling it what it is looking at.
     pub fn plumbing(&self, args: &[&str]) -> Result<String> {
         let run = self.run(args, &Approval::NotGranted)?;
+        if run.stdout_truncated {
+            return Ok(format!(
+                "{}
+[only the last {} lines — the rest was not read (`T-20`)]",
+                run.stdout_tail,
+                process::TAIL_LINES
+            ));
+        }
         Ok(run.stdout_tail.clone())
+    }
+
+    /// The same, whole (`T-20`).
+    ///
+    /// For output that is data rather than a transcript — a diff to parse, a
+    /// file list to walk — where a shorter answer is not a smaller answer but
+    /// a wrong one.
+    pub fn plumbing_all(&self, args: &[&str]) -> Result<String> {
+        Ok(self.run_inner(args, &Approval::NotGranted, true)?.stdout_tail)
     }
 
     /// One config value, or empty when it is not set. Not an error: "unset" is
@@ -294,6 +325,18 @@ impl Repo {
             .collect();
         let spec = Spec::new(format!("git {}", quoted.join(" ")), &self.root, self.timeout)
             .with_env(Env::declared());
+        process::run(&spec)
+    }
+
+    /// As [`Repo::run_unchecked`], keeping both streams whole (`T-20`).
+    fn run_unchecked_keeping_all(&self, args: &[&str]) -> Result<Run> {
+        let quoted: Vec<String> = args
+            .iter()
+            .map(|arg| if arg.contains(' ') { format!("\"{arg}\"") } else { (*arg).to_string() })
+            .collect();
+        let spec = Spec::new(format!("git {}", quoted.join(" ")), &self.root, self.timeout)
+            .with_env(Env::declared())
+            .keeping_all();
         process::run(&spec)
     }
 
@@ -604,6 +647,49 @@ mod tests {
         repo.stage(&["first.txt"]).expect("stage");
         repo.commit(&CommitMessage::new("Add the first file")).expect("commit");
         repo
+    }
+
+    /// `T-20`: a caller that needs the whole output can get it, and one handed
+    /// a tail is told so.
+    ///
+    /// The failure this exists for: `V-15`'s first wiring read a diff through
+    /// `plumbing`, got the last forty lines of it, found no requirement claimed
+    /// in that slice, and reported the change clean. Nothing anywhere said the
+    /// diff had been cut.
+    #[test]
+    fn a_long_output_is_whole_when_asked_for_and_labelled_when_not() {
+        let repo = repo("git-t20");
+        // Comfortably past the forty-line cap, and every line distinct so the
+        // first one is proof the whole thing came back.
+        let long: String = (0..300).map(|n| format!("line {n}
+")).collect();
+        std::fs::write(repo.root().join("long.txt"), &long).expect("write");
+        repo.stage(&["long.txt"]).expect("stage");
+
+        let whole = repo.plumbing_all(&["diff", "--cached"]).expect("whole");
+        assert!(whole.contains("line 0"), "the head of the diff is missing");
+        assert!(whole.contains("line 299"), "the tail of the diff is missing");
+        assert!(!whole.contains("T-20"), "a whole answer needs no apology: {}", &whole[..80]);
+
+        let tail = repo.plumbing(&["diff", "--cached"]).expect("tail");
+        assert!(!tail.contains("line 0"), "this should have been cut");
+        assert!(tail.contains("line 299"), "the tail keeps the end");
+        // The part that was actually missing before: it says what it is.
+        assert!(tail.contains("only the last"), "a tail that does not say so: {tail:.200}");
+        assert!(tail.contains("T-20"), "and names the rule: {tail:.200}");
+    }
+
+    /// A short output is not labelled, or the label means nothing.
+    #[test]
+    fn a_short_output_is_returned_untouched() {
+        let repo = repo("git-t20-short");
+        std::fs::write(repo.root().join("short.txt"), "one line
+").expect("write");
+        repo.stage(&["short.txt"]).expect("stage");
+
+        let out = repo.plumbing(&["diff", "--cached", "--stat"]).expect("stat");
+        assert!(!out.contains("only the last"), "nothing was cut: {out}");
+        assert_eq!(out, repo.plumbing_all(&["diff", "--cached", "--stat"]).expect("all"));
     }
 
     #[test]

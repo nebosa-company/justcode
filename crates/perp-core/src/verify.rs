@@ -924,6 +924,8 @@ mod tests {
                 stdout_tail: String::new(),
                 stderr_tail: String::new(),
                 truncated: false,
+                stdout_truncated: false,
+                stderr_truncated: false,
             },
             sha: None,
         }

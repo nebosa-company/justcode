@@ -6,11 +6,11 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with four open.** This document is the requirements source for the
+**Status: built, with three open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 13: **164 of 169 requirements are done**, 4 open, 1 external-gated
+As of cycle 13: **165 of 169 requirements are done**, 3 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
@@ -35,14 +35,20 @@ workspace, and each has a transcript behind it. Still open:
 - `M-29` — a link that cannot cache reports zeroes indistinguishable from a
   broken ledger.
 - `L-23` — thirteen tool calls before the first edit, on a one-file batch.
-- `T-20` — `Repo::plumbing` hands back a forty-line tail and says nothing, and
-  `panel.rs` shows a person that tail as if it were the diff.
 - `M-30` — the concurrency bound holds for a batch and not for a conversation.
 
 `T-20` and `M-30` were both found while verifying something else — the first by
 planting a claim to see whether `V-15` would catch it, and it did not, because
 it was reading a truncated diff; the second by checking whether `M-28`'s parity
 with `M-15` actually held, which it does, on a path both link kinds miss.
+
+`T-20` is closed. `Spec::keeping_all` returns both streams whole, `plumbing_all`
+is the caller-facing form, and `plumbing` now says so when what it hands back
+was cut. Closing it turned up a defect of the same shape one layer down:
+`Run::truncated` is *either* stream, so labelling stdout from it told a caller
+with a long stderr and an empty stdout that it had been handed a tail of
+nothing. A label about the wrong stream is the same class of lie as no label,
+and the flags are per-stream now.
 
 `V-15` came out of reading what cycles 10 to 12 did rather than out of a cycle
 failing in a way that filed it, and it was the first entry here proposed rather
@@ -453,7 +459,7 @@ needs permission.
 | ✅ ~~`T-16`~~ | Approvals expire. An unanswered request older than the configured window is parked with reason `approval-gated` and carried into the next cycle (Perpetum 0.6). |
 | ✅ ~~`T-18`~~ | The engine must not hold a lock on any artefact its own gates rebuild. On Windows a running executable cannot be replaced, so a harness launched from the workspace own `target/` fails its own build gate with `Access is denied (os error 5)`. The engine runs from a copy outside the tree it builds, and says so in the gate transcript. Found in `c1/b5/s08` by running the gates through the harness on its own repository. |
 | ✅ ~~`T-17`~~ | Anything drafted for a human — release notes, issue replies, GTM copy — is written to disk unattended and *sent* only through an `approve` call. Drafting is free; sending is not. |
-| `T-20` | A caller that needs a command's whole output can get it, and one that is handed a tail is told so. `T-6` makes truncation loud for the model, because silent truncation is how a model concludes a suite passed from the half it was shown. `Repo::plumbing` does the opposite for everything else: it returns `stdout_tail`, capped at forty lines, with a doc comment saying the output "is wanted as text" and nothing anywhere saying it is partial. `V-15`'s first wiring read a truncated diff, found no claim in it, and reported the change clean — a false negative inside the rule whose job is catching claims nobody checked, and it surfaced only because a claim was planted deliberately to see whether it would. `panel.rs` renders `git diff` through the same call and shows a person a silently capped diff today. |
+| ✅ ~~`T-20`~~ | A caller that needs a command's whole output can get it, and one that is handed a tail is told so. `T-6` makes truncation loud for the model, because silent truncation is how a model concludes a suite passed from the half it was shown. `Repo::plumbing` does the opposite for everything else: it returns `stdout_tail`, capped at forty lines, with a doc comment saying the output "is wanted as text" and nothing anywhere saying it is partial. `V-15`'s first wiring read a truncated diff, found no claim in it, and reported the change clean — a false negative inside the rule whose job is catching claims nobody checked, and it surfaced only because a claim was planted deliberately to see whether it would. `panel.rs` renders `git diff` through the same call and shows a person a silently capped diff today. |
 
 ---
 
