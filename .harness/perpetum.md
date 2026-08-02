@@ -6,11 +6,11 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with five open.** This document is the requirements source for the
+**Status: built, with four open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 10: **158 of 164 requirements are done**, 5 open, 1 external-gated
+As of cycle 10: **159 of 164 requirements are done**, 4 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
@@ -37,9 +37,15 @@ workspace, and each has a transcript behind it. Still open:
 - `M-29` — a link that cannot cache reports zeroes indistinguishable from a
   broken ledger.
 - `L-23` — thirteen tool calls before the first edit, on a one-file batch.
-- `V-14` — cycle 10 filed three green gates against three requirements that
-  changed nothing, because a batch gates once and attributes the result to
-  everything in it.
+`V-14` came out of cycle 10 and is closed in `8936558`. The batch took its ids
+before the agent ran, because the branch needs them, so the gate filed its
+result against every requirement in the batch including the ones that wrote
+nothing. Nothing about that was false, which made it worse than the hole `V-13`
+closed: the gates ran and were green, having measured a tree none of those
+requirements had touched. There was no false claim to catch, only a wrong
+attribution. The list is now taken after the work — `Agent` keeps `V-13`'s own
+measure instead of discarding it, and the hand-over happens in `Then`, the one
+place that holds both halves and knows the first has finished.
 
 Cycle 10 is the clearest reading of where the loop is. Four requirements, four
 failures, 117 model turns, not one byte of source changed — and it said so.
@@ -467,7 +473,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`V-12`~~ | The requirements source named by the binding is not writable by a tool. `write`, `patch` and `delete` on it are refused before they run, whatever the call says it is for. `V-2` says model prose is never written to a status marker and `V-9` says ids are minted only here — both describe the same file, and neither is enforced against the loop that has `patch` and a workspace-relative path. Cycle 8 attempted it twice; what stopped it was a pre-image mismatch, not a rule. |
 | ✅ ~~`V-13`~~ | A step that wrote nothing does not end `ok`. Filed as "made no tool call", which was already guarded and was not the defect: the steps that closed green had called plenty and written none of it. `V-2` refuses self-reported success at the requirement marker; the same claim one level down is currently recorded as a green step. Cycle 8 closed three steps `ok=True` whose summaries were prose, a survey of the repository, and a malformed `<perp-call>` block — the gates then passed because nothing had been touched, and the cycle reported eleven steps with two failures having changed not one byte. |
 | ✅ ~~`V-9`~~ | Requirement ids are minted only in the requirements source named by the binding (Perpetum 0.8). A write that introduces a new id anywhere else — batches, board, state, a `/btw` note — is rejected by the engine. |
-| `V-14` | A gate outcome is attributed only to requirements whose step changed something. A batch runs its gates once and files the result against every requirement in it, so a requirement whose step wrote nothing collects green gates it did not earn — the gates measured the tree as it already was. Cycle 10 recorded three green gates against `L-23`, `M-29` and `M-27` on a cycle that changed no source at all, and `perp explain` shows that green underneath the failed step. `V-13` stopped prose closing a step; this is the same claim one level up, where the evidence is real and the attribution is not. |
+| ✅ ~~`V-14`~~ | A gate outcome is attributed only to requirements whose step changed something. A batch runs its gates once and files the result against every requirement in it, so a requirement whose step wrote nothing collects green gates it did not earn — the gates measured the tree as it already was. Cycle 10 recorded three green gates against `L-23`, `M-29` and `M-27` on a cycle that changed no source at all, and `perp explain` shows that green underneath the failed step. `V-13` stopped prose closing a step; this is the same claim one level up, where the evidence is real and the attribution is not. |
 
 ---
 
