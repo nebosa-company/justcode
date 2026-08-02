@@ -306,3 +306,31 @@ test("no string is written in English at the point it is shown", () => {
     `these need a key in i18n.js and a t(...) call:\n${english.join("\n")}`,
   );
 });
+
+test("the panel follows the editor's font, and the size it follows is written", () => {
+  // `I-6`. The panel is docked against the editor and sat at a fixed `0.85rem`
+  // in the editor's proportional stack — the one surface that ignored View →
+  // Zoom, beside the one surface that decides what the current size is.
+  //
+  // Two halves that only work together, in two files that no compiler compares:
+  // the stylesheet consumes `--editor-font-size`, and `setFontSize` in main.js
+  // is what puts a value in it. Either one alone leaves the panel frozen at
+  // whatever `:root` declared, which is exactly what it looked like before —
+  // right on load, wrong after the first zoom, and no error anywhere.
+  const css = readFileSync("src/styles.css", "utf8");
+
+  const panel = css.match(/#perp-panel\s*\{([^}]*)\}/);
+  assert.ok(panel, "no #perp-panel rule in styles.css");
+  assert.match(panel[1], /font-family:\s*var\(--editor-font\)/, "the panel names its own typeface");
+  assert.match(panel[1], /font-size:\s*var\(--editor-font-size\)/, "the panel names its own size");
+
+  // Declared, so the panel is right before the first zoom rather than only
+  // after one.
+  assert.match(css, /--editor-font-size:\s*\d/, "no default for --editor-font-size");
+
+  // And written, or the default is all it will ever be.
+  const written = sources().some(({ text }) =>
+    /setProperty\(\s*"--editor-font-size"/.test(text),
+  );
+  assert.ok(written, "nothing in src/*.js ever sets --editor-font-size");
+});

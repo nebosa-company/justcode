@@ -608,8 +608,19 @@ button.primary:hover {
   height: 100%;
 }
 
+/* Named once. The panel reads at the same distance as the editor and now uses
+   the same typeface, so a second copy of this list is a second thing to keep in
+   step. */
+:root {
+  --editor-font: "Cascadia Code", Consolas, "Courier New", monospace;
+  /* Overwritten from `setFontSize` on every zoom, and on load. The literal is
+     the size the editor starts at, so the panel is right before the first
+     zoom rather than only after one. */
+  --editor-font-size: 14px;
+}
+
 .cm-scroller {
-  font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  font-family: var(--editor-font);
 }
 
 /* One scrollbar for the whole application: the editor, the terminal, the menus,
@@ -1821,7 +1832,8 @@ button.primary:hover {
   border-left: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg);
-  font-size: 0.85rem;
+  font-family: var(--editor-font);
+  font-size: var(--editor-font-size);
 }
 
 .palette-input {
