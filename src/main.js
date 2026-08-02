@@ -54,6 +54,7 @@ import {
 } from "./languages.js";
 import { renderMarkdownDocument } from "./markdown.js";
 import { createMenuBar, showContextMenu } from "./menu.js";
+import { accel, isLetter, IS_MAC, perPlatform } from "./shortcuts.js";
 import {
   initTerminals,
   openTerminal,
@@ -2095,8 +2096,13 @@ function setFontSize(size) {
   // the gutter rows are rebuilt at the new spacing rather than the old.
   for (const pane of panes) pane.view.requestMeasure();
   // The terminals are part of the same window and read at the same distance, so
-  // they zoom with the editor rather than staying at a fixed size.
+  // they zoom with the editor rather than staying at a fixed size. The harness
+  // panel is the same argument: it sits beside the editor and was the one
+  // surface that ignored zoom, staying at a fixed 0.85rem while everything
+  // around it grew. CSS rather than a transaction because nothing in it needs
+  // re-measuring — it is ordinary flow layout, not a virtualised document.
   setTerminalFontSize(fontSize);
+  document.documentElement.style.setProperty("--editor-font-size", fontSize + "px");
   dom.zoomLevel.textContent = `${fontSize}px`;
   localStorage.setItem(STORAGE.fontSize, String(fontSize));
 }
@@ -2469,8 +2475,20 @@ function buildMenus() {
         run: closeAllTabs,
       },
       { separator: true },
-      { label: t("file.minimize"), icon: "minimize", accel: "Alt+M", run: minimizeWindow },
-      { label: t("file.exit"), icon: "exit", accel: "Alt+F4", run: exitApp },
+      {
+        label: t("file.minimize"),
+        icon: "minimize",
+        // Cmd+M on a Mac, which is the platform's own minimise chord.
+        accel: perPlatform("Alt+M", "Ctrl+M"),
+        run: minimizeWindow,
+      },
+      {
+        label: t("file.exit"),
+        icon: "exit",
+        // Cmd+Q, and the window manager owns it on both platforms.
+        accel: perPlatform("Alt+F4", "Ctrl+Q"),
+        run: exitApp,
+      },
     ],
   },
   {
@@ -3011,7 +3029,7 @@ window.addEventListener(
       openCommandPalette();
       return;
     }
-    if (ctrl && event.altKey && event.key.toLowerCase() === "h") {
+    if (ctrl && event.altKey && isLetter(event, "h")) {
       event.preventDefault();
       togglePerpPanel();
       return;
@@ -3042,7 +3060,7 @@ window.addEventListener(
     // than a Ctrl combo: every Ctrl+Alt+<letter> is indistinguishable from
     // AltGr typing a special character (see the `altGr` note below), so it
     // is not safe ground for a new binding.
-    if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "z") {
+    if (!ctrl && event.altKey && !event.shiftKey && isLetter(event, "z")) {
       event.preventDefault();
       setWordWrap(!wordWrap);
       return;
@@ -3058,12 +3076,12 @@ window.addEventListener(
     // above — plain Alt avoids the Ctrl+Alt/AltGr ambiguity — chosen to match
     // Word Wrap and Bionic Reading already having a binding, so every View
     // toggle behaves consistently rather than some being mouse/menu-only.
-    if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "t") {
+    if (!ctrl && event.altKey && !event.shiftKey && isLetter(event, "t")) {
       event.preventDefault();
       setToolbarVisible(!showToolbar);
       return;
     }
-    if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "s") {
+    if (!ctrl && event.altKey && !event.shiftKey && isLetter(event, "s")) {
       event.preventDefault();
       setStatusbarVisible(!showStatusbar);
       return;
@@ -3075,7 +3093,13 @@ window.addEventListener(
     // of preventDefault: a focused terminal would otherwise still forward the
     // key to the shell as an escape sequence, so restoring the window would
     // show a stray `m` on the prompt.
-    if (!ctrl && event.altKey && !event.shiftKey && event.key.toLowerCase() === "m") {
+    // On a Mac the chord is Cmd+M, which is what its own windows use; Option+M
+    // types `µ` there and belongs to the person typing.
+    if (
+      (IS_MAC ? ctrl && !event.altKey : !ctrl && event.altKey) &&
+      !event.shiftKey &&
+      isLetter(event, "m")
+    ) {
       event.preventDefault();
       event.stopPropagation();
       minimizeWindow();
@@ -3177,7 +3201,7 @@ window.addEventListener(
     } else if (!altGr && key === "0") {
       event.preventDefault();
       setFontSize(DEFAULT_FONT_SIZE);
-    } else if (event.altKey && key === "g") {
+    } else if (event.altKey && isLetter(event, "g")) {
       event.preventDefault();
       event.stopPropagation();
       if (writes()) insertGuid();

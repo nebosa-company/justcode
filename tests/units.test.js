@@ -15,6 +15,7 @@ import { iconMarkup, PATHS } from "../src/icons.js";
 import { blocks, spans } from "../src/replytext.js";
 import { decideReload } from "../src/ondisk.js";
 import { renderMarkdownDocument } from "../src/markdown.js";
+import { formatAccel, isLetter } from "../src/shortcuts.js";
 
 test("a file's language comes from its own extension, not its path", () => {
   assert.equal(languageIdFor("a.py"), "python");
@@ -256,4 +257,41 @@ test("an emptied file is still a change worth reacting to", () => {
     decideReload({ diskText: "", savedText: "something", modified: true }),
     "ask",
   );
+});
+
+test("a Mac draws a shortcut in glyphs, in the order every other Mac menu uses", () => {
+  // Not a preference. Control, Option, Shift, Command, then the key — a menu
+  // that prints ⌘⇧S among applications printing ⇧⌘S reads as a port.
+  assert.equal(formatAccel("Ctrl+Shift+S", true), "⇧⌘S");
+  assert.equal(formatAccel("Ctrl+Alt+G", true), "⌥⌘G");
+  assert.equal(formatAccel("Ctrl+N", true), "⌘N");
+  // `Ctrl` in a declaration means the command modifier, which is what the key
+  // handler has always read it as (`event.ctrlKey || event.metaKey`).
+  assert.equal(formatAccel("Ctrl+Backspace", true), "⌘⌫");
+  // Alternatives keep their separator.
+  assert.equal(formatAccel("Ctrl+Y / Ctrl+Shift+Z", true), "⌘Y / ⇧⌘Z");
+});
+
+test("everywhere else the same declaration is left exactly as written", () => {
+  for (const spec of ["Ctrl+N", "Ctrl+Shift+S", "Alt+F", "Ctrl+Backspace", "F5"]) {
+    assert.equal(formatAccel(spec, false), spec);
+  }
+});
+
+test("a shortcut with nothing to translate survives both platforms", () => {
+  // Function keys, and the prose entries the reference list carries.
+  assert.equal(formatAccel("F5", true), "F5");
+  assert.equal(formatAccel("", true), "");
+  assert.equal(formatAccel("Shift+F4", true), "⇧F4");
+});
+
+test("an Option shortcut matches the key that was pressed, not the character it typed", () => {
+  // The bug this replaced: on a Mac ⌥M types `µ`, so `event.key === "m"` was
+  // never true and six shortcuts in this app simply did not exist there.
+  assert.equal(isLetter({ key: "µ", code: "KeyM" }, "m"), true);
+  assert.equal(isLetter({ key: "ß", code: "KeyS" }, "s"), true);
+  // The character still counts, for a layout where the letter has moved.
+  assert.equal(isLetter({ key: "m", code: "Semicolon" }, "m"), true);
+  // And a different key is still a different key.
+  assert.equal(isLetter({ key: "x", code: "KeyX" }, "m"), false);
 });

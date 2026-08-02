@@ -1,4 +1,5 @@
 import { iconElement } from "./icons.js";
+import { accel, IS_MAC } from "./shortcuts.js";
 
 /**
  * Renders a list of menu items into `container`, wiring up the keyboard
@@ -107,13 +108,15 @@ export function renderMenuItems(container, items, close, parent = null) {
     const accelerator = document.createElement("span");
     accelerator.className = "menu-accel";
     // A submenu shows a chevron where the shortcut would go.
-    accelerator.textContent = item.submenu ? "›" : item.accel || "";
+    // Declared once as `Ctrl+Shift+K`, drawn as `⇧⌘K` on a Mac (`shortcuts.js`).
+    accelerator.textContent = item.submenu ? "›" : accel(item.accel || "");
     button.append(accelerator);
 
     // The accelerator is always visible in the row; the tooltip repeats it on
     // hover so the shortcut is discoverable without reading the whole menu.
     // `hint` (a recent file's full path) is more useful than either.
-    button.title = item.hint || (item.accel ? `${item.label} — ${item.accel}` : item.label);
+    button.title =
+      item.hint || (item.accel ? `${item.label} — ${accel(item.accel)}` : item.label);
 
     if (item.enabled && !item.enabled()) {
       button.disabled = true;
@@ -322,9 +325,12 @@ export function createMenuBar(container, menus) {
     const title = document.createElement("button");
     title.className = "menu-title";
     title.type = "button";
-    const mnemonicIndex = menu.mnemonic
-      ? menu.label.toLowerCase().indexOf(menu.mnemonic.toLowerCase())
-      : -1;
+    // No underline on a Mac either: it advertises a key that does nothing
+    // there, which is worse than not offering one.
+    const mnemonicIndex =
+      menu.mnemonic && !IS_MAC
+        ? menu.label.toLowerCase().indexOf(menu.mnemonic.toLowerCase())
+        : -1;
     if (mnemonicIndex === -1) {
       title.textContent = menu.label;
     } else {
@@ -339,7 +345,9 @@ export function createMenuBar(container, menus) {
     title.setAttribute("role", "menuitem");
     title.setAttribute("aria-haspopup", "menu");
     title.setAttribute("aria-expanded", "false");
-    if (menu.mnemonic) title.setAttribute("aria-keyshortcuts", `Alt+${menu.mnemonic.toUpperCase()}`);
+    if (menu.mnemonic && !IS_MAC) {
+      title.setAttribute("aria-keyshortcuts", `Alt+${menu.mnemonic.toUpperCase()}`);
+    }
     title.addEventListener("click", () => {
       if (openIndex === index && openedByClick) close();
       else open(index, true);
@@ -421,7 +429,18 @@ export function createMenuBar(container, menus) {
     // just while the bar already has focus — mirrors Windows' menu-bar
     // access keys. Plain Alt only: Ctrl+Alt is AltGr on many layouts, and
     // Alt+Shift+letter is a layout-switch chord on some systems.
-    if (event.altKey && !event.ctrlKey && !event.shiftKey && event.key.length === 1) {
+    //
+    // Not on a Mac, and not merely because it did not work — though it did
+    // not, since ⌥F types `ƒ` and never equalled `"f"`. A Mac has no menu-bar
+    // access keys, and Option+letter is how its users type `ƒ`, `∂` and `©`.
+    // Making this one fire would have been the worse bug.
+    if (
+      !IS_MAC &&
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      event.key.length === 1
+    ) {
       const key = event.key.toLowerCase();
       const index = menus.findIndex((menu) => menu.mnemonic === key);
       if (index !== -1) {

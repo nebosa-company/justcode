@@ -1,5 +1,6 @@
 import { appLogoElement, iconElement, iconMarkup } from "./icons.js";
 import { LOCALES, t } from "./i18n.js";
+import { accel, IS_MAC, perPlatform } from "./shortcuts.js";
 
 /**
  * Shortcut reference. The "native" groups are CodeMirror's own bindings, which
@@ -13,6 +14,10 @@ import { LOCALES, t } from "./i18n.js";
 const SHORTCUTS = [
   {
     group: "sc.g.menus",
+    // Windows and Linux only. A Mac has no menu-bar access keys, and
+    // Option+letter is how its users type `ƒ` and `∂` — so these are not bound
+    // there, and listing them would advertise four dead keys.
+    onlyWhen: () => !IS_MAC,
     items: [
       ["Alt+F", "sc.openFileMenu"],
       ["Alt+E", "sc.openEditMenu"],
@@ -31,8 +36,8 @@ const SHORTCUTS = [
       ["F5", "sc.run"],
       ["Ctrl+W", "sc.closeTab"],
       ["Ctrl+Shift+W", "sc.closeAll"],
-      ["Alt+M", "sc.minimize"],
-      ["Alt+F4", "sc.exit"],
+      [perPlatform("Alt+M", "Ctrl+M"), "sc.minimize"],
+      [perPlatform("Alt+F4", "Ctrl+Q"), "sc.exit"],
     ],
   },
   {
@@ -951,7 +956,8 @@ export function showAssociations(groups, checkedNow, onApply) {
 function renderShortcutsInto(container) {
   const columns = document.createElement("div");
   columns.className = "shortcut-columns";
-  for (const { group, items } of SHORTCUTS) {
+  for (const { group, items, onlyWhen } of SHORTCUTS) {
+    if (onlyWhen && !onlyWhen()) continue;
     const section = document.createElement("section");
     const heading = document.createElement("h3");
     heading.textContent = t(group);
@@ -961,7 +967,7 @@ function renderShortcutsInto(container) {
       const keyCell = document.createElement("td");
       keyCell.className = "shortcut-keys";
       // Literal key names print as written; a `sc.k.` entry is prose to translate.
-      keyCell.textContent = keys.startsWith("sc.k.") ? t(keys) : keys;
+      keyCell.textContent = keys.startsWith("sc.k.") ? t(keys) : accel(keys);
       const textCell = document.createElement("td");
       textCell.textContent = t(description);
       row.append(keyCell, textCell);
