@@ -6,18 +6,18 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built, with three open.** This document is the requirements source for the
+**Status: built, with two open.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 13: **165 of 169 requirements are done**, 3 open, 1 external-gated
+As of cycle 13: **166 of 169 requirements are done**, 2 open, 1 external-gated
 (`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
 journal, projection), the gate runner and its evidence, the recovery and
 watchdog layer, the git harness, the verification machinery, the model router
 over a `curl` transport exercised against a live LM Studio, cost accounting
 replayed from the journal, the tool host and its permission classifier, **the
 loop driver**, and the chat surface with `/btw` — in [`crates/`](../crates/),
-623 tests, at version 0.2.0.
+628 tests, at version 0.2.0.
 
 **The harness runs a batch on its own, against a real model.** `perp run
 --requirement <id>` asks a link, parses tool calls through the degradation
@@ -35,7 +35,6 @@ workspace, and each has a transcript behind it. Still open:
 - `M-29` — a link that cannot cache reports zeroes indistinguishable from a
   broken ledger.
 - `L-23` — thirteen tool calls before the first edit, on a one-file batch.
-- `M-30` — the concurrency bound holds for a batch and not for a conversation.
 
 `T-20` and `M-30` were both found while verifying something else — the first by
 planting a claim to see whether `V-15` would catch it, and it did not, because
@@ -49,6 +48,15 @@ was cut. Closing it turned up a defect of the same shape one layer down:
 with a long stderr and an empty stdout that it had been handed a tail of
 nothing. A label about the wrong stream is the same class of lie as no label,
 and the flags are per-stream now.
+
+`M-30` is closed too, and auditing it found more paths than the row named.
+`chat`, `models`, `verify_model` and `capabilities` also reach a link, and
+`M-27` made the subprocess probe spawn the command to ask what it accepts — a
+whole agent process, which is the case `M-28` was written about. Four of the
+seven had no caller outside `client.rs` and were made private, which is the
+better answer where it applies: a path that cannot be reached needs no guard,
+and guarding `chat_raw` would have double-acquired under `call`, deadlocking the
+main path against itself. The three with a real public surface take a permit.
 
 `V-15` came out of reading what cycles 10 to 12 did rather than out of a cycle
 failing in a way that filed it, and it was the first entry here proposed rather
@@ -411,7 +419,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ⛔ `M-25` | An `lmlink` link cannot be reached by a base-URL swap: a peer's models are absent from the local REST listing, and `lms` selects the device from a **global** preferred-device setting rather than a per-call argument. Until LM Studio exposes per-request device selection, inference on a peer is **external-gated** — it needs the LM Studio SDK or a global setting change, and a loop that flipped a global setting to route one call would be changing the operator's environment underneath them. Measured in `c2/b10/s01`. |
 | ✅ ~~`M-27`~~ | A subprocess link's model is verified against what the command accepts. `M-14`'s probe asks a server which models it serves, so it is skipped entirely for a link that has no server — and a `claude-cli` link with a misspelled model is discovered by a failing call rather than at startup, which is the failure `M-14` exists to prevent. |
 | ✅ ~~`M-28`~~ | A subprocess link declares a concurrency bound and the router honours it, as `M-15` requires of an HTTP link. Nothing stops a batch spawning one command per parallel item today, and each is a whole agent process rather than a socket. |
-| `M-30` | The concurrency bound holds on every path that reaches a link, not only on `Client::call`. `M-15` acquires its permit in `call`, and `stream`, `chat_raw` and `speak` each reach a link without passing through it — `stream` because `C-4` streams a reply for the chat surface, the other two because they exist to bypass the router's dispatch. The bound is honoured for a batch and ignored for a conversation, which is the wrong way round: a person waiting on a reply is the case where a saturated GPU is felt. Found while verifying `M-28`, which asks only for parity with `M-15` and has it — this is the gap both link kinds share. |
+| ✅ ~~`M-30`~~ | The concurrency bound holds on every path that reaches a link, not only on `Client::call`. `M-15` acquires its permit in `call`, and `stream`, `chat_raw` and `speak` each reach a link without passing through it — `stream` because `C-4` streams a reply for the chat surface, the other two because they exist to bypass the router's dispatch. The bound is honoured for a batch and ignored for a conversation, which is the wrong way round: a person waiting on a reply is the case where a saturated GPU is felt. Found while verifying `M-28`, which asks only for parity with `M-15` and has it — this is the gap both link kinds share. |
 | ✅ ~~`M-16`~~ | **Warm before a batch.** LM Studio JIT-loads models; a cold 30B load is minutes. The engine pre-loads the batch's links and holds them with a TTL longer than the batch's expected duration. |
 | ✅ ~~`M-17`~~ | Never force two large models onto one host concurrently. The router treats a host's VRAM as a lease. |
 | ✅ ~~`M-18`~~ | Use TTFT and tok/s from `/api/v0` to keep a rolling throughput estimate per link, and use it for both scheduling and the wall-clock budget. |

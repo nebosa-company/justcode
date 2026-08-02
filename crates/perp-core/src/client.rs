@@ -481,7 +481,7 @@ impl<'a> Client<'a> {
     /// LM Studio's `/api/v0/models` carries quantization, loaded state and the
     /// real context length; everything else gets the OpenAI-compatible list,
     /// which carries ids and nothing more.
-    pub fn models(&self, link: &Link) -> Result<Vec<ModelFacts>> {
+    fn models(&self, link: &Link) -> Result<Vec<ModelFacts>> {
         let base = Self::base(link)?.trim_end_matches('/');
         let path = if link.kind.has_native_api() { "/api/v0/models" } else { "/v1/models" };
         let request = Self::authorise(link, Request::get(format!("{base}{path}")));
@@ -497,7 +497,7 @@ impl<'a> Client<'a> {
     }
 
     /// Check the configured model against what the link offers (`M-14`).
-    pub fn verify_model(&self, links: &Links, link: &Link) -> Result<ModelFacts> {
+    fn verify_model(&self, links: &Links, link: &Link) -> Result<ModelFacts> {
         let facts = self.models(link)?;
         let ids: Vec<String> = facts.iter().map(|f| f.id.clone()).collect();
         links.check_model(link, &ids)?;
@@ -558,6 +558,9 @@ impl<'a> Client<'a> {
 
     /// Probe capabilities, cached against link + model + quantization (`M-6`).
     pub fn capabilities(&mut self, links: &Links, link: &Link, now: i64) -> Result<Capabilities> {
+        // `M-30`: a probe reaches the link like anything else, and `M-27` made
+        // the subprocess probe spawn the command to ask what it accepts.
+        let _permit = self.permit(link)?;
         let facts = self.cached_facts(links, link, now)?;
         let key = ProbeKey::of(link, &facts);
         if let Some(cached) = self.cache.get(&key, now) {
@@ -591,6 +594,9 @@ impl<'a> Client<'a> {
         interrupt: impl FnMut() -> bool,
         on_event: impl FnMut(&crate::stream::Event),
     ) -> Result<crate::stream::Streamed> {
+        // `M-30`: taken before either dispatch, so the subprocess path is
+        // bounded too — that one spawns a whole agent process per call.
+        let _permit = self.permit(link)?;
         // A command is not an address, and asking one for a `base_url` is how
         // every chat call to a `claude-cli` link came to print a failure before
         // falling back to the buffered path.
@@ -800,12 +806,13 @@ impl<'a> Client<'a> {
 
     /// One call to one link.
     pub fn chat(&self, link: &Link, request: &ChatRequest) -> Result<Reply> {
+        let _permit = self.permit(link)?;
         self.speak(link, request, Self::protocol(link))
     }
 
     /// One call, keeping the raw response so a caller can read native tool
     /// calls out of it (`M-8`).
-    pub fn chat_raw(&self, link: &Link, request: &ChatRequest) -> Result<(Reply, String)> {
+    fn chat_raw(&self, link: &Link, request: &ChatRequest) -> Result<(Reply, String)> {
         // The same two exceptions [`speak`] makes, made here too — because this
         // is the method the chain walker actually calls. Routing them in `speak`
         // alone left both unreachable from the path every real call takes: a
@@ -840,7 +847,7 @@ impl<'a> Client<'a> {
     /// OpenAI's two surfaces; Anthropic is a third wire format and `claude-cli` is
     /// not a wire at all, so both are decided by kind before that question is
     /// asked.
-    pub fn speak(&self, link: &Link, request: &ChatRequest, protocol: Protocol) -> Result<Reply> {
+    fn speak(&self, link: &Link, request: &ChatRequest, protocol: Protocol) -> Result<Reply> {
         if link.kind == crate::link::Kind::Anthropic {
             return self.messages(link, request);
         }
@@ -910,6 +917,27 @@ impl<'a> Client<'a> {
     /// A fall-through never crosses the privacy boundary: the router has
     /// already removed ineligible links, so a `local-only` run cannot reach a
     /// cloud link by failing enough times.
+    /// Take the link's slot, or refuse (`M-30`).
+    ///
+    /// `M-15` bounds a link because one GPU serving one model does not want
+    /// four parallel requests, and a subprocess link is a whole agent process
+    /// rather than a socket. The bound was taken in [`Client::call`] alone, so
+    /// it held for a batch and not for a conversation — which is the wrong way
+    /// round, because a person waiting on a reply is when a saturated machine
+    /// is actually felt.
+    ///
+    /// Refuses rather than queues, the same as `call` skipping a link: a caller
+    /// here has already chosen its link and has nowhere to fall through to, so
+    /// the honest answer is that the link is busy.
+    fn permit(&self, link: &Link) -> Result<crate::link::Permit> {
+        self.permits.acquire(link).ok_or_else(|| {
+            Error::unbound(
+                format!("link.{}", link.name),
+                format!("at its concurrency limit of {} (`M-30`)", link.concurrency),
+            )
+        })
+    }
+
     pub fn call(
         &mut self,
         links: &Links,
@@ -1519,6 +1547,54 @@ mod tests {
         // And it never reached the wire: no server was asked, because there is
         // no server to ask.
         assert!(transport.seen.borrow().is_empty(), "{:?}", transport.seen.borrow());
+    }
+
+    /// `M-30`: the bound holds on the paths that never touch `call`.
+    ///
+    /// `M-15` took its permit in `call` alone, so a batch was bounded and a
+    /// conversation was not — which is the wrong way round, because a person
+    /// waiting on a reply is when a saturated machine is felt. `M-28` asked
+    /// only for parity between link kinds and had it; this is the gap both
+    /// kinds shared.
+    #[test]
+    fn the_bound_holds_on_every_path_that_reaches_a_link() {
+        let dir = tmpdir("m30-paths");
+        let stub = stub_claude(&dir, true);
+        let _bin = ClaudeBin::set(&stub);
+
+        let transport = Canned::new(vec![]);
+        let mut client = Client::new(&transport);
+        let links = claude_cli_link("sonnet");
+        let link = links.get("cli").expect("cli");
+
+        let permits = std::sync::Arc::clone(&client.permits);
+        let held = permits.acquire(link).expect("hold the link's one slot");
+
+        // `chat`, which goes to the link without passing through `call`.
+        let err = client
+            .chat(link, &ChatRequest::new(vec![Message::user("hi")]))
+            .expect_err("the link is already at its limit");
+        assert!(format!("{err}").contains("concurrency limit"), "chat: {err}");
+
+        // `stream`, which the chat surface uses and which spawns a whole
+        // process for a subprocess link.
+        let err = client
+            .stream(link, &ChatRequest::new(vec![Message::user("hi")]), || false, |_| {})
+            .expect_err("the link is already at its limit");
+        assert!(format!("{err}").contains("concurrency limit"), "stream: {err}");
+
+        // The probe reaches the link too, and `M-27` made it spawn the command.
+        let err = client
+            .capabilities(&links, link, 1000)
+            .expect_err("the link is already at its limit");
+        assert!(format!("{err}").contains("concurrency limit"), "capabilities: {err}");
+
+        // Released, everything works again — a bound that leaks is a bound that
+        // stops the loop for good on its second call.
+        drop(held);
+        client
+            .chat(link, &ChatRequest::new(vec![Message::user("hi")]))
+            .expect("the slot is free again");
     }
 
     #[test]
