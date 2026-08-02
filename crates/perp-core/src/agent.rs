@@ -32,7 +32,16 @@ use crate::tool::{Call, Host, Output};
 /// asked a model twelve times is not making progress, it is arguing with
 /// itself, and `L-11`'s watchdog would catch it eventually at much greater
 /// cost.
-pub const MAX_TURNS: u32 = 40;
+///
+/// Raised from forty to a hundred after cycles 10 and 11, where five of the
+/// eight requirement steps ended on the ceiling rather than on a verdict. It is
+/// a deliberate experiment and not a finding: nothing shows those steps were
+/// close to delivering, and the plainer reading is that they were going in
+/// circles more slowly than [`MAX_QUIET_TURNS`] counts. What the ceiling settles
+/// is only how much a stuck step costs before it is stopped — raising it buys
+/// evidence about which of the two is happening, at roughly two and a half
+/// times the tokens per stuck step.
+pub const MAX_TURNS: u32 = 100;
 
 /// Consecutive turns that changed nothing before a step is called stuck
 /// (`L-11`).
@@ -53,8 +62,8 @@ pub const MAX_TURNS: u32 = 40;
 /// So a turn is quiet only when it learned nothing *and* changed nothing —
 /// which is `L-12`'s repetition rule, and the reason [`Call::signature`] exists.
 /// Reading a range not read before is information. Reading the same bytes for
-/// the fourth time is going in circles. The forty-turn ceiling is what stops a
-/// model that keeps finding new things to read forever.
+/// the fourth time is going in circles. [`MAX_TURNS`] is what stops a model
+/// that keeps finding new things to read forever.
 pub const MAX_QUIET_TURNS: u32 = 4;
 
 /// Whether a call changes the workspace, and so counts as progress (`L-11`).
@@ -1351,8 +1360,8 @@ command: echo hi
         assert!(summary.contains("changed nothing"), "the no-progress rule fired: {summary}");
         // The literal, not the constant. Asserting `== MAX_QUIET_TURNS` moves with
         // the mutation, so raising the ceiling to the turn cap stayed green in a
-        // red run: the spinner would have burned forty turns and the test would
-        // still have agreed with it.
+        // red run: the spinner would have burned every turn the cap allows and
+        // the test would still have agreed with it.
         //
         // Five, not four: the first read is a signature never made before, so it
         // is information and resets the count. The four after it are repeats.
