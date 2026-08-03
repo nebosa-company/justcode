@@ -122,8 +122,21 @@ pub struct Channel {
 }
 
 impl Channel {
-    pub fn at(dir: &Path) -> Channel {
-        Channel { path: dir.join("control") }
+    /// Takes the **workspace root** and resolves `.harness/` itself.
+    ///
+    /// It used to take the directory, and the two callers disagreed about which
+    /// one: the engine passed `.harness/`, the CLI passed the root. So
+    /// `perp control abort` wrote `<root>/control`, the engine read
+    /// `<root>/.harness/control`, and the abort was never seen — the run
+    /// carried on into the next batch and the only thing that ever read the
+    /// file was the model, which found it while globbing the workspace and
+    /// treated an operator's stop signal as page content.
+    ///
+    /// Resolving here rather than at the call sites is what makes that class of
+    /// bug impossible rather than fixed: there is no longer a directory for a
+    /// caller to get wrong.
+    pub fn at(root: &Path) -> Channel {
+        Channel { path: crate::layout::dir_in(root).join("control") }
     }
 
     pub fn path(&self) -> &Path {
@@ -406,6 +419,46 @@ mod tests {
 
     const T: i64 = 1_700_000_000;
 
+    /// The CLI writes and the engine reads. They used to disagree about which
+    /// directory, and an abort that nobody read is worse than no abort at all —
+    /// the operator believes the loop is stopping and it is not.
+    ///
+    /// Both sides are constructed from the workspace root here, exactly as the
+    /// CLI and the engine construct them, so a future divergence fails this
+    /// rather than a run.
+    #[test]
+    fn the_operator_writes_where_the_engine_reads() {
+        let root = tmpdir("control-agree");
+        std::fs::create_dir_all(crate::layout::dir_in(&root)).expect("harness dir");
+
+        let written_by_the_cli = Channel::at(&root);
+        written_by_the_cli
+            .ask(&Control::Abort { who: "the operator".into() })
+            .expect("ask");
+
+        let read_by_the_engine = Channel::at(&root);
+        assert_eq!(
+            read_by_the_engine.read().expect("read"),
+            Control::Abort { who: "the operator".into() },
+            "the engine must see the abort the operator wrote"
+        );
+    }
+
+    /// And it must not land in the workspace the model searches. A control file
+    /// beside the source is one the model finds while globbing and reads as
+    /// page content — an operator's stop signal arriving as model input.
+    #[test]
+    fn the_control_file_is_not_loose_in_the_workspace() {
+        let root = tmpdir("control-placement");
+        std::fs::create_dir_all(crate::layout::dir_in(&root)).expect("harness dir");
+
+        let channel = Channel::at(&root);
+        channel.ask(&Control::Pause).expect("ask");
+
+        assert!(!root.join("control").exists(), "nothing loose in the workspace root");
+        assert!(crate::layout::dir_in(&root).join("control").exists(), "it belongs under .harness/");
+    }
+
     fn step(n: u32) -> StepId {
         StepId::new(4, "b17", n).expect("step")
     }
@@ -454,6 +507,7 @@ mod tests {
         // direction to guess in.
         let dir = tmpdir("control-junk");
         let channel = Channel::at(&dir);
+        std::fs::create_dir_all(crate::layout::dir_in(&dir)).expect("harness dir");
         std::fs::write(channel.path(), "resume-ish?\n").expect("write");
         let err = channel.read().expect_err("must refuse rather than assume");
         assert!(format!("{err}").contains("resume-ish"), "{err}");

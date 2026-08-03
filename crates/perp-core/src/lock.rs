@@ -51,7 +51,7 @@ impl Kind {
         }
     }
 
-    fn file_name(self) -> &'static str {
+    pub fn file_name(self) -> &'static str {
         match self {
             Kind::Write => "write.lock",
             Kind::Gate => "gate.lock",
@@ -165,9 +165,23 @@ impl Lock {
                 };
 
                 if now - existing.beat < ttl {
+                    // Say when it clears, and how to clear it now.
+                    //
+                    // The heartbeat rule is right and it did its job, but the
+                    // message did not: after a killed run, "held by
+                    // perp-29984-… at step c2/b2/s17" reads as a permanent
+                    // refusal by a process that no longer exists. Every later
+                    // command fails the same way and nothing says the wait is
+                    // finite, so the operator deletes the file by hand — which
+                    // is the one move that is unsafe if the holder *is* alive.
+                    let clears_in = ttl - (now - existing.beat);
                     return Err(Error::refused(
                         format!("{} lock", kind.as_str()),
-                        format!("held by {}", existing.describe()),
+                        format!(
+                            "held by {}; it stops being honoured in {clears_in}s if that process \
+                             has stopped beating — wait, or `perp unlock` to break it now",
+                            existing.describe()
+                        ),
                     ));
                 }
 
@@ -217,6 +231,33 @@ impl Lock {
     /// original.
     pub fn this_process(started: i64) -> String {
         format!("perp-{}-{started}", std::process::id())
+    }
+
+    /// Who holds a lock, if anyone. `None` for no lock and for one nobody can
+    /// read — the caller decides what an unreadable lock means.
+    pub fn peek(path: &Path) -> Option<Holder> {
+        Holder::parse(&fs::read_to_string(path).ok()?)
+    }
+
+    /// Break a lock deliberately, returning who held it.
+    ///
+    /// The operator's escape hatch, and it exists because they had no other one.
+    /// A killed run leaves a lock that outlives it, and until the heartbeat TTL
+    /// lapses every later command refuses — so the only move available was
+    /// deleting the file, which is precisely the move that is unsafe when the
+    /// holder is still running. `N-1` promises a kill costs at most the
+    /// in-flight step; a workspace no command will touch for five minutes costs
+    /// more than that.
+    ///
+    /// Deliberately not automatic: a lock held by a live process is doing its
+    /// job (`L-20`), and breaking it on a guess is how two writers happen.
+    pub fn break_at(path: &Path) -> Result<Option<Holder>> {
+        let held = Lock::peek(path);
+        match fs::remove_file(path) {
+            Ok(()) => Ok(held),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(Error::io(path, e)),
+        }
     }
 
     pub fn holder(&self) -> &Holder {

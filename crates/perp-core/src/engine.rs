@@ -235,7 +235,7 @@ impl Engine {
             budgets,
             concurrency: Concurrency::default(),
             root: root.to_path_buf(),
-            channel: crate::control::Channel::at(&crate::layout::dir_in(root)),
+            channel: crate::control::Channel::at(root),
             worktrees: None,
             now: time::now,
         })
@@ -1001,7 +1001,7 @@ mod tests {
         // processes, often on separate days, and a control file works when
         // only one of them is alive.
         let root = workspace("engine-pause");
-        crate::control::Channel::at(&crate::layout::dir_in(&root))
+        crate::control::Channel::at(&root)
             .ask(&crate::control::Control::Pause)
             .expect("ask");
 
@@ -1018,7 +1018,7 @@ mod tests {
     #[test]
     fn a_single_step_runs_exactly_one_and_then_pauses() {
         let root = workspace("engine-single-step");
-        let channel = crate::control::Channel::at(&crate::layout::dir_in(&root));
+        let channel = crate::control::Channel::at(&root);
         channel.ask(&crate::control::Control::Step).expect("ask");
 
         let mut engine = Engine::open(&root).expect("open");
@@ -1036,7 +1036,7 @@ mod tests {
     #[test]
     fn an_abort_writes_a_human_stop_rather_than_a_park() {
         let root = workspace("engine-abort");
-        crate::control::Channel::at(&crate::layout::dir_in(&root))
+        crate::control::Channel::at(&root)
             .ask(&crate::control::Control::Abort { who: "the operator".into() })
             .expect("ask");
 
@@ -1052,7 +1052,7 @@ mod tests {
     #[test]
     fn an_injection_applies_once_and_is_on_the_report() {
         let root = workspace("engine-inject");
-        let channel = crate::control::Channel::at(&crate::layout::dir_in(&root));
+        let channel = crate::control::Channel::at(&root);
         channel
             .ask(&crate::control::Control::Inject { text: "prefer the other helper".into() })
             .expect("ask");

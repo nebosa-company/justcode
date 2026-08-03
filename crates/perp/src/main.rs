@@ -135,6 +135,12 @@ usage:
       Live control. Written to a file the engine reads at the next step
       boundary, never mid-step. Works whether or not a loop is running.
 
+  perp unlock [--root <dir>]
+      Break the write and gate locks a killed run left behind, naming who held
+      them. A lock stops being honoured on its own once its holder stops
+      beating; this is for not waiting. If the name printed is a process still
+      running, you have just arranged for two writers.
+
   perp rewind <step> [--approve <your name>]
       Show what returning to a step would undo, and — with an approval — do it
       by reverting rather than resetting, so nothing is destroyed on either
@@ -224,6 +230,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("artifact") => cmd_artifact(&args[1..]),
         Some("watch") => cmd_watch(&args[1..]),
         Some("control") => cmd_control(&args[1..]),
+        Some("unlock") => cmd_unlock(&args[1..]),
         Some("rewind") => cmd_rewind(&args[1..]),
         Some("panel") => cmd_panel(&args[1..]),
         Some("cycle") => cmd_cycle(&args[1..]),
@@ -1433,6 +1440,41 @@ fn cmd_watch(args: &[&str]) -> std::result::Result<(), String> {
 
 /// Live control (`O-3`). Writes what the operator asked for; the engine reads
 /// it at the next step boundary and never mid-step.
+/// Break a lock a dead run left behind (`N-1`, `L-20`).
+///
+/// The operator had no way to do this. A killed run leaves a lock that outlives
+/// it, and until the heartbeat TTL lapses every later command refuses — so the
+/// only move was deleting the file by hand, which is the one move that is
+/// dangerous when the holder is actually alive.
+///
+/// It prints who held it rather than doing it quietly: if that names a process
+/// still running, the operator has just been told they are about to have two
+/// writers, which is the thing `L-20` exists to prevent.
+fn cmd_unlock(args: &[&str]) -> std::result::Result<(), String> {
+    let root = workspace_of(args);
+    let dir = perp_core::layout::dir_in(&root);
+
+    let mut broke_any = false;
+    for kind in [perp_core::lock::Kind::Write, perp_core::lock::Kind::Gate] {
+        let path = dir.join(kind.file_name());
+        match perp_core::lock::Lock::break_at(&path).map_err(|e| e.to_string())? {
+            Some(holder) => {
+                broke_any = true;
+                println!("broke the {} lock — held by {}", kind.as_str(), holder.describe());
+            }
+            None if path.exists() => {
+                broke_any = true;
+                println!("removed an unreadable {} lock at {}", kind.as_str(), path.display());
+            }
+            None => {}
+        }
+    }
+    if !broke_any {
+        println!("no lock held — nothing to break");
+    }
+    Ok(())
+}
+
 fn cmd_control(args: &[&str]) -> std::result::Result<(), String> {
     let root = workspace_of(args);
     load(args).map_err(|e| e.to_string())?;
