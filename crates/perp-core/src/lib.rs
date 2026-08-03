@@ -94,6 +94,9 @@ pub mod os;
 pub mod probe;
 pub mod process;
 pub mod prompt;
+/// Nothing at run time — a test that asks whether the rest of this crate is
+/// reachable from a real run (`V-15`).
+pub mod reachable;
 pub mod repo;
 pub mod runtime;
 pub mod security;
