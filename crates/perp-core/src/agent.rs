@@ -81,6 +81,28 @@ pub const MAX_QUIET_TURNS: u32 = 4;
 /// the context by turn fifty, and it stops the moment anything is written.
 pub const TELL_AFTER_TURNS: u32 = 8;
 
+/// Turns a step may spend changing nothing *after being told* before it is
+/// ended (`L-11`, `L-25`).
+///
+/// `L-11`'s quiet counter is the right rule and does not cover this case: it
+/// resets on a turn that *learned* something, and a model reading a file it has
+/// not read before learns something every time. So a step that only ever reads
+/// never goes quiet, and the only thing left to stop it is [`MAX_TURNS`] — a
+/// hundred turns away.
+///
+/// Measured, running this harness against DeepSeek on a Flutter backlog: `R-4`
+/// and `R-12` each sat at ten turns having written, patched and deleted nothing,
+/// with the `L-25` notice printed four times and nothing acting on it. The turn
+/// ceiling was raised from forty to a hundred to buy evidence about whether such
+/// steps were close to delivering. They were not, and this is the answer: a step
+/// told at eight and still empty at sixteen is not slow, it is stuck, and the
+/// remaining eighty-four turns buy nothing but tokens.
+///
+/// Not a repeat of `V-13`, which scores the same fact after the model has
+/// stopped and can no longer act on it. This ends the step while the ending is
+/// still cheap.
+pub const GIVE_UP_AFTER_TOLD: u32 = TELL_AFTER_TURNS * 2;
+
 /// What a step that has changed nothing is told (`L-25`).
 ///
 /// States the count, the consequence and nothing else. It does not say *make an
@@ -279,6 +301,21 @@ impl<'a> Agent<'a> {
                     summary: format!(
                         "{} changed nothing in {MAX_QUIET_TURNS} consecutive turns",
                         item.requirement
+                    ),
+                    detail: transcript,
+                };
+            }
+            // `L-25` told it at `TELL_AFTER_TURNS`; this is the acting on it.
+            // A step that has read for twice as long as it took to warn it and
+            // still written nothing is stuck, and `L-11`'s quiet counter cannot
+            // see it because every novel read counts as learning.
+            if turns > GIVE_UP_AFTER_TOLD && self.touched.len() == touched_before {
+                return Done::Failed {
+                    summary: format!(
+                        "{} read for {} turns and wrote nothing — told at {TELL_AFTER_TURNS} \
+                         (`L-25`) and ended at {GIVE_UP_AFTER_TOLD} (`L-11`)",
+                        item.requirement,
+                        turns - 1
                     ),
                     detail: transcript,
                 };
@@ -1593,6 +1630,54 @@ command: echo hi
 
         let sent = transport.seen.borrow().join("\n");
         assert!(!sent.contains("nothing has been written"), "it nagged a step that had written");
+    }
+
+    /// `L-11`: a step that only ever reads is ended, not narrated at.
+    ///
+    /// The sibling of the `L-25` test above, and the half that was missing. That
+    /// one proves the model is *told*; this proves something happens when it
+    /// takes no notice. Every reply reads a path not read before, so `L-12`'s
+    /// repetition rule never fires and `L-11`'s quiet counter resets every turn
+    /// — the step learned something each time. Before `GIVE_UP_AFTER_TOLD` the
+    /// only thing that could stop it was the hundred-turn ceiling.
+    ///
+    /// Measured against DeepSeek: `R-4` and `R-12` each read for ten turns and
+    /// wrote nothing, with the notice printed four times and no effect.
+    #[test]
+    fn a_step_that_only_ever_reads_is_ended_and_not_merely_told() {
+        let dir = tmpdir("agent-l11-enforced");
+        for n in 0..60 {
+            std::fs::write(dir.join(format!("f{n}.txt")), "x\n").expect("write");
+        }
+        let reads: Vec<String> = (0..60)
+            .map(|n| format!("```perp-call\ntool: read\npath: f{n}.txt\n```"))
+            .collect();
+        let transport = Scripted::new(reads.iter().map(String::as_str).collect());
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-11", "read and read", "try").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        let Done::Failed { summary, .. } = done else {
+            panic!("a step that wrote nothing must fail, not pass: {done:?}");
+        };
+        assert!(
+            summary.contains("wrote nothing"),
+            "it must say what was wrong with it, not merely that it stopped: {summary}"
+        );
+        assert!(
+            transport.seen.borrow().len() <= GIVE_UP_AFTER_TOLD as usize + 1,
+            "it must end near the give-up bound, not run on to the {MAX_TURNS}-turn ceiling: \
+             {} turns",
+            transport.seen.borrow().len()
+        );
     }
 
     /// `L-24`: progress is what happened, not which tool was named.
