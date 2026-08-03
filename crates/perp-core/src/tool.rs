@@ -669,7 +669,10 @@ impl Host {
                 self.resolve(where_)?;
                 // Quoted: a directory with a space in it is one argument, and
                 // `split_command` is what decides that.
-                self.shell(&format!("git grep -n -- \"{pattern}\" \"{where_}\""))?
+                self.shell(&format!(
+                    "git grep -n -- \"{pattern}\" \"{where_}\" {}",
+                    derived_excludes()
+                ))?
             }
             Tool::Glob => {
                 let pattern = call.need("pattern")?;
@@ -678,7 +681,7 @@ impl Host {
                 // would refuse the patterns the tool exists to accept.
                 // `git ls-files` lists what the repository has, which is inside
                 // the workspace by construction.
-                self.shell(&format!("git ls-files -- \"{pattern}\""))?
+                self.shell(&format!("git ls-files -- \"{pattern}\" {}", derived_excludes()))?
             }
             Tool::Shell => {
                 let command = call.need("command")?;
@@ -810,6 +813,37 @@ impl Host {
         text.push_str(&format!("\n[{}]", run.exit.describe()));
         Ok(text)
     }
+}
+
+/// Pathspecs hiding the loop's own derived files from the model's searches
+/// (`G-13`).
+///
+/// `G-13` versions the journal, the state projection and the gate evidence
+/// deliberately: they are what a reviewer reads, and what makes `perp resume`
+/// work on a fresh clone. That is right for a reviewer and wrong for the model,
+/// which searches the same tree and has no reason to read the transcript of its
+/// own previous turns.
+///
+/// Left visible, this scales into a failure that does not look like one.
+/// Measured on a Flutter backlog: at 660KB, a `grep` for `PathShape` returned
+/// 604,886 bytes, almost all of it journal; the model then read the journal
+/// directly, the request grew past what the endpoint would finish inside its
+/// timeout, and the batch blocked. Nothing in that chain names the journal —
+/// it presents as a flaky model and a slow provider.
+///
+/// The backlog, the binding and the links stay visible. Those are inputs the
+/// model is supposed to read. Only the append-only and regenerated files are
+/// hidden, and only from search: `read` still opens them by name, because an
+/// operator asking the chat surface about its own history should get an answer.
+fn derived_excludes() -> String {
+    [
+        ":(exclude).harness/journal.jsonl",
+        ":(exclude).harness/state.md",
+        ":(exclude).harness/gates",
+        ":(exclude).harness/artifacts",
+    ]
+    .map(|spec| format!("\"{spec}\""))
+    .join(" ")
 }
 
 /// Whether a token is worth resolving as a path (`X-13`).
