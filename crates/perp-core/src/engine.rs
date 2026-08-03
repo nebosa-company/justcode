@@ -722,6 +722,13 @@ impl Work for Gates {
                     Some(sha) => result.at_sha(sha),
                     None => result,
                 };
+                // `G-6`: a sha is provenance only if the tree it names is the
+                // tree that ran. Asked at gate time rather than at construction,
+                // because the step in between is the one that dirties it.
+                let result = match crate::git::Repo::at(&self.target).is_clean() {
+                    Ok(clean) => result.with_tree(clean),
+                    Err(_) => result,
+                };
                 let evidence = result.evidence();
                 let green = result.is_green();
                 let name = gate.name.clone();

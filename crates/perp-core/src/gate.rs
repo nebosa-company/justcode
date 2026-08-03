@@ -122,6 +122,7 @@ impl Gate {
             name: self.name.clone(),
             run,
             sha: None,
+            dirty: None,
             runtime: self.runtime.to_string(),
         })
     }
@@ -171,6 +172,21 @@ pub struct GateResult {
     /// The commit the gate ran against. A green gate at a sha that no longer
     /// exists is not evidence (`G-6`); filling this in is batch 4's job.
     pub sha: Option<String>,
+    /// Whether the working tree had uncommitted changes when the gate ran.
+    ///
+    /// The sha alone is not the provenance it looks like. A gate runs against
+    /// the *tree*, and when the tree is dirty the sha names the parent commit —
+    /// which does not contain the code that was gated. Running this harness
+    /// against a Flutter backlog, every gate transcript for `R-1` to `R-3` was
+    /// pinned to the commit that added the binding, because the code the gates
+    /// went green on had not been committed yet. Nothing looked wrong: the sha
+    /// resolved, and a reader following it would have found a tree with none of
+    /// the work in it.
+    ///
+    /// `G-6` exists to stop a green gate being credited to the wrong tree. It
+    /// caught the missing-sha case and not this one, which is worse — a sha
+    /// that resolves is trusted, and an absent one is questioned.
+    pub dirty: Option<bool>,
 }
 
 impl GateResult {
@@ -183,12 +199,27 @@ impl GateResult {
         self
     }
 
+    /// Say what the tree looked like, not just which commit HEAD was on.
+    pub fn with_tree(mut self, clean: bool) -> GateResult {
+        self.dirty = Some(!clean);
+        self
+    }
+
     /// The verbatim evidence block. Never summarised — Perpetum 0.5 wants the
     /// actual error text, not a description of it.
     pub fn evidence(&self) -> String {
         let mut out = format!("gate: {}\n", self.name);
         if let Some(sha) = &self.sha {
             out.push_str(&format!("sha: {sha}\n"));
+            // Said in the transcript rather than left for a reader to infer.
+            // The sha is the honest half of the answer only when the tree it
+            // names is the tree that ran.
+            if self.dirty == Some(true) {
+                out.push_str(
+                    "tree: dirty — this sha is the parent commit and does NOT contain what was \
+                     gated (`G-6`)\n",
+                );
+            }
         }
         out.push_str(&self.run.transcript());
         out
@@ -304,12 +335,48 @@ mod tests {
         }
     }
 
+    fn at_tree(sha: &str, clean: bool) -> GateResult {
+        GateResult {
+            runtime: "host".to_string(),
+            name: "test".into(),
+            run: fake_run("cargo test", Exit::Code(0), ""),
+            sha: Some(sha.into()),
+            dirty: None,
+        }
+        .with_tree(clean)
+    }
+
+    /// `G-6`: a sha that resolves is trusted, so one naming the wrong tree is
+    /// worse evidence than none at all.
+    ///
+    /// Running this harness on a Flutter backlog, every transcript for `R-1` to
+    /// `R-3` was pinned to the commit that added the binding — the code the
+    /// gates went green on had not been committed yet. A reader following that
+    /// sha finds a tree with none of the work in it, and nothing said so.
+    #[test]
+    fn a_gate_on_a_dirty_tree_says_the_sha_is_not_what_ran() {
+        let evidence = at_tree("72ebbdd", false).evidence();
+        assert!(evidence.contains("72ebbdd"), "the sha is still recorded: {evidence}");
+        assert!(
+            evidence.contains("does NOT contain what was gated"),
+            "and is qualified, so it cannot be read as provenance: {evidence}"
+        );
+    }
+
+    #[test]
+    fn a_gate_on_a_clean_tree_pins_without_a_caveat() {
+        let evidence = at_tree("072c401", true).evidence();
+        assert!(evidence.contains("072c401"));
+        assert!(!evidence.contains("does NOT contain"), "a clean tree needs no caveat: {evidence}");
+    }
+
     fn red(stderr: &str) -> GateResult {
         GateResult {
             runtime: "host".to_string(),
             name: "build".into(),
             run: fake_run("cargo build", Exit::Code(101), stderr),
             sha: None,
+            dirty: None,
         }
     }
 
@@ -319,6 +386,7 @@ mod tests {
             name: "build".into(),
             run: fake_run("cargo build", Exit::Code(0), ""),
             sha: None,
+            dirty: None,
         }
     }
 

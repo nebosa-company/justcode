@@ -928,6 +928,7 @@ mod tests {
                 stderr_truncated: false,
             },
             sha: None,
+            dirty: None,
         }
     }
 
