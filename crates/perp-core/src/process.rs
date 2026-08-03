@@ -790,7 +790,6 @@ mod tests {
         }
     }
 
-    #[test]
     /// The failure this prevents named the wrong thing entirely.
     ///
     /// `ls -la && find .` runs `ls` with `-la`, `&&`, `find` and `.` as
