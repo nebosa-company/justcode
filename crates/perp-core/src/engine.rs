@@ -558,8 +558,35 @@ impl Engine {
                 )?;
                 continue;
             };
-            let summary = if check.already_built() {
-                format!("reality check: {requirement} is already present in the tree")
+            // A citation is not an implementation.
+            //
+            // The requirement id is the obvious needle and the misleading one:
+            // this codebase cites ids in doc comments on purpose, so
+            // `threshold.dart` matched `R-12` because it says "the contour
+            // tracer of `R-12` consumes this representation" — a forward
+            // reference to work that did not exist. The check then reported
+            // `R-12` already present, which is the one answer that tells a loop
+            // to stop. Measured on a Flutter backlog, where it was the only
+            // match outside the requirements file itself.
+            //
+            // Matches in the requirements source are discounted for the same
+            // reason: that is where ids are *defined* (`V-9`), so finding one
+            // there says only that the requirement exists.
+            let implemented: Vec<&String> = check
+                .in_tree
+                .iter()
+                .filter(|path| !path.contains("requirements"))
+                .filter(|path| !path.ends_with(".md"))
+                .collect();
+            let summary = if !implemented.is_empty() {
+                format!(
+                    "reality check: {requirement} may already be present — {}",
+                    implemented.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", ")
+                )
+            } else if check.already_built() {
+                format!(
+                    "reality check: {requirement} is cited in documentation but not implemented"
+                )
             } else if check.was_removed() {
                 format!("reality check: {requirement} is absent now but the history touched it")
             } else {
