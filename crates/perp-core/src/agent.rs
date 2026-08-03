@@ -640,6 +640,74 @@ impl Work for Agent<'_> {
         self.work(&item)
     }
 
+    /// `V-5`: a second link reads what the first one wrote.
+    ///
+    /// This had no caller. `verify::independence` was written and tested, the
+    /// verdict renderer in `perp explain` was written and tested, `Role::Verifier`
+    /// existed in the router — and nothing ever resolved it. Across five runs
+    /// against DeepSeek, all 129 calls were `role: coder`; the configured
+    /// verifier link was asked for nothing, and every requirement carried "no
+    /// verifier verdict recorded (`V-5`)" while reporting itself reviewed.
+    ///
+    /// Silence is the answer in three cases, and each is a refusal rather than a
+    /// skip: nothing was written, so there is nothing to review; the verifier
+    /// resolves to the link that authored the change, which `V-5` says is not
+    /// review; or no link answered. A verdict is never invented for any of them.
+    fn review(&mut self) -> Option<String> {
+        if self.touched.is_empty() {
+            return None;
+        }
+        let step = self.at_step.clone()?;
+        let verifier = self
+            .links
+            .resolve(Role::Verifier, self.health, self.mode)
+            .ok()?;
+
+        // Checked before the call, so a review that cannot count is not paid
+        // for. The author is read from the journal records this run produced,
+        // never asserted (`M-10`).
+        let independence = crate::verify::independence(&step, &verifier.name, &self.pending);
+        if !independence.counts() {
+            return Some(format!("verdict: not reviewed — {}", independence.describe()));
+        }
+
+        let files = self.touched.join(", ");
+        let mut diff = String::new();
+        for path in self.touched.clone().iter().take(8) {
+            let read = crate::tool::Call::new(crate::tool::Tool::Read).arg("path", path.clone());
+            if let Ok(output) = self.host.run(&read) {
+                diff.push_str(&format!("\n--- {path} ---\n{}\n", output.render()));
+            }
+        }
+
+        let request = ChatRequest::new(vec![
+            Message::system(
+                "You are reviewing a change somebody else's model wrote. Say whether it does what \
+                 the requirement asked, and name anything wrong with it. Be specific and short. \
+                 You are not editing it and you cannot approve anything."
+                    .to_string(),
+            ),
+            Message::user(format!("Requirement: {step}\n\nFiles: {files}\n{diff}")),
+        ]);
+
+        let served = self
+            .client
+            .call(self.links, Role::Verifier, &request, self.health, self.mode, (self.now)())
+            .ok()?;
+        if let Some(at) = self.at_step.clone() {
+            self.pending.push(served.to_record(
+                at,
+                (self.now)(),
+                self.links.price(&served.link),
+            ));
+        }
+        Some(format!(
+            "verdict: {}\n{}",
+            independence.describe(),
+            served.reply.content.trim()
+        ))
+    }
+
     fn spend(&self) -> crate::budget::Spend {
         self.spend
     }

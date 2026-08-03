@@ -150,6 +150,19 @@ pub trait Work {
         Vec::new()
     }
 
+    /// Ask an independent link to review what the step just produced (`V-5`).
+    ///
+    /// Returns the verdict text, or `None` when there is nothing to review or
+    /// nobody independent to ask. The engine journals it; the work does not,
+    /// because a reviewer that files its own verdict is a reviewer whose verdict
+    /// is worth what `V-2` says self-reported success is worth.
+    ///
+    /// Default: `None`. Work with no model has nobody to ask, which is the
+    /// honest answer for the gate runner.
+    fn review(&mut self) -> Option<String> {
+        None
+    }
+
     /// Told what the preceding work delivered, before this one runs (`V-14`).
     ///
     /// The gate is built before the agent runs, so it cannot know at
@@ -375,7 +388,19 @@ impl Engine {
             report.last_step = Some(step.clone());
             report.steps += 1;
 
+            // `V-1`, Perpetum 0.7: look before building, and record what was
+            // found whether or not it found anything.
+            //
+            // The machinery for this existed and nothing called it.
+            // `RealityCheck::run` and `verify::may_implement` were both written,
+            // both tested, and had no caller in the engine — so every
+            // requirement built by this harness carried "no reality check
+            // recorded (`V-1`)" in its evidence chain, and the mandatory step
+            // was mandatory only in prose.
+            self.record_reality_check(&step, &task)?;
+
             work.at_step(&step);
+            let step_for_verdict = step.clone();
             let guard = self.session.begin_for(
                 step,
                 &task.summary,
@@ -388,8 +413,26 @@ impl Engine {
             // the step closes, so a crash between the two loses the outcome and
             // not the accounting. Written through the guard's journal because
             // the guard holds the borrow.
+            // `V-5`: an independent link reads what this step wrote, and its
+            // verdict goes on the record. Asked here rather than inside the
+            // work, because a reviewer that files its own verdict is worth what
+            // `V-2` says self-reported success is worth.
+            let verdict = work.review();
+
             for record in work.drain_records() {
                 guard.journal().append(&record)?;
+            }
+            if let Some(verdict) = verdict {
+                guard.journal().append(
+                    &crate::journal::Record::outcome(
+                        step_for_verdict.clone(),
+                        (self.now)(),
+                        true,
+                        "independent review",
+                    )
+                    .with_detail(verdict)
+                    .for_requirements(task.requirements.clone()),
+                )?;
             }
 
             let halted = match done {
@@ -472,6 +515,63 @@ impl Engine {
             }
         }
         warnings
+    }
+
+    /// Look before building, and put what was found on the record (`V-1`).
+    ///
+    /// Runs on the engine's side of the boundary on purpose. Perpetum 0.7 makes
+    /// the search mandatory, and a mandatory step the model performs is one the
+    /// model can decline to perform — `V-2`'s rule about self-reported success
+    /// applies to self-reported searching for exactly the same reason.
+    ///
+    /// A check that finds the work already present does not stop the step. It
+    /// is evidence, and the loop is entitled to build on top of something that
+    /// exists; what it is not entitled to do is not look. `already_built` and
+    /// `was_removed` ride along in the record so a reader can see which it was.
+    ///
+    /// The needles are the requirement id and the words of its summary long
+    /// enough to mean anything — the same thing a person would grep for.
+    fn record_reality_check(&mut self, step: &StepId, task: &Task) -> Result<()> {
+        let repo = crate::git::Repo::at(&self.root);
+        for requirement in &task.requirements {
+            let mut needles: Vec<String> = vec![requirement.clone()];
+            needles.extend(
+                task.summary
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .filter(|word| word.len() > 4)
+                    .take(4)
+                    .map(str::to_string),
+            );
+            let borrowed: Vec<&str> = needles.iter().map(String::as_str).collect();
+            let Ok(check) = crate::verify::RealityCheck::run(&repo, requirement, &borrowed) else {
+                // A repository that cannot be searched is not a reason to skip
+                // the step silently — it is recorded as the check failing, so
+                // the gap is visible rather than invisible.
+                self.session.journal().append(
+                    &crate::journal::Record::outcome(
+                        step.clone(),
+                        (self.now)(),
+                        false,
+                        "reality check could not run",
+                    )
+                    .for_requirements([requirement.clone()]),
+                )?;
+                continue;
+            };
+            let summary = if check.already_built() {
+                format!("reality check: {requirement} is already present in the tree")
+            } else if check.was_removed() {
+                format!("reality check: {requirement} is absent now but the history touched it")
+            } else {
+                format!("reality check: {requirement} is not there yet")
+            };
+            self.session.journal().append(
+                &crate::journal::Record::outcome(step.clone(), (self.now)(), true, summary)
+                    .with_detail(check.evidence())
+                    .for_requirements([requirement.clone()]),
+            )?;
+        }
+        Ok(())
     }
 
     /// The terminal record. Every exit writes exactly one (`L-14`).

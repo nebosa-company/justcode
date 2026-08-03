@@ -298,7 +298,15 @@ impl Chain {
             if let Some(detail) = &record.detail {
                 // `V-1` and `V-5` write their own prefixes, so the chain can
                 // find them without a schema.
-                if detail.starts_with("reality:") && chain.reality_check.is_none() {
+                // `RealityCheck::evidence` writes "reality check for <id>", and
+                // `verify::may_implement` looks for that. This looked for
+                // "reality:" — so even once the check was being recorded,
+                // `perp explain` would still have reported it missing. Three
+                // components, two formats, and the disagreement invisible
+                // because nothing wrote either one.
+                if (detail.starts_with("reality check for") || detail.starts_with("reality:"))
+                    && chain.reality_check.is_none()
+                {
                     chain.reality_check = Some(detail.clone());
                 }
                 if detail.starts_with("verdict:") && chain.verdict.is_none() {
