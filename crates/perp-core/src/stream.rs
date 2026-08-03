@@ -35,6 +35,12 @@ pub enum Event {
     /// A piece of a separate reasoning channel, kept apart from the message
     /// (`M-22`) — journalled, never concatenated, never replayed.
     Reasoning(String),
+    /// Fragments of the tool calls a model is asking for.
+    ///
+    /// Carried as a vector because one chunk may advance several calls at
+    /// once, and dropping the ones after the first would silently lose a tool
+    /// call — the kind of loss that looks like a model that changed its mind.
+    ToolCalls(Vec<ToolCallDelta>),
     /// The provider said it is finished.
     Done { finish_reason: Option<String> },
     /// Usage, which most providers send in the final chunk.
@@ -43,6 +49,30 @@ pub enum Event {
     /// call costs the same as a buffered one and the ledger has to agree
     /// (`M-11`): recording zero here charged every cache hit at miss price.
     Usage { prompt: i64, completion: i64, cached: i64 },
+}
+
+/// One chunk's worth of a tool call, as it arrives on the wire.
+///
+/// Every field except `index` is optional because the provider sends the
+/// identity once and then only argument text: the first chunk carries `id` and
+/// `function.name`, and the dozen after it carry a few characters of
+/// `arguments` each. `index` is what ties them together.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolCallDelta {
+    pub index: usize,
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub arguments: String,
+}
+
+/// One tool call, assembled from the fragments it arrived in.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    /// JSON text. Left as text rather than parsed here, because the ladder
+    /// owns what a malformed argument object means (`M-8`).
+    pub arguments: String,
 }
 
 /// Why a stream stopped.
@@ -133,6 +163,37 @@ pub fn parse_line(line: &str) -> Option<Event> {
                 return Some(Event::Reasoning(text.to_string()));
             }
         }
+        // Before content, because a chunk that carries a tool call carries an
+        // empty `content` alongside it and would otherwise fall through to the
+        // `finish_reason` line below with the call dropped on the floor.
+        if let Some(entries) = delta.get("tool_calls").and_then(Value::as_arr) {
+            let deltas: Vec<ToolCallDelta> = entries
+                .iter()
+                .map(|entry| {
+                    let function = entry.get("function");
+                    fn text(value: Option<&Value>) -> Option<&str> {
+                        value.and_then(Value::as_str)
+                    }
+                    ToolCallDelta {
+                        // A provider that omits `index` is sending one call at
+                        // a time, which is index zero.
+                        index: entry
+                            .get("index")
+                            .and_then(Value::as_i64)
+                            .unwrap_or_default()
+                            .max(0) as usize,
+                        id: text(entry.get("id")).map(str::to_string),
+                        name: text(function.and_then(|f| f.get("name"))).map(str::to_string),
+                        arguments: text(function.and_then(|f| f.get("arguments")))
+                            .unwrap_or_default()
+                            .to_string(),
+                    }
+                })
+                .collect();
+            if !deltas.is_empty() {
+                return Some(Event::ToolCalls(deltas));
+            }
+        }
         if let Some(text) = delta.get("content").and_then(Value::as_str) {
             if !text.is_empty() {
                 return Some(Event::Delta(text.to_string()));
@@ -205,6 +266,9 @@ pub struct Streamed {
     pub content: String,
     /// Kept apart from `content` (`M-22`).
     pub reasoning: String,
+    /// The tool calls asked for, assembled in the order the provider indexed
+    /// them. Empty for a plain answer, which is not a failure.
+    pub tool_calls: Vec<ToolCall>,
     pub stop: Stop,
     pub prompt_tokens: i64,
     pub completion_tokens: i64,
@@ -219,8 +283,12 @@ impl Streamed {
     /// Whether there is anything worth journalling. An interrupted stream with
     /// half a sentence in it is worth keeping (`C-4`); a silent one is not
     /// content, it is a failure.
+    ///
+    /// A turn that asked for a tool and said nothing else is the loop's most
+    /// common turn, so tool calls count: judging it on prose alone would call
+    /// the ordinary case empty.
     pub fn has_content(&self) -> bool {
-        !self.content.is_empty()
+        !self.content.is_empty() || !self.tool_calls.is_empty()
     }
 }
 
@@ -300,6 +368,7 @@ pub fn read_from(
     let mut out = Streamed {
         content: String::new(),
         reasoning: String::new(),
+        tool_calls: Vec::new(),
         stop: Stop::Complete { finish_reason: None },
         prompt_tokens: 0,
         cached_tokens: 0,
@@ -334,6 +403,26 @@ pub fn read_from(
                 match &event {
                     Event::Delta(text) => out.content.push_str(text),
                     Event::Reasoning(text) => out.reasoning.push_str(text),
+                    Event::ToolCalls(deltas) => {
+                        for delta in deltas {
+                            // Grow to fit rather than index blindly: a provider
+                            // is entitled to start at index 1, and a panic here
+                            // would take the batch down (`N-9`).
+                            if out.tool_calls.len() <= delta.index {
+                                out.tool_calls.resize(delta.index + 1, ToolCall::default());
+                            }
+                            let Some(call) = out.tool_calls.get_mut(delta.index) else {
+                                continue;
+                            };
+                            if let Some(id) = &delta.id {
+                                call.id.clone_from(id);
+                            }
+                            if let Some(name) = &delta.name {
+                                call.name.clone_from(name);
+                            }
+                            call.arguments.push_str(&delta.arguments);
+                        }
+                    }
                     Event::Usage { prompt, completion, cached } => {
                         out.prompt_tokens = *prompt;
                         out.completion_tokens = *completion;
@@ -363,6 +452,74 @@ pub fn read_from(
     Ok(out)
 }
 
+/// Rebuild the non-streaming response shape from a stream.
+///
+/// Everything above the transport reads the buffered shape:
+/// `ladder::parse_native` wants `choices[0].message.tool_calls`, and
+/// `client::parse_chat` wants `message.content`, `message.reasoning_content`
+/// and a `usage` object. Reassembling it here rather than teaching each of them
+/// a second wire format keeps one parser per format and makes streaming what it
+/// actually is — a transport detail (`M-21`).
+///
+/// Reasoning goes back in its own field and never into `content` (`M-22`).
+pub fn buffered_shape(streamed: &Streamed, model: &str) -> String {
+    let mut message = vec![
+        ("role".to_string(), Value::str("assistant")),
+        ("content".to_string(), Value::str(streamed.content.clone())),
+    ];
+    if !streamed.reasoning.is_empty() {
+        message.push(("reasoning_content".to_string(), Value::str(streamed.reasoning.clone())));
+    }
+    if !streamed.tool_calls.is_empty() {
+        let calls = streamed
+            .tool_calls
+            .iter()
+            .map(|call| {
+                Value::Obj(vec![
+                    ("id".to_string(), Value::str(call.id.clone())),
+                    ("type".to_string(), Value::str("function")),
+                    (
+                        "function".to_string(),
+                        Value::Obj(vec![
+                            ("name".to_string(), Value::str(call.name.clone())),
+                            ("arguments".to_string(), Value::str(call.arguments.clone())),
+                        ]),
+                    ),
+                ])
+            })
+            .collect();
+        message.push(("tool_calls".to_string(), Value::Arr(calls)));
+    }
+    let finish = match &streamed.stop {
+        Stop::Complete { finish_reason } => finish_reason.clone(),
+        _ => None,
+    };
+    // The miss is the remainder. `M-11` prices hit and miss ~50× apart, so a
+    // rebuilt body that reported only the total would charge every cache hit at
+    // miss price — which is how the ledger came to disagree with the invoice.
+    let miss = (streamed.prompt_tokens - streamed.cached_tokens).max(0);
+    json::to_string(&Value::Obj(vec![
+        ("model".to_string(), Value::str(model)),
+        (
+            "choices".to_string(),
+            Value::Arr(vec![Value::Obj(vec![
+                ("index".to_string(), Value::int(0)),
+                ("message".to_string(), Value::Obj(message)),
+                ("finish_reason".to_string(), finish.map_or(Value::Null, Value::str)),
+            ])]),
+        ),
+        (
+            "usage".to_string(),
+            Value::Obj(vec![
+                ("prompt_tokens".to_string(), Value::int(streamed.prompt_tokens)),
+                ("completion_tokens".to_string(), Value::int(streamed.completion_tokens)),
+                ("prompt_cache_hit_tokens".to_string(), Value::int(streamed.cached_tokens)),
+                ("prompt_cache_miss_tokens".to_string(), Value::int(miss)),
+            ]),
+        ),
+    ]))
+}
+
 /// Add the flags that make `curl` stream (`M-23`).
 ///
 /// `-N` is the load-bearing one: without it curl buffers, and the first token
@@ -377,6 +534,84 @@ pub fn streaming_args(base: Vec<String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tool call arrives split across chunks: identity once, then argument
+    /// text a few characters at a time.
+    ///
+    /// The red run for this was the loop itself. Before tool calls were read
+    /// off the stream, routing the loop through it (`M-23`) produced turns that
+    /// asked for nothing, because `parse_line` returned `None` for every chunk
+    /// carrying a call and the ladder saw an empty message.
+    #[test]
+    fn a_tool_call_is_assembled_from_its_fragments() {
+        let chunks = [
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read","arguments":""}}]}}]}"#,
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\""}}]}}]}"#,
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"a.txt\"}"}}]}}]}"#,
+        ];
+
+        let mut assembled: Vec<ToolCall> = Vec::new();
+        for chunk in chunks {
+            let Some(Event::ToolCalls(deltas)) = parse_line(chunk) else {
+                panic!("every one of these chunks carries a tool call: {chunk}");
+            };
+            for delta in deltas {
+                if assembled.len() <= delta.index {
+                    assembled.resize(delta.index + 1, ToolCall::default());
+                }
+                let Some(call) = assembled.get_mut(delta.index) else { continue };
+                if let Some(id) = &delta.id {
+                    call.id.clone_from(id);
+                }
+                if let Some(name) = &delta.name {
+                    call.name.clone_from(name);
+                }
+                call.arguments.push_str(&delta.arguments);
+            }
+        }
+
+        assert_eq!(assembled.len(), 1, "one call, not one per chunk");
+        assert_eq!(assembled[0].id, "call_1");
+        assert_eq!(assembled[0].name, "read");
+        assert_eq!(
+            assembled[0].arguments, r#"{"path":"a.txt"}"#,
+            "the arguments are the concatenation, and must parse as JSON afterwards"
+        );
+    }
+
+    /// Two calls in one chunk. Returning only the first would lose a tool call
+    /// and look like a model that changed its mind.
+    #[test]
+    fn one_chunk_may_advance_several_calls() {
+        let line = r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"a"}},{"index":1,"id":"call_2","function":{"name":"glob","arguments":"b"}}]}}]}"#;
+        let Some(Event::ToolCalls(deltas)) = parse_line(line) else {
+            panic!("a chunk with two calls is still a tool-call chunk");
+        };
+        assert_eq!(deltas.len(), 2, "both calls survive the parse");
+        assert_eq!(deltas[1].index, 1);
+        assert_eq!(deltas[1].name.as_deref(), Some("glob"));
+    }
+
+    /// A turn that asked for a tool and said nothing else is the loop's most
+    /// common turn. Judged on prose alone it would be called empty and dropped.
+    #[test]
+    fn a_toolonly_turn_has_content() {
+        let streamed = Streamed {
+            content: String::new(),
+            reasoning: String::new(),
+            tool_calls: vec![ToolCall {
+                id: "call_1".into(),
+                name: "read".into(),
+                arguments: "{}".into(),
+            }],
+            stop: Stop::Complete { finish_reason: Some("tool_calls".into()) },
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            cached_tokens: 0,
+            first_token: None,
+        };
+        assert!(streamed.has_content(), "a tool call is content");
+    }
 
     /// The CLI's stream is not SSE — one JSON object per line, with the
     /// Messages API's own events wrapped a level down.
@@ -548,6 +783,7 @@ mod tests {
         let silent = Streamed {
             content: String::new(),
             reasoning: String::new(),
+            tool_calls: Vec::new(),
             stop: Stop::Silent { after: Duration::from_secs(20) },
             prompt_tokens: 0,
             cached_tokens: 0,

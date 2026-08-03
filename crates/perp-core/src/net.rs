@@ -153,6 +153,25 @@ impl Response {
 
 pub trait Transport: fmt::Debug {
     fn send(&self, request: &Request) -> Result<Response>;
+
+    /// Send with a **first-token deadline** and hand back the buffered response
+    /// shape either way (`M-23`).
+    ///
+    /// The distinction this exists to make: a buffered request says nothing to
+    /// the transport until the entire answer exists, so a model deliberating and
+    /// a server that has wedged are indistinguishable for the length of
+    /// `--max-time`. Measured against DeepSeek on a real backlog, a turn that
+    /// generated 34,391 output tokens outran the whole-request bound and came
+    /// back as `curl: (28) ... with 4 bytes received` — three runs blocked that
+    /// way before the shape was visible. Streaming makes it mechanical: either a
+    /// token arrives inside the deadline, or the link is failed over (`M-9`).
+    ///
+    /// Defaulted to [`Transport::send`] on purpose. A stub that returns a canned
+    /// body has no socket and nothing to be deadlined about, so a test seam stays
+    /// a test seam and only the real transport grows the behaviour.
+    fn send_deadlined(&self, request: &Request, _first_token: Duration) -> Result<Response> {
+        self.send(request)
+    }
 }
 
 /// `curl`, invoked once per request.
@@ -299,6 +318,28 @@ impl Curl {
 }
 
 impl Transport for Curl {
+    /// The real one: stream, enforce the deadline, and rebuild the buffered
+    /// shape so nothing above the transport knows the difference.
+    fn send_deadlined(&self, request: &Request, first_token: Duration) -> Result<Response> {
+        let (args, stdin) = self.streaming_invocation(request)?;
+        let streamed = crate::stream::read(
+            &crate::stream::streaming_args(args),
+            stdin.as_deref(),
+            first_token,
+            // The loop has no operator at the keyboard. `C-4`'s interrupt
+            // belongs to the chat surface, and `perp control` stops at a step
+            // boundary rather than mid-call.
+            || false,
+            |_| {},
+        )?;
+        if streamed.stop.should_fail_over() {
+            // A failure the chain walker can fall through on (`M-9`), carrying
+            // why rather than a bare exit code.
+            return Err(Error::unbound("link", streamed.stop.describe()));
+        }
+        Ok(Response { status: 200, body: crate::stream::buffered_shape(&streamed, "") })
+    }
+
     fn send(&self, request: &Request) -> Result<Response> {
         let body_path = match &request.body {
             Some(body) => {

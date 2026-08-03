@@ -833,10 +833,22 @@ impl<'a> Client<'a> {
         let base = Self::base(link)?.trim_end_matches('/');
         let url = format!("{base}/v1/chat/completions");
         self.check_egress(&url)?;
+
+        // `M-23`: the loop gets a first-token deadline too. A buffered request
+        // tells the transport nothing until the whole answer exists, so a model
+        // thinking hard and a server that has wedged look identical until
+        // `--max-time` fires minutes later. The transport streams underneath and
+        // hands back the buffered shape, so this call site is unchanged apart
+        // from asking for the deadline.
+        let mut streaming = request.clone();
+        streaming.stream = true;
         let body =
-            crate::security::outbound(&request.to_json(&link.model), link, &self.redact).text;
+            crate::security::outbound(&streaming.to_json(&link.model), link, &self.redact).text;
         let http = Self::authorise(link, Request::post_json(url, body));
-        let response = self.transport.send(&http)?;
+        let response = self.transport.send_deadlined(
+            &http,
+            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+        )?;
         let reply = Self::interpret(link, &response)?;
         Ok((reply, response.body))
     }
@@ -1093,6 +1105,67 @@ pub fn models_method() -> Method {
 mod tests {
     use super::*;
     use crate::testutil::tmpdir;
+
+    /// The seam that makes `M-23` safe for the loop: a streamed reply is
+    /// rebuilt into the buffered shape, because `ladder::parse_native` reads
+    /// `choices[0].message.tool_calls` and must not learn a second wire format.
+    ///
+    /// Without this the loop streams and every turn asks for nothing — the
+    /// model's tool calls arrive and are discarded between the transport and
+    /// the ladder, which looks like a model that stopped using its tools.
+    #[test]
+    fn a_streamed_tool_call_survives_into_the_ladder() {
+        let streamed = crate::stream::Streamed {
+            content: String::new(),
+            reasoning: "thinking".into(),
+            tool_calls: vec![crate::stream::ToolCall {
+                id: "call_1".into(),
+                name: "read".into(),
+                arguments: r#"{"path":"a.txt"}"#.into(),
+            }],
+            stop: crate::stream::Stop::Complete { finish_reason: Some("tool_calls".into()) },
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            cached_tokens: 4,
+            first_token: None,
+        };
+
+        let raw = crate::stream::buffered_shape(&streamed, "deepseek-v4-flash");
+        let calls = crate::ladder::parse_native(&raw).expect("the rebuilt body parses");
+
+        assert_eq!(calls.len(), 1, "the call survives the round trip");
+        assert_eq!(calls[0].tool, crate::tool::Tool::Read);
+    }
+
+    /// `M-22`: reasoning is a separate channel and must not be folded into the
+    /// message on the way back out of a stream either.
+    #[test]
+    fn rebuilt_body_carries_no_reasoning() {
+        let streamed = crate::stream::Streamed {
+            content: "the answer".into(),
+            reasoning: "the private deliberation".into(),
+            tool_calls: Vec::new(),
+            stop: crate::stream::Stop::Complete { finish_reason: Some("stop".into()) },
+            prompt_tokens: 1,
+            completion_tokens: 1,
+            cached_tokens: 0,
+            first_token: None,
+        };
+
+        let raw = crate::stream::buffered_shape(&streamed, "m");
+        let reply = parse_chat(&raw).expect("the rebuilt body parses");
+
+        assert_eq!(reply.content, "the answer");
+        assert_eq!(
+            reply.reasoning.as_deref(),
+            Some("the private deliberation"),
+            "reasoning survives, in its own channel"
+        );
+        assert!(
+            !reply.content.contains("deliberation"),
+            "and never folded into the message (`M-22`)"
+        );
+    }
 
     #[test]
     fn the_tools_array_reaches_the_wire() {
