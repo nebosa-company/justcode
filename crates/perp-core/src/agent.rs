@@ -658,6 +658,20 @@ impl Work for Agent<'_> {
             return None;
         }
         let step = self.at_step.clone()?;
+        // The requirement, not just the step it ran under.
+        //
+        // The first version sent only the step id, and the verifier said so:
+        // "I can't verify it against the exact requirement `c14/D/s48` because
+        // that requirement text wasn't included ... based on the code and doc
+        // comment it seems functionally aligned." A review of whether code
+        // matches its intent, conducted without the intent, is a review of
+        // whether the code matches itself — which is the same circularity
+        // `V-5` exists to break, arriving by a different route.
+        let requirement = self
+            .items
+            .get(self.at.saturating_sub(1))
+            .map(|item| format!("{}\n\n{}", item.requirement, item.summary))
+            .unwrap_or_else(|| step.to_string());
         let verifier = self
             .links
             .resolve(Role::Verifier, self.health, self.mode)
@@ -687,7 +701,7 @@ impl Work for Agent<'_> {
                  You are not editing it and you cannot approve anything."
                     .to_string(),
             ),
-            Message::user(format!("Requirement: {step}\n\nFiles: {files}\n{diff}")),
+            Message::user(format!("Requirement: {requirement}\n\nFiles: {files}\n{diff}")),
         ]);
 
         let served = self
