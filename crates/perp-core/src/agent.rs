@@ -431,10 +431,42 @@ impl<'a> Agent<'a> {
             // tomorrow.
             if let Some(step) = self.at_step.clone() {
                 self.pending.push(served.to_record(
-                    step,
+                    step.clone(),
                     (self.now)(),
                     self.links.price(&served.link),
                 ));
+
+                // `O-10`: which link answered, and which were passed over
+                // (`M-9`). Written only when something actually fell through —
+                // where the first link answers, the "choice" is the configured
+                // order and is recoverable from `links.md`. What cannot be
+                // recovered is that a link was tried and declined, which is
+                // exactly `O-8`'s point about alternatives.
+                if !served.fell_through.is_empty() {
+                    let passed: Vec<String> = served
+                        .fell_through
+                        .iter()
+                        .map(|attempt| attempt.link.clone())
+                        .collect();
+                    let why = served
+                        .fell_through
+                        .iter()
+                        .map(|attempt| format!("{}: {}", attempt.link, attempt.outcome))
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    self.pending.push(
+                        crate::decision::Decision::new(
+                            served.link.clone(),
+                            passed,
+                            why,
+                            crate::decision::Decider::Rule { cites: "M-9".into() },
+                            step,
+                            (self.now)(),
+                        )
+                        .for_requirement(item.requirement.clone())
+                        .to_record(),
+                    );
+                }
             }
             self.spend.money += self.links.price(&served.link).charge(&crate::cost::Usage::from_reply(
                 served.reply.usage.prompt_tokens,
@@ -560,6 +592,26 @@ impl<'a> Agent<'a> {
                     // both say "is an error", and an error the loop carries on
                     // through is a warning wearing the word.
                     if let Some(reason) = self.tripped.take() {
+                        // `O-10`: a watchdog ending a step is a fork. It chose
+                        // to stop rather than let the step run to its ceiling,
+                        // and the reason is the part that cannot be
+                        // reconstructed from the outcome (`L-11`–`L-13`).
+                        if let Some(step) = self.at_step.clone() {
+                            self.pending.push(
+                                crate::decision::Decision::new(
+                                    "end the step",
+                                    vec!["let it run to the turn ceiling".into()],
+                                    reason.clone(),
+                                    crate::decision::Decider::Rule {
+                                        cites: "L-11-L-13".into(),
+                                    },
+                                    step,
+                                    (self.now)(),
+                                )
+                                .for_requirement(item.requirement.clone())
+                                .to_record(),
+                            );
+                        }
                         transcript.push_str(&format!("\n[watchdog] {reason}\n"));
                         return Done::Failed {
                             summary: format!("{}: {reason}", item.requirement),

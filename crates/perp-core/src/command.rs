@@ -232,6 +232,10 @@ pub struct Chain {
     pub reality_check: Option<String>,
     /// The verifier's verdict and whether it was independent (`V-5`).
     pub verdict: Option<String>,
+    /// The forks taken on the way (`O-12`). Rendered beside the evidence
+    /// because "was it verified" and "why was it done this way" are different
+    /// questions and an auditor asks both.
+    pub decisions: Vec<String>,
     /// The diff, read from the repository at the pinned commit — not stored in
     /// the journal. A diff in a record would be a second copy of something git
     /// already keeps, and the two would eventually disagree.
@@ -243,6 +247,25 @@ pub struct Link {
     pub step: StepId,
     pub summary: String,
     pub ok: Option<bool>,
+}
+
+/// One line per fork, for the evidence chain (`O-12`).
+///
+/// The alternatives are kept even here, where space is tight: without them the
+/// line is a fact rather than a decision, which is `O-8`'s whole objection.
+fn summarise_decision(decision: &crate::decision::Decision) -> String {
+    let over = if decision.over.is_empty() {
+        String::new()
+    } else {
+        format!(" over {}", decision.over.join(", "))
+    };
+    format!(
+        "{}{} — {} [{}]",
+        decision.chose,
+        over,
+        decision.why,
+        decision.decider.describe()
+    )
 }
 
 impl Chain {
@@ -270,6 +293,7 @@ impl Chain {
             sha: None,
             links: Vec::new(),
             reality_check: None,
+            decisions: Vec::new(),
             verdict: None,
             diff: None,
         };
@@ -319,6 +343,26 @@ impl Chain {
                 }
             }
         }
+        // `O-12`: the forks taken on the way, beside the evidence. Replayed
+        // over the whole journal rather than the matched records, because ids
+        // are assigned in journal order and a decision numbered against a
+        // filtered slice would not be the same decision `perp decisions`
+        // shows (`O-13`, `N-5`).
+        let log = crate::decision::log(records);
+        chain.decisions = match subject {
+            Subject::Requirement(id) => crate::decision::bearing_on(&log, id)
+                .into_iter()
+                .map(summarise_decision)
+                .collect(),
+            Subject::Step(step) => log
+                .iter()
+                .filter(|d| &d.step == step)
+                .map(summarise_decision)
+                .collect(),
+            // A sha names a commit, not a fork; the decisions that led to it
+            // are reached through the requirement or the step.
+            Subject::Sha(_) => Vec::new(),
+        };
         chain
     }
 
@@ -388,6 +432,15 @@ verdict
             None => out.push_str("
 no verifier verdict recorded (`V-5`)
 "),
+        }
+        if !self.decisions.is_empty() {
+            out.push_str("
+decisions
+");
+            for decision in &self.decisions {
+                out.push_str(&format!("  {decision}
+"));
+            }
         }
         if let Some(diff) = &self.diff {
             out.push_str(&format!("

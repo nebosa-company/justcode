@@ -497,6 +497,20 @@ impl Engine {
                         expired.id
                     )),
                 )?;
+                // `O-10`: an expiry is a fork nobody attended — the window
+                // closed and the loop chose to park rather than proceed
+                // unapproved (`T-16`).
+                guard.journal().append(
+                    &crate::decision::Decision::new(
+                        "park as approval-gated",
+                        vec!["proceed unapproved".into(), "keep waiting".into()],
+                        format!("nobody answered approval #{} inside its window", expired.id),
+                        crate::decision::Decider::Rule { cites: "T-16".into() },
+                        step_for_verdict.clone(),
+                        (self.now)(),
+                    )
+                    .to_record(),
+                )?;
                 report.warnings.push(format!(
                     "approval #{} expired unanswered — parked as approval-gated",
                     expired.id
@@ -683,6 +697,40 @@ impl Engine {
                     .with_detail(check.evidence())
                     .for_requirements([requirement.clone()]),
             )?;
+
+            // `O-10`: a reality check that finds the work already present is a
+            // fork — build on it, or build it again. The loop takes the first
+            // silently, and a reader a week later cannot tell it was ever a
+            // question (`V-1`).
+            if !implemented.is_empty() {
+                self.session.journal().append(
+                    &crate::decision::Decision::new(
+                        "build on what is there",
+                        vec!["implement it again".into()],
+                        {
+                            // Named, not listed. A generic requirement matches
+                            // half the repository, and a reason that is
+                            // twenty-four paths long is one nobody reads.
+                            let shown: Vec<&str> =
+                                implemented.iter().take(3).map(|p| p.as_str()).collect();
+                            let rest = implemented.len().saturating_sub(shown.len());
+                            if rest > 0 {
+                                format!(
+                                    "already present in {} and {rest} other file(s)",
+                                    shown.join(", ")
+                                )
+                            } else {
+                                format!("already present in {}", shown.join(", "))
+                            }
+                        },
+                        crate::decision::Decider::Rule { cites: "V-1".into() },
+                        step.clone(),
+                        (self.now)(),
+                    )
+                    .for_requirement(requirement.clone())
+                    .to_record(),
+                )?;
+            }
         }
         Ok(())
     }

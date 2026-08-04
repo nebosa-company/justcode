@@ -74,6 +74,8 @@ pub mod command;
 pub mod container_pool;
 pub mod control;
 pub mod cost;
+/// What was chosen and what else was there (`O-8`–`O-13`).
+pub mod decision;
 pub mod cycle;
 pub mod engine;
 pub mod error;

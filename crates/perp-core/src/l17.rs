@@ -7,7 +7,7 @@
 //! # Configuration
 //!
 //! Enable in binding.md:
-//! ```
+//! ```text
 //! l17.enabled = true
 //! l17.engine = docker  # or podman
 //! l17.image = rust:latest

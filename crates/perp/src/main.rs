@@ -135,6 +135,12 @@ usage:
       Live control. Written to a file the engine reads at the next step
       boundary, never mid-step. Works whether or not a loop is running.
 
+  perp decisions [--since <step>] [--decider <who>] [--root <dir>]
+      Every fork the loop took: what was chosen, what else was available, why,
+      and who decided - `rule`, `model` or `person`. Replayed from the journal,
+      never stored, so the same journal gives the same log anywhere. Filter by
+      `--since` a step id, or by `--decider`.
+
   perp approvals [--root <dir>]
       What is waiting for a person: what was asked for, why, the command it
       would run, and the requirement it serves. Rebuilt from the journal, so a
@@ -243,6 +249,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("control") => cmd_control(&args[1..]),
         Some("unlock") => cmd_unlock(&args[1..]),
         Some("approvals") => cmd_approvals(&args[1..]),
+        Some("decisions") => cmd_decisions(&args[1..]),
         Some("approve") => cmd_answer(&args[1..], true),
         Some("reject") => cmd_answer(&args[1..], false),
         Some("rewind") => cmd_rewind(&args[1..]),
@@ -1575,6 +1582,43 @@ fn cmd_watch(args: &[&str]) -> std::result::Result<(), String> {
 /// same box as everything else is indistinguishable from a model repeating
 /// what it was told to say, and `T-7` makes tool output data rather than
 /// instruction for exactly that reason.
+/// Every fork the loop took (`O-12`).
+///
+/// The journal answers "what happened"; this answers "what else was on the
+/// table", which is the question nobody can reconstruct afterwards and the one
+/// an auditor actually asks.
+fn cmd_decisions(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+    let log = perp_core::decision::log(&records);
+
+    let since = flag(args, "--since");
+    let decider = flag(args, "--decider");
+    let shown: Vec<&perp_core::decision::Decision> = log
+        .iter()
+        .filter(|d| since.is_none_or(|s| d.step.to_string().as_str() >= s))
+        .filter(|d| decider.is_none_or(|w| d.decider.kind() == w))
+        .collect();
+
+    if shown.is_empty() {
+        println!("no decisions recorded — the loop has not reached a fork it writes down");
+        return Ok(());
+    }
+    println!("{} decision(s) of {} in the journal
+", shown.len(), log.len());
+    for decision in shown {
+        print!("{}", decision.describe());
+        // A reversal is the most useful record in the log, so it is not left
+        // for the reader to notice (`O-11`).
+        if let Some(later) = decision.superseded_by(&log) {
+            println!("  SUPERSEDED by #{later}");
+        }
+        println!();
+    }
+    Ok(())
+}
+
 fn cmd_approvals(args: &[&str]) -> std::result::Result<(), String> {
     let binding = load(args).map_err(|e| e.to_string())?;
     let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
@@ -1619,6 +1663,7 @@ fn cmd_answer(args: &[&str], granted: bool) -> std::result::Result<(), String> {
         return Err(format!("no approval #{id} — `perp approvals` lists what is waiting"));
     };
     let step = entry.request.step.clone();
+    let entry_what = entry.request.what.clone();
 
     if granted {
         queue.grant(id, who, now).map_err(|e| e.to_string())?;
@@ -1626,8 +1671,36 @@ fn cmd_answer(args: &[&str], granted: bool) -> std::result::Result<(), String> {
         queue.refuse(id, who, now).map_err(|e| e.to_string())?;
     }
     journal
-        .append(&Approvals::answered_record(step, id, granted, who, now))
+        .append(&Approvals::answered_record(step.clone(), id, granted, who, now))
         .map_err(|e| e.to_string())?;
+
+    // `O-10`: an approval is the clearest fork there is — a person chose, and
+    // the alternative was the opposite. `O-9`'s `person` decider exists for
+    // exactly this, and it is the only one where the name is the whole point.
+    let (chose, other) = if granted {
+        ("grant it", "refuse it")
+    } else {
+        ("refuse it", "grant it")
+    };
+    let mut decision = perp_core::decision::Decision::new(
+        chose,
+        vec![other.to_string()],
+        format!("approval #{id}: {}", entry_what),
+        perp_core::decision::Decider::Person { name: who.to_string() },
+        step,
+        now,
+    );
+    // `O-11`: answering an approval that was already answered the other way is
+    // a reversal, and the reversal is the most useful record in the log — the
+    // only one carrying what was learned. Named rather than left for a reader
+    // to spot by comparing timestamps.
+    if let Some(earlier) = perp_core::decision::log(&records)
+        .iter()
+        .rfind(|d| d.why.starts_with(&format!("approval #{id}:")) && d.chose != chose)
+    {
+        decision = decision.superseding(earlier.id);
+    }
+    journal.append(&decision.to_record()).map_err(|e| e.to_string())?;
 
     println!(
         "approval #{id} {} by {who}. It applies to this cycle and no later one (`T-15`).",

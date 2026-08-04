@@ -336,7 +336,14 @@ fn fake_link(answers: Vec<(u16, String)>) -> u16 {
 #[test]
 fn a_real_call_over_a_real_socket_lands_in_the_journal_and_the_ledger() {
     let models = r#"{"object":"list","data":[{"id":"small","type":"llm","quantization":"Q4_K_M","state":"loaded","max_context_length":4096}]}"#;
-    let chat = r#"{"id":"c1","model":"small","choices":[{"index":0,"message":{"role":"assistant","content":"hello back"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1000,"completion_tokens":20,"prompt_cache_hit_tokens":800,"prompt_cache_miss_tokens":200}}"#;
+    // `chat_raw` asks for a stream (`M-23`), so the fixture has to answer like
+    // one — SSE chunks, not a single buffered object — or the reader that
+    // parses `data: ` lines sees a body it does not recognise and comes back
+    // empty without ever failing the call.
+    let chat = "data: {\"choices\":[{\"delta\":{\"content\":\"hello back\"}}]}\n\n\
+                data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
+                data: {\"usage\":{\"prompt_tokens\":1000,\"completion_tokens\":20,\"prompt_cache_hit_tokens\":800}}\n\n\
+                data: [DONE]\n\n";
     let port = fake_link(vec![(200, models.to_string()), (200, chat.to_string())]);
 
     let root = with_links(
