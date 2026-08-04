@@ -494,7 +494,7 @@ fn warm_local_links(
             Ok(r) => r,
             Err(e) => {
                 if verbose {
-                    eprint!("  M-7 error: {}: failed to reach {}: {}\n", link.name, url, e);
+                    eprintln!("  M-7 error: {}: failed to reach {}: {}", link.name, url, e);
                 }
                 return None;
             }
@@ -504,7 +504,7 @@ fn warm_local_links(
             Ok(m) => m,
             Err(e) => {
                 if verbose {
-                    eprint!("  M-7 error: {}: failed to parse /api/v0/models response: {}\n", link.name, e);
+                    eprintln!("  M-7 error: {}: failed to parse /api/v0/models response: {}", link.name, e);
                 }
                 return None;
             }
@@ -513,7 +513,7 @@ fn warm_local_links(
         let found = models.iter().find(|facts| facts.id == link.model).cloned();
         if found.is_none() && verbose {
             let available: Vec<_> = models.iter().map(|m| m.id.as_str()).collect();
-            eprint!("  M-7 error: {}: model '{}' not in /api/v0/models. Available: {}\n",
+            eprintln!("  M-7 error: {}: model '{}' not in /api/v0/models. Available: {}",
                     link.name, link.model, available.join(", "));
         }
         found
