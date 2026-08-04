@@ -982,10 +982,10 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
         let source = perp_core::layout::requirements_text(
             &binding.resolve("path.requirements").map_err(|e| e.to_string())?,
         );
-        let stated = perp_core::cycle::backlog_all(&source)
-            .into_iter()
-            .find(|(id, _)| id == requirement)
-            .map(|(_, text)| text);
+        // `stated`, not `backlog_all`: that one truncates to 160 characters for
+        // a list a person scrolls, and using it here handed the model a
+        // requirement cut off mid-sentence with nothing to say so.
+        let stated = perp_core::cycle::stated(&source, requirement);
 
         let summary = flag(args, "--summary")
             .map(str::to_string)

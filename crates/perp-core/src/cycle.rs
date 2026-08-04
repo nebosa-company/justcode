@@ -104,6 +104,43 @@ pub fn backlog_all(source: &str) -> Vec<(String, String)> {
     all
 }
 
+/// What one requirement says, in full, whatever its marker (`V-9`).
+///
+/// [`backlog_all`] truncates to 160 characters because it feeds a list a
+/// person scrolls; [`backlog`] hands a model the whole text. Reaching for the
+/// first when a model needed the second gave `perp run --requirement` a
+/// requirement cut off mid-sentence — no ellipsis, nothing to say anything was
+/// missing, which is exactly the silent truncation `T-6` forbids and worse than
+/// saying nothing: a model that is told nothing goes and reads the file, and a
+/// model handed a confident-looking fragment does not.
+///
+/// Marker-blind on purpose. `backlog` skips what is done, and asking to re-run
+/// a finished requirement by name is a reasonable thing to want.
+pub fn stated(source: &str, id: &str) -> Option<String> {
+    for line in source.lines() {
+        let line = line.trim();
+        if !line.starts_with('|') {
+            continue;
+        }
+        let mut cells = line.trim_matches('|').split('|');
+        let (Some(first), Some(text)) = (cells.next(), cells.next()) else { continue };
+        let found = first
+            .trim()
+            .trim_start_matches(['🟡', '✅', '⛔', '🔶', '❌'])
+            .trim()
+            .trim_matches('~')
+            .trim_matches('`')
+            .trim_matches('~')
+            .trim_matches('`')
+            .trim();
+        if found == id {
+            let text = text.trim();
+            return (!text.is_empty()).then(|| text.to_string());
+        }
+    }
+    None
+}
+
 pub fn backlog(source: &str, limit: usize) -> Vec<Item> {
     let mut items = Vec::new();
     // Checked before the loop, not inside it: the earlier version pushed an
