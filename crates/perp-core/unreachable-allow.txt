@@ -111,7 +111,6 @@ process.rs::inherited
 process.rs::with
 prompt.rs::compact
 prompt.rs::start
-repo.rs::dir_for
 repo.rs::is_blocked
 repo.rs::land_blocked
 repo.rs::read_merge

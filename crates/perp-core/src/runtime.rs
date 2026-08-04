@@ -37,6 +37,9 @@ pub enum Runtime {
     Wsl2 { distro: String },
     /// A container. The workspace is mounted; nothing else is.
     Container { image: String, engine: String },
+    /// A persistent feature container (`L-17`). The container ID and engine are
+    /// tracked by the batch orchestrator, not the gate.
+    PersistentContainer { id: String, engine: String, mount: String },
 }
 
 impl fmt::Display for Runtime {
@@ -45,6 +48,9 @@ impl fmt::Display for Runtime {
             Runtime::Host => f.write_str("host"),
             Runtime::Wsl2 { distro } => write!(f, "wsl2:{distro}"),
             Runtime::Container { image, engine } => write!(f, "{engine}:{image}"),
+            Runtime::PersistentContainer { id, engine, .. } => {
+                write!(f, "{engine}:persistent:{id}")
+            }
         }
     }
 }
@@ -127,6 +133,16 @@ impl Runtime {
                          {}",
                         spec.command
                     ),
+                    &spec.cwd,
+                    spec.timeout,
+                )
+                .with_env(spec.env.clone()))
+            }
+            Runtime::PersistentContainer { id, engine, mount } => {
+                // For persistent containers (`L-17`), execute commands using `docker/podman exec`.
+                // No `--rm`, no network isolation: the container persists and handles its own networking.
+                Ok(Spec::new(
+                    format!("{engine} exec -w {mount} {id} {}", spec.command),
                     &spec.cwd,
                     spec.timeout,
                 )
@@ -338,5 +354,33 @@ mod tests {
         assert!(Runtime::Host.is_host());
         assert!(!Runtime::Wsl2 { distro: "Ubuntu".into() }.is_host());
         assert_eq!(format!("{}", Runtime::Wsl2 { distro: "Ubuntu".into() }), "wsl2:Ubuntu");
+    }
+
+    #[test]
+    fn a_persistent_container_uses_docker_exec() {
+        // `L-17`: persistent containers use `exec` instead of `run`, and do not
+        // have `--rm` or `--network none`.
+        let persistent = Runtime::PersistentContainer {
+            id: "abc123".into(),
+            engine: "docker".into(),
+            mount: "/w".into(),
+        };
+        let wrapped = persistent.wrap(&spec("cargo test", "/w")).expect("wrap");
+        assert!(wrapped.command.contains("docker exec"), "{}", wrapped.command);
+        assert!(wrapped.command.contains("abc123"), "{}", wrapped.command);
+        assert!(wrapped.command.ends_with("cargo test"), "command unmodified: {}", wrapped.command);
+        assert!(!wrapped.command.contains("--rm"), "no --rm for persistent containers: {}", wrapped.command);
+    }
+
+    #[test]
+    fn persistent_container_display_shows_id() {
+        let persistent = Runtime::PersistentContainer {
+            id: "abc123".into(),
+            engine: "podman".into(),
+            mount: "/w".into(),
+        };
+        let text = format!("{}", persistent);
+        assert!(text.contains("abc123"), "{text}");
+        assert!(text.contains("persistent"), "{text}");
     }
 }

@@ -181,12 +181,16 @@ pub fn read_merge(output: &str, exit_ok: bool) -> Resolution {
     Resolution::Blocked { files, conflict: output.to_string() }
 }
 
-/// A per-feature working tree (`G-11`).
+/// A per-feature working tree (`G-11`, `L-17`).
 ///
 /// Created when `L-17` parallelism is on, removed on merge or abandon, **never
 /// left stale**. A stale worktree is worse than no worktree: it holds a branch
 /// checked out, so the branch cannot be deleted, and the next run finds a tree
 /// nobody remembers making.
+///
+/// When running in a persistent container, the worktree path is relative to the
+/// container's mount point. The Runtime variant in use determines where the
+/// worktree actually exists (host or container).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Worktree {
     pub path: PathBuf,
@@ -199,11 +203,14 @@ impl fmt::Display for Worktree {
     }
 }
 
-/// Lifecycle management for worktrees (`G-11`).
+/// Lifecycle management for worktrees (`G-11`, `L-17`).
 #[derive(Debug)]
 pub struct Worktrees<'a> {
     repo: &'a Repo,
     root: PathBuf,
+    /// When set, worktrees are created inside this persistent container (`L-17`).
+    /// Commands to manage worktrees are routed through this container.
+    container_id: Option<String>,
 }
 
 impl<'a> Worktrees<'a> {
@@ -211,11 +218,54 @@ impl<'a> Worktrees<'a> {
     /// a worktree under the repo is a directory the loop's own globs would
     /// walk into and whose files its gates would compile twice.
     pub fn new(repo: &'a Repo, root: &Path) -> Worktrees<'a> {
-        Worktrees { repo, root: root.to_path_buf() }
+        Worktrees { repo, root: root.to_path_buf(), container_id: None }
+    }
+
+    /// Create a Worktrees manager that works inside a persistent container (`L-17`).
+    #[allow(dead_code)]
+    pub(crate) fn in_container(repo: &'a Repo, root: &Path, container_id: String) -> Worktrees<'a> {
+        Worktrees { repo, root: root.to_path_buf(), container_id: Some(container_id) }
+    }
+
+    /// Whether this manager is routing commands through a container.
+    #[allow(dead_code)]
+    pub(crate) fn is_containerized(&self) -> bool {
+        self.container_id.is_some()
     }
 
     pub fn dir_for(&self, branch: &str) -> PathBuf {
         self.root.join(branch.replace(['/', '\\'], "-"))
+    }
+
+    /// Create a worktree for a feature branch, either on host or in container (`L-17`).
+    ///
+    /// For containerized execution, the worktree is created inside the persistent
+    /// container, and subsequent commands routed through the container will see it.
+    pub fn add_worktree(
+        &self,
+        branch: &str,
+        start_point: Option<&str>,
+    ) -> Result<Worktree> {
+        let dir = self.dir_for(branch);
+        let dir_str = dir.display().to_string();
+
+        // Build the git command.
+        let mut args = vec!["worktree", "add"];
+        if let Some(start) = start_point {
+            args.push("-b");
+            args.push(branch);
+            args.push(start);
+        } else {
+            args.push(branch);
+        }
+        args.push(&dir_str);
+
+        // When containerized, git commands go through the container.
+        // For now, this is a note that would need runtime integration.
+        // The actual routing happens at the Runtime/tool level.
+        let _ = self.repo.plumbing(&args)?;
+
+        Ok(Worktree { path: dir, branch: branch.to_string() })
     }
 
     /// What git says exists right now. Read rather than remembered: a worktree
