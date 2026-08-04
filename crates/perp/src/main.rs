@@ -135,6 +135,17 @@ usage:
       Live control. Written to a file the engine reads at the next step
       boundary, never mid-step. Works whether or not a loop is running.
 
+  perp approvals [--root <dir>]
+      What is waiting for a person: what was asked for, why, the command it
+      would run, and the requirement it serves. Rebuilt from the journal, so a
+      request survives the run that raised it being killed.
+
+  perp approve <id> --by <your name> [--root <dir>]
+  perp reject  <id> --by <your name> [--root <dir>]
+      Answer one. The name is required and goes in the journal - an approval
+      with nobody's name against it is one nobody gave. Applies to the cycle it
+      was raised in and to no later one (`T-15`).
+
   perp unlock [--root <dir>]
       Break the write and gate locks a killed run left behind, naming who held
       them. A lock stops being honoured on its own once its holder stops
@@ -231,6 +242,9 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("watch") => cmd_watch(&args[1..]),
         Some("control") => cmd_control(&args[1..]),
         Some("unlock") => cmd_unlock(&args[1..]),
+        Some("approvals") => cmd_approvals(&args[1..]),
+        Some("approve") => cmd_answer(&args[1..], true),
+        Some("reject") => cmd_answer(&args[1..], false),
         Some("rewind") => cmd_rewind(&args[1..]),
         Some("panel") => cmd_panel(&args[1..]),
         Some("cycle") => cmd_cycle(&args[1..]),
@@ -1427,9 +1441,13 @@ fn cmd_watch(args: &[&str]) -> std::result::Result<(), String> {
     loop {
         let records = journal.read_all().map_err(|e| e.to_string())?;
         let projection = replay(&records);
-        // Approvals live in the engine's queue, which only exists inside a run.
-        // Reported as zero-known rather than guessed at from the journal.
-        let snapshot = Snapshot::of(&projection, &records, 0);
+        // Replayed, not guessed. This reported a hard-coded zero and said so:
+        // "approvals live in the engine's queue, which only exists inside a
+        // run". The queue is rebuilt from the journal now, so a request raised
+        // by a run that has since been killed is still counted — which is
+        // exactly the moment an operator wants to know about it.
+        let waiting = Approvals::replay(&records).pending(perp_core::time::now()).len();
+        let snapshot = Snapshot::of(&projection, &records, waiting);
         println!("{snapshot}");
 
         let Some(seconds) = every else { return Ok(()) };
@@ -1440,6 +1458,73 @@ fn cmd_watch(args: &[&str]) -> std::result::Result<(), String> {
 
 /// Live control (`O-3`). Writes what the operator asked for; the engine reads
 /// it at the next step boundary and never mid-step.
+/// The approvals queue: list it, or answer one (`T-14`, `T-15`).
+///
+/// Answered here and not in chat, deliberately. An approval typed into the
+/// same box as everything else is indistinguishable from a model repeating
+/// what it was told to say, and `T-7` makes tool output data rather than
+/// instruction for exactly that reason.
+fn cmd_approvals(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+    let queue = Approvals::replay(&records);
+
+    let waiting = queue.pending(perp_core::time::now());
+    if waiting.is_empty() {
+        println!("nothing waiting for a person");
+        return Ok(());
+    }
+    println!("{} waiting:\n", waiting.len());
+    for entry in waiting {
+        println!("{}", entry.request.describe());
+    }
+    println!("answer with: perp approve <id> --by <your name>   (or `perp reject`)");
+    Ok(())
+}
+
+/// Grant or refuse one request, by id (`T-14`).
+fn cmd_answer(args: &[&str], granted: bool) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let Some(id_text) = positionals(args).first().copied() else {
+        return Err("which one? `perp approve <id> --by <your name>`".into());
+    };
+    let id: u64 = id_text.parse().map_err(|_| format!("`{id_text}` is not an approval id"))?;
+    // Named on purpose: an approval with nobody's name against it is an
+    // approval nobody gave, and the journal is the only record of who did.
+    let Some(who) = flag(args, "--by") else {
+        return Err(
+            "who is approving? `--by <your name>` — an approval with no name on it is not one"
+                .into(),
+        );
+    };
+
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+    let mut queue = Approvals::replay(&records);
+    let now = perp_core::time::now();
+
+    let Some(entry) = queue.entries().iter().find(|e| e.request.id == id) else {
+        return Err(format!("no approval #{id} — `perp approvals` lists what is waiting"));
+    };
+    let step = entry.request.step.clone();
+
+    if granted {
+        queue.grant(id, who, now).map_err(|e| e.to_string())?;
+    } else {
+        queue.refuse(id, who, now).map_err(|e| e.to_string())?;
+    }
+    journal
+        .append(&Approvals::answered_record(step, id, granted, who, now))
+        .map_err(|e| e.to_string())?;
+
+    println!(
+        "approval #{id} {} by {who}. It applies to this cycle and no later one (`T-15`).",
+        if granted { "granted" } else { "refused" }
+    );
+    Ok(())
+}
+
 /// Break a lock a dead run left behind (`N-1`, `L-20`).
 ///
 /// The operator had no way to do this. A killed run leaves a lock that outlives

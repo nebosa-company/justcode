@@ -150,6 +150,16 @@ pub trait Work {
         Vec::new()
     }
 
+    /// Calls this work refused for want of a person, to be raised into the
+    /// queue (`T-14`).
+    ///
+    /// Drained by the engine after each step, like [`Work::drain_records`]. The
+    /// work does not raise them itself: only the engine knows the step and
+    /// cycle, and only the queue can mint an id.
+    fn drain_approvals(&mut self) -> Vec<crate::approval::Ask> {
+        Vec::new()
+    }
+
     /// Ask an independent link to review what the step just produced (`V-5`).
     ///
     /// Returns the verdict text, or `None` when there is nothing to review or
@@ -187,6 +197,8 @@ pub struct Report {
     pub controls: Vec<String>,
     /// Things that went wrong without failing anything (`A-7`).
     pub warnings: Vec<String>,
+    /// Calls this run could not make without a person (`T-14`).
+    pub approvals_raised: u32,
     /// Whether the gates ran green — `None` when none ran.
     ///
     /// A failed step and a red gate are different things, and a report that
@@ -232,6 +244,9 @@ pub struct Engine {
     /// The clock. Injected so a budget test does not have to wait out a
     /// wall-clock limit in real seconds.
     now: fn() -> i64,
+    /// Requests waiting for a person (`T-14`), replayed from the journal on
+    /// open so that killing the loop does not empty it.
+    approvals: crate::approval::Queue,
 }
 
 impl Engine {
@@ -243,6 +258,13 @@ impl Engine {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         let budgets = crate::budget::from_entries(&entries)?;
+        // Rebuilt from the journal, so killing the loop does not empty the
+        // queue (`N-2`: a cold start reads the binding and the journal, and
+        // killing the loop is the normal way to stop it).
+        let approvals = match session.journal().read_all() {
+            Ok(records) => crate::approval::Queue::replay(&records),
+            Err(_) => crate::approval::Queue::new(),
+        };
         Ok(Engine {
             session,
             budgets,
@@ -251,6 +273,7 @@ impl Engine {
             channel: crate::control::Channel::at(root),
             worktrees: None,
             now: time::now,
+            approvals,
         })
     }
 
@@ -333,6 +356,7 @@ impl Engine {
             last_step: None,
             controls: Vec::new(),
             warnings: Vec::new(),
+            approvals_raised: 0,
         };
 
         loop {
@@ -417,6 +441,42 @@ impl Engine {
             // verdict goes on the record. Asked here rather than inside the
             // work, because a reviewer that files its own verdict is worth what
             // `V-2` says self-reported success is worth.
+            // `T-14`: what the step could not do without a person goes on the
+            // record and into the queue, and the loop carries on (`L-19`).
+            for ask in work.drain_approvals() {
+                let request = ask.into_request(step_for_verdict.clone(), cycle, (self.now)());
+                let id = self.approvals.raise(request.clone());
+                let mut raised = request;
+                raised.id = id;
+                guard
+                    .journal()
+                    .append(&crate::approval::Queue::raised_record(&raised, (self.now)()))?;
+                report.approvals_raised += 1;
+            }
+
+            // `T-16`: a request nobody answered inside its window is parked,
+            // not waited on. The reason is its own — `approval-gated` is
+            // counted apart from done and from blocked (`V-8`), because it is
+            // neither the loop's fault nor its to fix.
+            for expired in self.approvals.expire((self.now)()) {
+                guard.journal().append(
+                    &crate::journal::Record::outcome(
+                        step_for_verdict.clone(),
+                        (self.now)(),
+                        false,
+                        format!("approval #{} expired unanswered: {}", expired.id, expired.what),
+                    )
+                    .with_detail(format!(
+                        "approval-expired\nid={}\nparked with reason approval-gated (`T-16`)\n",
+                        expired.id
+                    )),
+                )?;
+                report.warnings.push(format!(
+                    "approval #{} expired unanswered — parked as approval-gated",
+                    expired.id
+                ));
+            }
+
             let verdict = work.review();
 
             for record in work.drain_records() {

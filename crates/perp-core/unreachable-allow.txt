@@ -13,13 +13,9 @@
 
 agent.rs::as_role
 approval.rs::close_cycle
-approval.rs::expire
-approval.rs::grant
 approval.rs::is_granted
 approval.rs::is_never
 approval.rs::needs_approval
-approval.rs::raise
-approval.rs::refuse
 approval.rs::to_request
 approval.rs::with_ttl
 artifact.rs::publish_policy

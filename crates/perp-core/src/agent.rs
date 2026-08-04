@@ -179,6 +179,9 @@ pub struct Agent<'a> {
     pub turns: Vec<Turn>,
     /// Cost records waiting to go in the journal (`M-11`).
     pending: Vec<crate::journal::Record>,
+    /// Calls this run refused for want of a person, waiting to be raised into
+    /// the queue by the engine (`T-14`).
+    approvals: Vec<crate::approval::Ask>,
     /// Workspace paths this run's calls wrote to, in first-touch order.
     ///
     /// `G-3` refuses `git add .` — a batch stages the files its steps touched,
@@ -217,6 +220,7 @@ impl<'a> Agent<'a> {
             spend: crate::budget::Spend::default(),
             turns: Vec::new(),
             pending: Vec::new(),
+            approvals: Vec::new(),
             touched: Vec::new(),
             at_step: None,
             delivered: Vec::new(),
@@ -546,6 +550,34 @@ impl<'a> Agent<'a> {
         let mut out = String::new();
         let mut progressed = false;
         for call in calls {
+            // `T-14`: a call that needs a person is enqueued, not merely
+            // refused. Refusing was all that happened before — the model was
+            // told "needs approval", nothing recorded that anyone had been
+            // asked, and there was no queue for a person to answer. The
+            // approval boundary was a wall with no door in it.
+            //
+            // The loop does not wait here (`L-19`). The call does not run, the
+            // request goes on the record, and the step carries on with
+            // whatever else it can do.
+            if let crate::approval::Policy::Approve { reason } = crate::tool::classify(call) {
+                self.approvals.push(crate::approval::Ask {
+                    what: call.signature(),
+                    why: reason.clone(),
+                    command: call.get("command").map(str::to_string),
+                    diff: call.get("content").map(str::to_string),
+                    requirement: call.requirement.clone(),
+                });
+                out.push_str(&crate::tool::Output::refusal(
+                    call.tool,
+                    &format!(
+                        "needs approval: {reason}. It has been queued for a person — carry on \
+                         with something else; you cannot approve it and asking again will not \
+                         help (`T-14`, `L-19`)."
+                    ),
+                ).render());
+                continue;
+            }
+
             let rendered = match self.host.run(call) {
                 Ok(output) => {
                     // Recorded *after* it ran, and only then. Pushed before,
@@ -747,6 +779,10 @@ impl Work for Agent<'_> {
 
     fn drain_records(&mut self) -> Vec<crate::journal::Record> {
         std::mem::take(&mut self.pending)
+    }
+
+    fn drain_approvals(&mut self) -> Vec<crate::approval::Ask> {
+        std::mem::take(&mut self.approvals)
     }
 
     fn at_step(&mut self, step: &crate::step::StepId) {

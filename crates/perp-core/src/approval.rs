@@ -60,6 +60,38 @@ pub const NEVER: &[(&str, &str)] = &[
     ("destroy", "deleting data or infrastructure — all of Perpetum Phase G"),
 ];
 
+/// What the work knows about a call that needs a person, before the engine
+/// gives it an id and a place in the queue (`T-14`).
+///
+/// The split is deliberate. The agent knows *what* was asked for and *why* it
+/// was refused; only the engine knows which step and cycle it happened in, and
+/// only the queue can mint an id. A work that assigned its own ids would be a
+/// second source of them, which is the objection `L-22` makes about step ids.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ask {
+    pub what: String,
+    pub why: String,
+    pub command: Option<String>,
+    pub diff: Option<String>,
+    pub requirement: Option<String>,
+}
+
+impl Ask {
+    pub fn into_request(self, step: StepId, cycle: u32, at: i64) -> Request {
+        Request {
+            id: 0,
+            what: self.what,
+            why: self.why,
+            command: self.command,
+            diff: self.diff,
+            requirement: self.requirement,
+            step,
+            cycle,
+            raised_at: at,
+        }
+    }
+}
+
 /// One request waiting for a human (`T-14`).
 ///
 /// Carries everything needed to decide without going and looking: what, why,
@@ -222,6 +254,95 @@ impl Queue {
         })
     }
 
+    /// The journal record raising this request (`T-14`, `O-1`).
+    ///
+    /// The queue lives in memory and the loop restarts. `N-2` says a cold
+    /// start reads the binding and the journal and nothing else, so a queue
+    /// that existed only in a process was a queue that emptied itself every
+    /// time the loop was killed — and killing the loop is the normal way to
+    /// stop it. Written as a record so [`Queue::replay`] can rebuild it.
+    pub fn raised_record(request: &Request, at: i64) -> crate::journal::Record {
+        let mut detail = format!(
+            "approval-raised\nid={}\nwhat={}\nwhy={}\ncycle={}\n",
+            request.id, request.what, request.why, request.cycle
+        );
+        if let Some(requirement) = &request.requirement {
+            detail.push_str(&format!("for={requirement}\n"));
+        }
+        if let Some(command) = &request.command {
+            detail.push_str(&format!("runs={command}\n"));
+        }
+        crate::journal::Record::outcome(
+            request.step.clone(),
+            at,
+            true,
+            format!("approval #{} requested: {}", request.id, request.what),
+        )
+        .with_detail(detail)
+    }
+
+    /// The record answering one, either way.
+    pub fn answered_record(
+        step: crate::step::StepId,
+        id: u64,
+        granted: bool,
+        by: &str,
+        at: i64,
+    ) -> crate::journal::Record {
+        let verb = if granted { "granted" } else { "refused" };
+        crate::journal::Record::outcome(step, at, true, format!("approval #{id} {verb} by {by}"))
+            .with_detail(format!("approval-{verb}\nid={id}\nby={by}\n"))
+    }
+
+    /// Rebuild a queue from the journal (`O-1`: the journal is the truth).
+    ///
+    /// Replayed rather than snapshotted, for the same reason `state.md` is: a
+    /// snapshot and the journal can disagree, and then something has to decide
+    /// which is right.
+    pub fn replay(records: &[crate::journal::Record]) -> Queue {
+        let mut queue = Queue::new();
+        for record in records {
+            let Some(detail) = &record.detail else { continue };
+            let mut lines = detail.lines();
+            let kind = lines.next().unwrap_or_default();
+            let field = |name: &str| -> Option<String> {
+                detail
+                    .lines()
+                    .find_map(|l| l.strip_prefix(&format!("{name}=")))
+                    .map(str::to_string)
+            };
+            let id: u64 = field("id").and_then(|v| v.parse().ok()).unwrap_or_default();
+
+            match kind {
+                "approval-raised" => {
+                    let request = Request {
+                        id,
+                        what: field("what").unwrap_or_default(),
+                        why: field("why").unwrap_or_default(),
+                        command: field("runs"),
+                        diff: None,
+                        requirement: field("for"),
+                        step: record.step.clone(),
+                        cycle: field("cycle").and_then(|v| v.parse().ok()).unwrap_or_default(),
+                        raised_at: record.at,
+                    };
+                    queue.entries.push(Entry { request, verdict: Verdict::Pending });
+                    queue.next_id = queue.next_id.max(id + 1);
+                }
+                "approval-granted" | "approval-refused" => {
+                    let by = field("by").unwrap_or_default();
+                    let _ = if kind == "approval-granted" {
+                        queue.grant(id, &by, record.at)
+                    } else {
+                        queue.refuse(id, &by, record.at)
+                    };
+                }
+                _ => {}
+            }
+        }
+        queue
+    }
+
     /// Drop everything from earlier cycles. Called at a cycle boundary so no
     /// grant can survive into the next one.
     pub fn close_cycle(&mut self, cycle: u32) -> usize {
@@ -280,6 +401,71 @@ impl Draft {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The queue must outlive the process that raised it (`N-2`, `T-14`).
+    ///
+    /// It lived in memory and nothing held it, so killing the loop — the
+    /// normal way to stop it — emptied the queue. An operator answering an
+    /// approval in the morning would have been answering nothing.
+    #[test]
+    fn a_queue_survives_the_run_that_raised_it() {
+        let mut queue = Queue::new();
+        let id = queue.raise(
+            Ask {
+                what: "git push origin main".into(),
+                why: "pushing reaches other people (`S-7`)".into(),
+                command: Some("git push origin main".into()),
+                diff: None,
+                requirement: Some("G-5".into()),
+            }
+            .into_request(step(), 3, 1_700_000_000),
+        );
+        let raised = Queue::raised_record(
+            queue.entries().iter().find(|e| e.request.id == id).map(|e| &e.request).expect("raised"),
+            1_700_000_000,
+        );
+
+        let replayed = Queue::replay(&[raised]);
+
+        let pending = replayed.pending(1_700_000_001);
+        assert_eq!(pending.len(), 1, "the request survived");
+        assert_eq!(pending[0].request.what, "git push origin main");
+        assert_eq!(
+            pending[0].request.requirement.as_deref(),
+            Some("G-5"),
+            "and carries what it was for, so it can be decided without going and looking"
+        );
+    }
+
+    /// An answer survives too, and a request answered in a previous process is
+    /// not asked again.
+    #[test]
+    fn an_answer_replays_with_the_request() {
+        let mut queue = Queue::new();
+        let request = Ask {
+            what: "publish the release notes".into(),
+            why: "posting publicly is Perpetum 0.4's absolute".into(),
+            command: None,
+            diff: None,
+            requirement: Some("A-4".into()),
+        }
+        .into_request(step(), 3, 1_700_000_000);
+        let id = queue.raise(request.clone());
+        let mut raised = request;
+        raised.id = id;
+
+        let replayed = Queue::replay(&[
+            Queue::raised_record(&raised, 1_700_000_000),
+            Queue::answered_record(step(), id, true, "ivelin", 1_700_000_050),
+        ]);
+
+        assert!(replayed.pending(1_700_000_100).is_empty(), "an answered request stops waiting");
+        assert!(replayed.is_granted(id, 3), "and the grant is remembered");
+        assert!(
+            !replayed.is_granted(id, 4),
+            "but not into the next cycle (`T-15`) — a grant is per action and per cycle"
+        );
+    }
 
     fn step() -> StepId {
         StepId::parse("c3/b11/s01").expect("step")
