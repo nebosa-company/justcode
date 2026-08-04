@@ -278,7 +278,33 @@ impl<'a> Agent<'a> {
              Available tools:\n{}",
             ladder.rung().instructions(),
             crate::tool::schemas(),
-        )
+        ) + &self.repo_map()
+    }
+
+    /// The repository, ranked and budgeted, in the stable prefix (`T-27`, `M-12`).
+    ///
+    /// Built once per step and placed after the tool schemas, which are the
+    /// most stable text there is — so the prefix stays in the order `M-12`
+    /// asks for: rules, tools, then slowly-changing state.
+    ///
+    /// The files this step has already touched are the focus, so a step editing
+    /// a file sees it whether or not the rest of the repository imports it.
+    ///
+    /// Empty when it cannot be built. A step that begins with no map is the
+    /// situation every step was in until now; a step that refuses to begin
+    /// because `git ls-files` failed would be worse than the problem.
+    fn repo_map(&self) -> String {
+        let root = self.host.root.clone();
+        let listed = crate::tool::tracked_files(&root);
+        if listed.is_empty() {
+            return String::new();
+        }
+        let map = crate::map::build(&root, &listed, crate::map::DEFAULT_BUDGET, &self.touched);
+        if map.is_empty() {
+            String::new()
+        } else {
+            format!("\n\n{map}")
+        }
     }
 
     /// Run one item to completion, or until it stops making progress.

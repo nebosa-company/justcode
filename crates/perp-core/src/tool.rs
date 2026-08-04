@@ -1101,6 +1101,48 @@ fn looks_like_path(token: &str) -> bool {
 ///
 /// Exactly once, not at-least-once: a pattern that matches twice means the
 /// caller was thinking of one of them, and the harness cannot know which.
+/// The source files git is tracking, for the repo map (`T-27`).
+///
+/// `git ls-files` rather than a directory walk, so `.gitignore` decides what is
+/// source — which keeps `node_modules`, `target/` and every build artefact out
+/// without a second list of exclusions to maintain. The harness's own derived
+/// files go too (`G-13`): the journal is evidence for a reader, not structure
+/// for a map.
+///
+/// Extensions are filtered because a map of `.png` and `.lock` files is noise.
+pub fn tracked_files(root: &Path) -> Vec<String> {
+    const SOURCE: &[&str] = &[
+        "rs", "dart", "ts", "tsx", "js", "jsx", "py", "go", "java", "kt", "swift", "c", "h",
+        "cpp", "hpp", "cs", "rb", "php", "scala", "sh", "ps1",
+    ];
+    // `keep_all`, or the list arrives as its last forty lines and the map
+    // silently describes a repository that stops partway through the alphabet.
+    // This is the case that option exists for: output as data, not transcript.
+    let spec = Spec::new(
+        format!("git ls-files -- . {}", derived_excludes()),
+        root,
+        Duration::from_secs(30),
+    )
+    .with_env(Env::declared())
+    .keeping_all();
+    let Ok(run) = process::run(&spec) else { return Vec::new() };
+    if !run.is_success() {
+        return Vec::new();
+    }
+    run.stdout_tail
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| {
+            Path::new(line)
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| SOURCE.contains(&e))
+        })
+        .map(str::to_string)
+        .collect()
+}
+
 /// The declarations in a file, with their line numbers (`T-24`).
 ///
 /// Deliberately lexical and deliberately multi-language. A real parser per
@@ -1132,6 +1174,27 @@ pub fn symbols(text: &str) -> Vec<(usize, String)> {
         if trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed.starts_with('*') {
             continue;
         }
+        // Indentation is the only signal available for "is this a declaration
+        // or a local", short of parsing. A top-level item sits at column 0; a
+        // method inside a class or `impl` sits one level in. Anything deeper is
+        // inside a function body.
+        //
+        // Without this a 4,000-line JavaScript file reported every `const` in
+        // every function — `const owner = paneOfTab(tab.id)` read as API — and
+        // outranked an entire Rust core in the repo map on sheer volume.
+        let indent = line.len() - trimmed.len();
+        if indent > 4 {
+            continue;
+        }
+        // `const`, `let` and `var` are locals far more often than they are
+        // declarations, so they count only at the top level, where they are
+        // module constants.
+        let binding_keyword =
+            ["const ", "let ", "var ", "static "].iter().any(|kw| trimmed.starts_with(kw));
+        if binding_keyword && indent > 0 {
+            continue;
+        }
+
         if OPENERS.iter().any(|opener| trimmed.starts_with(opener)) {
             // The signature, not the body: everything up to the brace or colon
             // that opens it.

@@ -85,6 +85,8 @@ pub mod ladder;
 pub mod json;
 pub mod link;
 pub mod local;
+/// A ranked structural view of the repository, for the stable prefix (`T-27`).
+pub mod map;
 pub mod metrics;
 pub mod lock;
 pub mod net;
