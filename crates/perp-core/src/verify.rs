@@ -436,6 +436,24 @@ pub struct StrayId {
 /// Everything else cites. A batch file that invents `L-99` produces a plan
 /// referring to a requirement that does not exist, and nobody notices until the
 /// cycle that tries to build it.
+/// Does this text introduce something shaped like a requirement id (`V-9`)?
+///
+/// Used to keep `note` (`T-23`) from becoming a side door into the backlog. A
+/// note is for describing a problem; filing the requirement is a person's job,
+/// and a loop that could mint ids in passing would have a second source of them
+/// — which is the objection `V-9` makes and `L-22` makes about step ids.
+///
+/// Answers on shape alone and does not consult the source, because the point is
+/// to refuse the *act*: citing `V-4` in a note is fine and normal, and this
+/// only fires on a bare `X-123` written as a declaration would write it.
+pub fn looks_like_new_id(text: &str) -> bool {
+    ids_in(text).iter().any(|id| {
+        // A citation reads "as `V-4` says"; a minting reads "V-99: the parser
+        // should …". The colon after it is the tell.
+        text.contains(&format!("{id}:")) || text.contains(&format!("{id} —"))
+    })
+}
+
 pub fn stray_ids(source: &str, others: &[(&str, &str)]) -> Vec<StrayId> {
     let defined = ids_in(source);
     let mut stray = Vec::new();

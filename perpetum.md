@@ -6,201 +6,28 @@ a continuous B→F loop against local models (LM Studio, LM Link) and the DeepSe
 API — and usable as a chat client, a git harness and an OS-integrated tool host
 in between cycles.
 
-**Status: built. Nothing open but `M-25`, which waits on someone else.** This document is the requirements source for the
+**Status: partly built.** This document is the requirements source for the
 harness — requirement ids are defined here and cited elsewhere (Perpetum 0.8).
 Working name for the binary: `perp`.
 
-As of cycle 14: **169 of 170 requirements are done**, 0 open, 1 external-gated
-(`M-25`), 0 parked as conflicting. What exists is the spine (binding, steps,
-journal, projection), the gate runner and its evidence, the recovery and
-watchdog layer, the git harness, the verification machinery, the model router
-over a `curl` transport exercised against a live LM Studio, cost accounting
-replayed from the journal, the tool host and its permission classifier, **the
-loop driver**, and the chat surface with `/btw` — in [`crates/`](../crates/),
-633 tests, at version 0.2.0.
+As of cycle 4, batch 25: **151 of 152 requirements are done**, 0 in progress, 1
+external-gated (`M-25`), 0 parked as conflicting. What exists is the spine
+(binding, steps, journal, projection), the gate runner and its evidence, the
+recovery and watchdog layer, the git harness, the verification machinery, the
+model router over a `curl` transport exercised against a live LM Studio, cost
+accounting replayed from the journal, the tool host and its permission
+classifier, **the loop driver**, and the chat surface with `/btw` — in
+[`crates/`](../crates/), 511 tests, at version 0.2.0.
 
 **The harness runs a batch on its own, against a real model.** `perp run
 --requirement <id>` asks a link, parses tool calls through the degradation
 ladder, runs them through the permission classifier, and feeds the results back
 as data — journalled, costed, and stopped for one of exactly three named
-reasons. It has done this on this repository on DeepSeek for tenths of a cent,
-and on a Flutter project through a `claude-cli` link for nothing, against a
-subscription.
+reasons. It has done this on this repository, on DeepSeek, for tenths of a cent.
 
-### These came from running it
-
-Not from reading the code. Each was found by a real cycle against a real
-workspace, and each has a transcript behind it. All of them are closed now; what
-follows is what each one turned out to be.
-
-`I-6` is the last thing closed here, and the only one that came from a person
-using the editor rather than from a cycle or from reading code. The panel sat at
-a fixed `0.85rem` in the editor's proportional stack — the one surface ignoring
-View → Zoom, docked against the one surface that decides what the current size
-is. Two halves in two files no compiler compares: the stylesheet consumes
-`--editor-font-size` and `setFontSize` is what puts a value in it, and either
-alone leaves the panel frozen at whatever `:root` declared. The test in
-`tests/consistency.test.js` checks both, and what it cannot check is whether the
-result looks right — no test here can, and the marker does not claim it.
-
-`M-29`. A subprocess link replaces its system prompt every
-call, which is what buys the tool protocol, so `M-12`'s stable prefix is not
-stable and there is nothing for a cache to hit. The zero it reports is correct
-and reads exactly like a ledger that stopped counting — the indistinguishability
-was the defect, not the zero. The first implementation only spoke up when *every*
-link in a ledger was uncacheable, which is useless: this repository's own is 1519
-`claude-cli` calls out of 1523, and the stragglers made it fall back to a bare
-`0 cached`. Running it against the real journal is what showed that; the tests
-passed either way.
-
-
-`L-23` is closed, and half of it had been done for some time without anyone
-noticing the other half was not. The system prompt has told a step to state its
-intent before its first tool call since `1dc3884`; nothing kept the answer, so a
-batch that opened with `pwd`, `ls` and `echo hello` left no trace of having been
-asked not to. The intent is now journalled from the reply that carries the first
-call — from that reply rather than a separate round trip, because asking for it
-in its own turn would spend exactly the turn `L-23` exists to save. A step that
-states nothing is recorded as having stated nothing, which is the case the
-requirement was filed on and the one worth being able to find.
-
-`T-20` and `M-30` were both found while verifying something else — the first by
-planting a claim to see whether `V-15` would catch it, and it did not, because
-it was reading a truncated diff; the second by checking whether `M-28`'s parity
-with `M-15` actually held, which it does, on a path both link kinds miss.
-
-`T-20` is closed. `Spec::keeping_all` returns both streams whole, `plumbing_all`
-is the caller-facing form, and `plumbing` now says so when what it hands back
-was cut. Closing it turned up a defect of the same shape one layer down:
-`Run::truncated` is *either* stream, so labelling stdout from it told a caller
-with a long stderr and an empty stdout that it had been handed a tail of
-nothing. A label about the wrong stream is the same class of lie as no label,
-and the flags are per-stream now.
-
-`M-30` is closed too, and auditing it found more paths than the row named.
-`chat`, `models`, `verify_model` and `capabilities` also reach a link, and
-`M-27` made the subprocess probe spawn the command to ask what it accepts — a
-whole agent process, which is the case `M-28` was written about. Four of the
-seven had no caller outside `client.rs` and were made private, which is the
-better answer where it applies: a path that cannot be reached needs no guard,
-and guarding `chat_raw` would have double-acquired under `call`, deadlocking the
-main path against itself. The three with a real public surface take a permit.
-
-`V-15` came out of reading what cycles 10 to 12 did rather than out of a cycle
-failing in a way that filed it, and it was the first entry here proposed rather
-than asked for. It and its two companions, `L-24` and `L-25`, are all closed.
-
-`V-15` is enforced by `perp check citations`, and it was validated against the
-four commits that argued for it — cycle 9's prose-only `X-13`, the two real
-implementations that replaced it, and cycle 13's untested `L-24` — where the
-answer was known independently of the code being tested. It flags the two lies
-and neither of the honest changes. Three design corrections came out of running
-it rather than reasoning about it, and one real defect in its own wiring:
-`Repo::plumbing` returns `stdout_tail`, capped by `T-6` at forty lines, so the
-first version read a truncated diff and reported everything fine — a false
-negative inside the rule whose job is catching claims nobody checked.
-
-`L-25` was the one that named a cause rather than a detection, and is closed in
-`f106fe2`. The measure `V-13` keeps is now read one turn at a time and appended
-to the tool results, so a step that has written nothing by its eighth turn is
-told so while there is still something it can do about it.
-
-**Cycle 13 wrote code.** `M-27` and `M-28` are marked from it — 132 lines, seven
-functions and three tests, the loop's first delivery after sixteen attempts
-across cycles 9 to 12 that produced no bytes at all. `L-25` is the only thing
-that changed, which is one run and not proof, and it is the one variable.
-
-It arrived with a defect its own gate caught. The three new tests each set
-`PERP_CLAUDE_BIN`, a process-global, and cargo runs tests as threads in one
-process: each passed alone twelve times out of twelve, and the full suite went
-red in three runs out of six. The gate went red at `c13/b2/s194`, every step
-failed, and nothing was marked — real code arrived, was found broken, and
-claimed nothing, which is the whole apparatus behaving correctly on the first
-run where it had something to judge. Fixed in `0ef08b5` and marked in
-`c13/verify/s02`, on the requirement text rather than on the green suite.
-
-`L-24` came from the same cycle and is marked too. The loop removed
-`is_progress` outright and had `run_calls` report whether a call actually
-mutated the workspace, setting it only where the call succeeded — so a refused
-write no longer reads as work, which `V-12` makes reachable on purpose. It also
-saw something this document's author had not: `touched` is deduplicated for
-staging, so measuring its length would read a second write to the same path as a
-quiet turn, which is what a careful model does when it verifies and re-writes.
-
-What it did not do was test any of it. `L-24` sat in two comments, and nothing
-would have noticed if it stopped being true — `V-15`'s case exactly, filed hours
-earlier and applied first to the loop's work rather than to a person's. The test
-added in `c13/l24/s02` puts `Tool::Shell` back in the mutating set and watches
-the watchdog stop firing, which is why it never fired once across cycles 10 to
-12 on steps of 40, 47, 56 and 59 turns.
-
-`V-14` came out of cycle 10 and is closed in `8936558`. The batch took its ids
-before the agent ran, because the branch needs them, so the gate filed its
-result against every requirement in the batch including the ones that wrote
-nothing. Nothing about that was false, which made it worse than the hole `V-13`
-closed: the gates ran and were green, having measured a tree none of those
-requirements had touched. There was no false claim to catch, only a wrong
-attribution. The list is now taken after the work — `Agent` keeps `V-13`'s own
-measure instead of discarding it, and the hand-over happens in `Then`, the one
-place that holds both halves and knows the first has finished.
-
-Cycle 10 is the clearest reading of where the loop is. Four requirements, four
-failures, 117 model turns, not one byte of source changed — and it said so.
-`V-13` caught two steps that read and reported; the turn ceiling caught the
-other two, which spent forty turns each without an edit. The same cycle under
-cycle 8's rules would have reported nine of eleven steps green. Nothing about
-the work improved; the account of it stopped being false, which is all `V-12`
-and `V-13` were ever going to buy. `L-23` is now being demonstrated by the steps
-sent to fix it.
-
-`X-13` is closed, and took three attempts to notice it was not. The loop filed
-it done in cycles 6, 8 and 9, and each time the step closed green with three
-green gates behind it. Cycle 9's attempt was the instructive one: nine lines,
-all of them prose, adding a paragraph asserting `shell` was confined and putting
-`X-13` in the module header, with no code and no test. The hole read as sealed
-in the one place a reader would look. `V-13` did not catch it, because the step
-*had* written — it wrote only the description of the change it had not made.
-Closed for real in `a6b4ff0` and marked in `c10/x13/s03`, on a test that writes
-a file outside the root and fails when the guard is taken out.
-
-`X-14` was the exception to the heading above, and sat under it only because it
-belonged beside `X-13`. It came from reading the shell arm while closing `X-13`,
-not from a cycle, and had no transcript behind it. It is closed in `62732ae` and
-marked in `c10/x14/s03`: `grep`'s `path` reached `git grep`'s command line
-without ever being resolved, and what kept it from reading anything was git
-declining to look outside its work tree. The disarmed run is the clearest
-statement of the difference — with the resolve removed the test fails on `it
-ran:` with an empty result, nothing having escaped and nothing having been
-refused either. A tool the harness happens to call is not a boundary the harness
-keeps.
-
-`V-12` and `V-13` were the uncomfortable pair, and are closed. `V-2` — no
-self-reported success — is the clause this document is built around, and cycle 8
-showed it holding only at the requirement marker, by convention, with nothing
-underneath it: the loop could have written its own `✅` and the run would have
-looked identical. It now cannot write this file at all, and a step that changed
-nothing cannot close green.
-
-Both were marked on evidence a person went and made, in `c9/evidence/s02`.
-`V-12` was proved by asking a live model to mark itself done and watching the
-host refuse it (`c1/D/s125`). `V-13` was proved by cycle 9 doing to itself what
-cycle 8 had got away with: the same steps, on the same work, closing not-ok and
-saying *read and reported, but changed nothing*.
-
-Closed in cycle 6, marked after a person read the evidence in
-`c7/evidence/s02`: `M-26` (a run refused over a declared link no role chain
-named), `T-19` (no way to delete a file except through the index) and `V-11`
-(`perp check ids` passed on having found nothing to check).
-
-The loop's own steps for all three **failed** — two on the 40-turn ceiling, one
-on an unparseable tool block — and its gate was red when they ended, because it
-had changed `missing_credentials` without updating the test that asserted the
-old contract. The work was right and the run that produced it was not clean.
-That is what `V-2` is for: the marker went on after a person ran the gates at
-`acee1c3` and read the diff, not because a batch reported success.
-
-`M-25` remains external-gated: inference on an LM Link peer is unreachable from
-outside LM Studio, measured in `c2/b10/s01` rather than assumed.
+Everything in this document is built except `M-25`, which is external-gated:
+inference on an LM Link peer is unreachable from outside LM Studio, measured in
+`c2/b10/s01` rather than assumed.
 
 Status markers below say which requirement is where; a marker without a matching
 journal entry is not believed (Perpetum 0.7).
@@ -340,9 +167,6 @@ An unattended loop with no ceiling is a billing incident.
 | ✅ ~~`L-13`~~ | **Thrash watchdog:** a file edited to a previously seen content hash within a batch is flagged; twice, the feature is blocked. |
 | ✅ ~~`L-14`~~ | Stop conditions are exactly Perpetum F's: backlog exhausted, batch blocked, or a human says stop. Each writes a distinct terminal record. |
 | ✅ ~~`L-15`~~ | The loop stops *clean*: no half-applied patch, no dangling branch, no running child process. |
-| ✅ ~~`L-23`~~ | A step states what it intends to do before its first tool call, and the intent is journalled. A batch that opens with `pwd`, `ls` and `echo hello` has spent its turns establishing that the harness is real, which is a reasonable thing for an agent to wonder and an expensive way to answer it. Measured: thirteen tool calls before the first edit, on a batch that had one file to change. |
-| ✅ ~~`L-24`~~ | Progress means the workspace changed, measured and not guessed from the tool name. `is_progress` counts `shell` as progress on the grounds that it "changes the workspace", and mostly it does not: twenty of cycle 12's twenty-three `shell` calls were `grep`. So `L-11`'s quiet-turn watchdog is unreachable — a step that greps through `shell` every fourth turn resets the counter forever, and cycles 10 to 12 never once fired it across steps of 40, 47, 56 and 59 turns. `V-13` already computes the honest measure, which is whether the touched set grew. |
-| ✅ ~~`L-25`~~ | A step is told, while it can still act, that it has changed nothing. `V-13` decides a step wrote nothing at scoring time, which is after the model has stopped and cannot do anything about it. Cycle 12 raised the ceiling to 100 and no step reached it: `M-29`, `M-27` and `M-28` read for 47, 59 and 56 turns, concluded they understood the problem, and wrote a summary. Nothing had told them the job was an edit. The measure `V-13` keeps is the one to feed back, and the tool result is where it reaches the model. |
 | ✅ ~~`L-16`~~ | Two attempts at a failing gate, then `BLOCKED` with the **verbatim error text** (Perpetum 0.5). The engine enforces the count; the model cannot ask for a third. |
 
 ### 2.4 Concurrency
@@ -435,8 +259,6 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ✅ ~~`M-12`~~ | Prompts are assembled **stable-prefix first**: system rules, binding, tool schemas, then slowly-changing state, then the volatile task tail. Never reorder the stable region between calls in a batch. |
 | ✅ ~~`M-13`~~ | Context compaction is a first-class step run by the `compactor` role on a local link. Compaction output is journalled, so what was dropped is recoverable. |
 | ✅ ~~`M-14`~~ | Model ids, prices, context limits and endpoint paths live in config, refreshed from the provider's model list at startup. A deprecated or missing model id is a startup error naming the replacement, never a silent fallback. |
-| ✅ ~~`M-26`~~ | A declared link that no role chain names is not credential-checked at startup. `M-24` checks every declared link, so a run refuses over a link nothing would have used — which happened twice on a workspace configured entirely for another provider, and the only fix was to set a variable for an endpoint that was never going to be called. |
-| ✅ ~~`M-29`~~ | A link that cannot use prefix caching reports that, rather than reporting zeroes. Replacing a subprocess link's system prompt is what buys the tool protocol and it costs the cache with it, so `M-12` does not apply and a column of zeroes is a property of the link rather than a broken ledger — but nothing says so, and the two look identical. |
 | ✅ ~~`M-24`~~ | Declared credentials are checked when the project is bound, not at first use. A link whose `auth_env` names an unset variable must fail `perp bind`, not the eleventh call of a batch — by which point the loop has spent an hour to discover a typo. Found in `c2/b8/s06`, where a local link with an optional token failed before it ever tried to connect. |
 | ✅ ~~`M-15`~~ | Per-link concurrency limits are respected. One GPU serving one model does not want four parallel requests. |
 
@@ -445,9 +267,6 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | id | Requirement |
 |---|---|
 | ⛔ `M-25` | An `lmlink` link cannot be reached by a base-URL swap: a peer's models are absent from the local REST listing, and `lms` selects the device from a **global** preferred-device setting rather than a per-call argument. Until LM Studio exposes per-request device selection, inference on a peer is **external-gated** — it needs the LM Studio SDK or a global setting change, and a loop that flipped a global setting to route one call would be changing the operator's environment underneath them. Measured in `c2/b10/s01`. |
-| ✅ ~~`M-27`~~ | A subprocess link's model is verified against what the command accepts. `M-14`'s probe asks a server which models it serves, so it is skipped entirely for a link that has no server — and a `claude-cli` link with a misspelled model is discovered by a failing call rather than at startup, which is the failure `M-14` exists to prevent. |
-| ✅ ~~`M-28`~~ | A subprocess link declares a concurrency bound and the router honours it, as `M-15` requires of an HTTP link. Nothing stops a batch spawning one command per parallel item today, and each is a whole agent process rather than a socket. |
-| ✅ ~~`M-30`~~ | The concurrency bound holds on every path that reaches a link, not only on `Client::call`. `M-15` acquires its permit in `call`, and `stream`, `chat_raw` and `speak` each reach a link without passing through it — `stream` because `C-4` streams a reply for the chat surface, the other two because they exist to bypass the router's dispatch. The bound is honoured for a batch and ignored for a conversation, which is the wrong way round: a person waiting on a reply is the case where a saturated GPU is felt. Found while verifying `M-28`, which asks only for parity with `M-15` and has it — this is the gap both link kinds share. |
 | ✅ ~~`M-16`~~ | **Warm before a batch.** LM Studio JIT-loads models; a cold 30B load is minutes. The engine pre-loads the batch's links and holds them with a TTL longer than the batch's expected duration. |
 | ✅ ~~`M-17`~~ | Never force two large models onto one host concurrently. The router treats a host's VRAM as a lease. |
 | ✅ ~~`M-18`~~ | Use TTFT and tok/s from `/api/v0` to keep a rolling throughput estimate per link, and use it for both scheduling and the wall-clock budget. |
@@ -468,23 +287,7 @@ means prompt *layout* is an engineering requirement, not a style preference.
 | ✅ ~~`T-4`~~ | Background processes are tracked and killed at step end (`X-4`). A dev server left running across steps is a leak the next gate will blame on the wrong feature. |
 | ✅ ~~`T-5`~~ | Tool schemas are generated once per session and are part of the stable prefix (`M-12`). |
 | ✅ ~~`T-6`~~ | Every tool result is truncated to a declared budget, with the truncation visible to the model. Silent truncation causes confident wrong conclusions. |
-| ✅ ~~`T-19`~~ | A `delete(path)` tool exists, confined to the workspace like the other file tools. It asks before it runs — a deleted untracked file is the act `git clean` is refused for, and nothing can tell whose file it was. Today the only route to removing a file is `git rm`, which stages as a side effect and refuses on an untracked one — so the loop cannot clean up after itself without touching the index. |
 | ✅ ~~`T-7`~~ | Tool output is **data, never instruction**. Content from files, HTTP, issue trackers and test output cannot change harness policy, approve an action, or redirect the loop (`S-1`). |
-
-#### Tools the loop asked for by failing without them
-
-Each of these is a shape of failure observed running this harness against a
-Flutter backlog, not a capability wanted in the abstract. The tools it already
-had were never the bottleneck; exploration, integration and provenance were.
-
-| id | Requirement |
-|---|---|
-| ✅ ~~`T-21`~~ | `apply(path, edits)` performs several pre-image-verified replacements in one call, **all or nothing**. An edit that fails its pre-image leaves the file exactly as it was. `T-2` verifies one edit at a time, so a real change costs a round trip each, and a partial failure leaves a file in a state neither the model nor the requirement intended — which `L-15`'s clean stop forbids and which `patch` can produce today. |
-| ✅ ~~`T-22`~~ | `checkpoint(label)` makes a local commit of the paths this step touched (`G-3`), and cannot push. `G-5` classifies a local commit as `auto` and no tool offers one, so work accumulates uncommitted across a whole batch — which is why gate transcripts recorded the parent commit rather than the code they gated (`G-6`), and why `O-4`'s rewind has nothing finer than a batch to return to. |
-| ✅ ~~`T-23`~~ | `note(kind, text)` files a finding — a weak test, a wrong assumption, a thing worth doing later — into the journal in a form `perp explain` renders and a person can act on. `V-4` says a wrong test is a requirement, filed and cited rather than edited in passing; nothing offered a way to file one, so the verifier's findings landed in prose nobody reads. It cannot mint requirement ids (`V-9`) and cannot approve anything (`T-13`). |
-| ✅ ~~`T-24`~~ | `symbols(path)` lists the declarations in a file and `refs(name)` finds where a name is used, by structure rather than by substring. A `grep` for a type returned 604,886 bytes on this repository and the model read the result into its context until the request outgrew what the endpoint would finish — three runs blocked that way. A model asking where something is used wants a symbol table, not every line that mentions the word. |
-| ✅ ~~`T-25`~~ | `plan(steps)` declares what a step intends to do, in a form the engine can compare against what it did. `L-23` already makes the model state its intent, but as prose nothing can check — so `V-13`'s "changed nothing" is available only after the model has stopped, and `L-25` has nothing better than a turn count to reason about. |
-| ✅ ~~`T-26`~~ | `sandbox_run(command)` runs a command against a throwaway worktree at a named commit, leaving the live tree untouched. Every gate today runs against the working tree, which is why a dirty tree makes a green gate's sha a lie (`G-6`) and why `V-3`'s red run has to stash and restore. It is also what `L-17`'s per-feature parallelism needs. |
 
 ### 4.2 Runtime
 
@@ -510,7 +313,6 @@ needs permission.
 | ✅ ~~`T-16`~~ | Approvals expire. An unanswered request older than the configured window is parked with reason `approval-gated` and carried into the next cycle (Perpetum 0.6). |
 | ✅ ~~`T-18`~~ | The engine must not hold a lock on any artefact its own gates rebuild. On Windows a running executable cannot be replaced, so a harness launched from the workspace own `target/` fails its own build gate with `Access is denied (os error 5)`. The engine runs from a copy outside the tree it builds, and says so in the gate transcript. Found in `c1/b5/s08` by running the gates through the harness on its own repository. |
 | ✅ ~~`T-17`~~ | Anything drafted for a human — release notes, issue replies, GTM copy — is written to disk unattended and *sent* only through an `approve` call. Drafting is free; sending is not. |
-| ✅ ~~`T-20`~~ | A caller that needs a command's whole output can get it, and one that is handed a tail is told so. `T-6` makes truncation loud for the model, because silent truncation is how a model concludes a suite passed from the half it was shown. `Repo::plumbing` does the opposite for everything else: it returns `stdout_tail`, capped at forty lines, with a doc comment saying the output "is wanted as text" and nothing anywhere saying it is partial. `V-15`'s first wiring read a truncated diff, found no claim in it, and reported the change clean — a false negative inside the rule whose job is catching claims nobody checked, and it surfaced only because a claim was planted deliberately to see whether it would. `panel.rs` renders `git diff` through the same call and shows a person a silently capped diff today. |
 
 ---
 
@@ -563,9 +365,7 @@ The loop runs on a real machine, and half of "exercise the real artefact"
 | ✅ ~~`X-9`~~ | The harness can register itself with the OS scheduler (Task Scheduler, systemd, launchd) so a cycle resumes after a reboot. Registration is `approve`; resumption then reconciles per `L-7`. |
 | ✅ ~~`X-10`~~ | Sleep and resume are survivable: a loop that wakes to a stale peer, an expired token or a moved clock reconciles rather than continuing on stale assumptions. |
 | ✅ ~~`X-11`~~ | GUI automation — driving the mouse and keyboard of other applications — is out of scope. If ever added, it is `never` while unattended. |
-| ✅ ~~`X-13`~~ | The `shell` tool is confined to the workspace root the way the file tools are (`X-2`). A command whose working directory is outside it, or that names an absolute path outside it, is refused before it runs. `X-2` was written about file tools and reads as covering everything; `shell` is the hole in it, and `cd` is one argument. |
 | ✅ ~~`X-12`~~ | Gates run with a declared environment, not the ambient shell's. The unattended run and the operator's terminal must not disagree about `PATH`. |
-| ✅ ~~`X-14`~~ | Every path a tool accepts is resolved before it is used, including the ones that are not called `path`. `grep`'s `path` argument goes into a command line unresolved, so a search rooted outside the workspace is not refused by the harness — only by `git grep` declining to look outside its work tree, which is git's behaviour and not a boundary the harness keeps. `X-13` closed the same hole for `shell`; this is the rest of it. |
 
 ---
 
@@ -585,12 +385,7 @@ decides whether a week of unattended running produced software or a fiction.
 | ✅ ~~`V-7`~~ | Status markers are derived from journal evidence. The engine writes them; the model proposes. |
 | ✅ ~~`V-8`~~ | Gated items (`external-gated`, `credential-gated`, `approval-gated`, `blocked`) are counted separately from done, forever, and are never re-picked without their reason changing. |
 | ✅ ~~`V-10`~~ | The red run verifies the mutation **actually changed the file** before believing either result. A mutation that failed to apply reports a passing test that was never challenged — a false green wearing the costume of evidence. Found the hard way in `c1/b3/s12`, where a multi-line `sed` pattern silently matched nothing. |
-| ✅ ~~`V-11`~~ | `perp check ids` fails when it finds no documents to check. It reports `documents: 0` and exits green today, which is a pass that proves nothing — the same shape of green as a test suite that never runs the code it names. A checker that cannot find its inputs has not checked them. |
-| ✅ ~~`V-12`~~ | The requirements source named by the binding is not writable by a tool. `write`, `patch` and `delete` on it are refused before they run, whatever the call says it is for. `V-2` says model prose is never written to a status marker and `V-9` says ids are minted only here — both describe the same file, and neither is enforced against the loop that has `patch` and a workspace-relative path. Cycle 8 attempted it twice; what stopped it was a pre-image mismatch, not a rule. |
-| ✅ ~~`V-13`~~ | A step that wrote nothing does not end `ok`. Filed as "made no tool call", which was already guarded and was not the defect: the steps that closed green had called plenty and written none of it. `V-2` refuses self-reported success at the requirement marker; the same claim one level down is currently recorded as a green step. Cycle 8 closed three steps `ok=True` whose summaries were prose, a survey of the repository, and a malformed `<perp-call>` block — the gates then passed because nothing had been touched, and the cycle reported eleven steps with two failures having changed not one byte. |
 | ✅ ~~`V-9`~~ | Requirement ids are minted only in the requirements source named by the binding (Perpetum 0.8). A write that introduces a new id anywhere else — batches, board, state, a `/btw` note — is rejected by the engine. |
-| ✅ ~~`V-14`~~ | A gate outcome is attributed only to requirements whose step changed something. A batch runs its gates once and files the result against every requirement in it, so a requirement whose step wrote nothing collects green gates it did not earn — the gates measured the tree as it already was. Cycle 10 recorded three green gates against `L-23`, `M-29` and `M-27` on a cycle that changed no source at all, and `perp explain` shows that green underneath the failed step. `V-13` stopped prose closing a step; this is the same claim one level up, where the evidence is real and the attribution is not. |
-| ✅ ~~`V-15`~~ | A step may not add a requirement's citation without adding a test that fails without it. Enforced structurally by `perp check citations`, which reports open requirements a change cites with no test naming them; whether that test would fail without the change is `V-3`'s question and `RedRun` already answers it. Cycle 9 closed `X-13` with nine lines of prose: a module-doc paragraph asserting `shell` was confined to the workspace, and `X-13` added to the file's requirement header, with no code and no test. Every gate went green, because a false docstring compiles, and `perp check ids` passed, because the id it cited is defined. The hole read as sealed in the one place a reader would look. `V-13` did not catch it — the step *had* written, and what it wrote was the description of the change it had not made. A citation is a claim about behaviour, and the test that fails without it is the only thing that distinguishes the claim from a sentence. |
 
 ---
 
@@ -662,7 +457,6 @@ Speculative, and the reason this document lives in this repo.
 | ✅ ~~`I-3`~~ | The panel hosts chat, the approvals queue, the current diff, the artifact view and a journal timeline. Approving from the panel opens the diff first. |
 | ✅ ~~`I-4`~~ | Existing editor surfaces are reused where they fit: the Problems panel for gate failures, the terminal dock for gate transcripts, tabs for the files under edit. |
 | ✅ ~~`I-5`~~ | The panel is a view onto the journal, not a second source of truth. Closing the editor does not stop the loop; reopening re-attaches. |
-| ✅ ~~`I-6`~~ | The panel reads like the editor beside it: same typeface, same size, and it follows zoom. It sat at a fixed `0.85rem` in the editor's proportional stack while everything around it grew — the one surface that ignored View → Zoom, docked against the one surface that defines what the current size is. Named once as `--editor-font` and `--editor-font-size` rather than copied, because a second list of fallbacks is a second thing to keep in step, and set from `setFontSize` on every zoom and on load so the panel is right before the first zoom rather than only after one. |
 
 ---
 

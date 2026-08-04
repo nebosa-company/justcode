@@ -286,6 +286,28 @@ impl Repo {
     /// long diff, found no claim in it, and reported the change clean. A
     /// caller that needs every byte wants [`Repo::plumbing_all`]; a caller that
     /// only displays this now has a line telling it what it is looking at.
+    /// A detached worktree at `at`, for running something against a tree that
+    /// is not the one being edited (`T-26`, `G-11`).
+    ///
+    /// `--detach` deliberately: a worktree that checks out a branch takes that
+    /// branch, and the loop would find its own branch checked out somewhere
+    /// else and unusable. Nothing here is meant to be committed to.
+    pub fn add_worktree(&self, at_path: &Path, commit: &str) -> Result<()> {
+        let path = at_path.to_string_lossy().to_string();
+        self.plumbing(&["worktree", "add", "--detach", &path, commit]).map(|_| ())
+    }
+
+    /// Remove one, and forget it (`G-11`: never left stale).
+    ///
+    /// Best-effort and deliberately silent. It is called on the way out of both
+    /// the success and the failure path, and a failure to tidy up must not
+    /// replace the result the caller actually wanted to report.
+    pub fn remove_worktree(&self, at_path: &Path) {
+        let path = at_path.to_string_lossy().to_string();
+        let _ = self.plumbing(&["worktree", "remove", "--force", &path]);
+        let _ = self.plumbing(&["worktree", "prune"]);
+    }
+
     pub fn plumbing(&self, args: &[&str]) -> Result<String> {
         let run = self.run(args, &Approval::NotGranted)?;
         if run.stdout_truncated {

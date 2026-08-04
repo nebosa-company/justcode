@@ -568,6 +568,48 @@ impl<'a> Agent<'a> {
         }
     }
 
+    /// Commit what this step has touched, locally (`T-22`, `G-2`, `G-3`).
+    ///
+    /// Staged explicitly, from `self.touched` — the deduplicated set of paths
+    /// this run actually wrote. `G-3` forbids `git add -A` precisely so an
+    /// unattended loop cannot sweep up a change it did not make, and this is
+    /// the only place that knows the difference.
+    ///
+    /// Carries the trailers `G-2` asks for: the requirement, the step, and the
+    /// link and model that authored it. A line of code traces back to both.
+    fn checkpoint(&mut self, label: &str) -> Result<String> {
+        if self.touched.is_empty() {
+            return Err(crate::error::Error::refused(
+                "checkpoint",
+                "nothing has been written this step — a commit of no changes is not a checkpoint",
+            ));
+        }
+        let repo = crate::git::Repo::at(&self.host.root);
+        let paths: Vec<&str> = self.touched.iter().map(String::as_str).collect();
+        repo.stage(&paths)?;
+
+        let authored = self
+            .turns
+            .last()
+            .map(|turn| format!("{} · {}", turn.link, self.role))
+            .unwrap_or_else(|| "the loop".to_string());
+        let mut message = crate::git::CommitMessage::new(label.to_string());
+        if let Some(step) = &self.at_step {
+            message.step = Some(step.to_string());
+        }
+        if let Some(item) = self.items.get(self.at.saturating_sub(1)) {
+            message.requirements = vec![item.requirement.clone()];
+        }
+        message.authored_by = Some(authored);
+
+        let sha = repo.commit(&message)?;
+        Ok(format!(
+            "committed {} file(s) as {} — locally, and not pushed (`G-5`)",
+            paths.len(),
+            &sha[..sha.len().min(8)]
+        ))
+    }
+
     /// Run the calls and render the results as data (`T-7`, `S-1`). The
     /// second return is whether any call this turn actually mutated the
     /// workspace (`L-24`) — a fact taken from what happened, not guessed from
@@ -579,6 +621,25 @@ impl<'a> Agent<'a> {
         let mut out = String::new();
         let mut progressed = false;
         for call in calls {
+            // `T-22`: a local commit of what this step touched.
+            //
+            // Handled here rather than in the tool host because `G-3` forbids
+            // `git add -A` and staging must be exactly the paths this step
+            // wrote — and the host does not know which those were. Without a
+            // tool for it, `G-5` classified a local commit as the loop's own
+            // business and then offered no way to make one, so a whole batch
+            // accumulated uncommitted and its gate transcripts recorded the
+            // parent commit (`G-6`).
+            if call.tool == crate::tool::Tool::Checkpoint {
+                let label = call.get("label").unwrap_or("checkpoint");
+                let rendered = match self.checkpoint(label) {
+                    Ok(summary) => summary,
+                    Err(e) => format!("{e}"),
+                };
+                out.push_str(&format!("\n{}\n{rendered}\n", call.signature()));
+                continue;
+            }
+
             // `L-12`: the same call with the same arguments, over and over, is
             // an error rather than a retry. The signature set above answers a
             // different question — whether a turn *learned* anything — and a
