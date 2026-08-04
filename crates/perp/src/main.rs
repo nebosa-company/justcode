@@ -486,13 +486,37 @@ fn warm_local_links(
     // and read *before* loading anything — the whole question is whether a load
     // is needed, and finding out by loading answers it too late.
     let facts = |link: &perp_core::link::Link| -> Option<perp_core::probe::ModelFacts> {
-        let base = link.base_url.as_deref()?.trim_end_matches('/');
-        let response =
-            transport.send(&perp_core::net::Request::get(format!("{base}/api/v0/models"))).ok()?;
-        perp_core::probe::parse_models(&response.body)
-            .ok()?
-            .into_iter()
-            .find(|facts| facts.id == link.model)
+        let base = link.base_url.as_deref()?;
+        let base = base.trim_end_matches('/');
+        let url = format!("{base}/api/v0/models");
+
+        let response = match transport.send(&perp_core::net::Request::get(url.clone())) {
+            Ok(r) => r,
+            Err(e) => {
+                if verbose {
+                    eprint!("  M-7 error: {}: failed to reach {}: {}\n", link.name, url, e);
+                }
+                return None;
+            }
+        };
+
+        let models = match perp_core::probe::parse_models(&response.body) {
+            Ok(m) => m,
+            Err(e) => {
+                if verbose {
+                    eprint!("  M-7 error: {}: failed to parse /api/v0/models response: {}\n", link.name, e);
+                }
+                return None;
+            }
+        };
+
+        let found = models.iter().find(|facts| facts.id == link.model).cloned();
+        if found.is_none() && verbose {
+            let available: Vec<_> = models.iter().map(|m| m.id.as_str()).collect();
+            eprint!("  M-7 error: {}: model '{}' not in /api/v0/models. Available: {}\n",
+                    link.name, link.model, available.join(", "));
+        }
+        found
     };
 
     let prepared = perp_core::local::prepare(
