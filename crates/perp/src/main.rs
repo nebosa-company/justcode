@@ -29,7 +29,7 @@ use perp_core::journal::{Journal, Record};
 use perp_core::client::{ChatRequest, Client, Message};
 use perp_core::cost::Ledger;
 use perp_core::link::{AssumeHealthy, Links, Mode, Role};
-use perp_core::net::Curl;
+use perp_core::net::{Curl, Transport};
 use perp_core::session::{Decision, Finding, Probe, Session};
 use perp_core::state::{render, replay};
 use perp_core::verify;
@@ -456,6 +456,57 @@ fn cmd_state(args: &[&str]) -> Result<()> {
 /// Health is assumed, and the output says so, because a listing that implies it
 /// pinged something it did not is the kind of quiet lie this harness exists to
 /// avoid.
+/// Get the local links ready before a run needs them (`M-16`, `M-17`, `M-19`).
+///
+/// LM Studio JIT-loads a model on first use. Without this an unattended batch
+/// paid a cold load — minutes, for anything large — inside its first step and
+/// against that step's first-token deadline, which is exactly the failure
+/// `M-16` describes and which nothing prevented, because none of it was called.
+///
+/// Best-effort on purpose. A machine with no `lms` on its PATH is the common
+/// case for a cloud-only run, and refusing to start would make a local-server
+/// convenience into a hard dependency.
+fn warm_local_links(
+    binding: &perp_core::binding::Binding,
+    verbose: bool,
+) -> std::result::Result<(), String> {
+    let path = binding.resolve("path.links").map_err(|e| e.to_string())?;
+    let links = Links::load(&path).map_err(|e| e.to_string())?;
+    let local: Vec<&perp_core::link::Link> =
+        links.all().iter().filter(|link| link.is_local()).collect();
+    if local.is_empty() {
+        return Ok(());
+    }
+
+    let lms = perp_core::local::Lms::new();
+    let transport = Curl::new();
+
+    // What each link says about itself (`M-7`): `state`, `quantization`,
+    // `max_context_length`. Read from the native surface rather than guessed,
+    // and read *before* loading anything — the whole question is whether a load
+    // is needed, and finding out by loading answers it too late.
+    let facts = |link: &perp_core::link::Link| -> Option<perp_core::probe::ModelFacts> {
+        let base = link.base_url.as_deref()?.trim_end_matches('/');
+        let response =
+            transport.send(&perp_core::net::Request::get(format!("{base}/api/v0/models"))).ok()?;
+        perp_core::probe::parse_models(&response.body)
+            .ok()?
+            .into_iter()
+            .find(|facts| facts.id == link.model)
+    };
+
+    let prepared = perp_core::local::prepare(
+        &lms,
+        &local,
+        &facts,
+        std::time::Duration::from_secs(perp_core::local::DEFAULT_TTL_SECS),
+    );
+    if verbose && !prepared.describe().is_empty() {
+        eprint!("· warm\n{}", prepared.describe());
+    }
+    Ok(())
+}
+
 fn cmd_links(args: &[&str]) -> std::result::Result<(), String> {
     let binding = load(args).map_err(|e| e.to_string())?;
     let path = binding.resolve("path.links").map_err(|e| e.to_string())?;
@@ -880,6 +931,8 @@ fn write_state(path: &Path, rendered: &str) -> Result<()> {
 fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
     let root = workspace_of(args);
     let binding = load(args).map_err(|e| e.to_string())?;
+    // `M-16`: before the batch, not inside its first step.
+    warm_local_links(&binding, true)?;
     let cycle: u32 = flag(args, "--cycle")
         .map(|text| text.parse().map_err(|_| format!("--cycle takes a number, not `{text}`")))
         .transpose()?
@@ -1797,6 +1850,8 @@ fn cmd_schedule(args: &[&str]) -> std::result::Result<(), String> {
 fn cmd_cycle(args: &[&str]) -> std::result::Result<(), String> {
     let root = workspace_of(args);
     let binding = load(args).map_err(|e| e.to_string())?;
+    // `M-16`: before the batch, not inside its first step.
+    warm_local_links(&binding, true)?;
 
     let cycle: u32 = flag(args, "--cycle")
         .map(|t| t.parse().map_err(|_| format!("--cycle takes a number, not `{t}`")))

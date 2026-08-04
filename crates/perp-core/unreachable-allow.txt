@@ -82,13 +82,9 @@ ladder.rs::repairs_used
 layout.rs::binding_in
 link.rs::in_flight
 link.rs::is_openai_shaped
-local.rs::claim
 local.rs::estimate
-local.rs::is_reachable
-local.rs::link_status
 local.rs::resident_on
 local.rs::unload
-local.rs::warm
 local.rs::with_program
 lock.rs::holder
 net.rs::with_program

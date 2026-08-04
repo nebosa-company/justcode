@@ -167,6 +167,117 @@ impl LinkStatus {
     }
 }
 
+/// Health from `lms link status` (`M-19`).
+///
+/// The router consulted [`crate::link::AssumeHealthy`] and nothing else, so a
+/// peer that had gone away was healthy right up until the call to it failed —
+/// which `M-19` exists to prevent, and which costs a whole step to discover.
+///
+/// Probed once per run rather than per call: `lms link status` spawns a
+/// process, and a peer that vanishes mid-run fails its step (`M-19`), which is
+/// the behaviour asked for anyway.
+#[derive(Debug, Clone)]
+pub struct Peers {
+    status: LinkStatus,
+}
+
+impl Peers {
+    /// Ask `lms`. A failure is not the same as "no peers": it means the
+    /// question could not be asked, and every link stays eligible rather than
+    /// being quietly written off.
+    pub fn probe(lms: &Lms) -> Peers {
+        Peers {
+            status: lms.link_status().unwrap_or(LinkStatus {
+                online: true,
+                peers: Vec::new(),
+                this_device: None,
+            }),
+        }
+    }
+
+    pub fn status(&self) -> &LinkStatus {
+        &self.status
+    }
+}
+
+impl crate::link::Health for Peers {
+    fn is_healthy(&self, link: &Link) -> bool {
+        self.status.is_reachable(link)
+    }
+}
+
+/// What preparing a run's links did (`M-16`, `M-17`, `M-19`).
+#[derive(Debug, Clone, Default)]
+pub struct Prepared {
+    pub warmed: Vec<Warmed>,
+    /// Links that will not be used, and why — a peer that is not there, or a
+    /// host with no room left.
+    pub unavailable: Vec<(String, String)>,
+}
+
+impl Prepared {
+    pub fn describe(&self) -> String {
+        let mut out = String::new();
+        for warmed in &self.warmed {
+            out.push_str(&format!("  {}\n", warmed.describe()));
+        }
+        for (link, why) in &self.unavailable {
+            out.push_str(&format!("  {link}: {why}\n"));
+        }
+        out
+    }
+}
+
+/// Get a run's local links ready before it needs them (`M-16`, `M-17`).
+///
+/// Called once at the top of a run. Everything here was written, tested and
+/// never invoked: LM Studio JIT-loads a model on first use, so an unattended
+/// batch paid a cold 30B load inside its first step and against its first
+/// timeout, which is the failure `M-16` describes and which nothing prevented.
+///
+/// `facts` is how the caller reports what a link says about itself
+/// (`/api/v0/models`, per `M-7`) — passed in rather than fetched, so this is
+/// testable without a GPU and so the probe cache is not bypassed.
+pub fn prepare(
+    lms: &Lms,
+    links: &[&Link],
+    facts: &dyn Fn(&Link) -> Option<ModelFacts>,
+    ttl: Duration,
+) -> Prepared {
+    let mut prepared = Prepared::default();
+    let mut vram = Vram::new();
+    let peers = Peers::probe(lms);
+
+    for link in links {
+        if !link.is_local() {
+            continue; // A cloud endpoint has nothing to load and no VRAM.
+        }
+        if !crate::link::Health::is_healthy(&peers, link) {
+            prepared
+                .unavailable
+                .push((link.name.clone(), "the peer it names is not connected (`M-19`)".into()));
+            continue;
+        }
+        // `M-17`: the lease is claimed before the load, because the point is to
+        // refuse the second model rather than discover it out of memory.
+        if let Err(e) = vram.claim(link) {
+            prepared.unavailable.push((link.name.clone(), e.to_string()));
+            continue;
+        }
+        let Some(known) = facts(link) else {
+            prepared
+                .unavailable
+                .push((link.name.clone(), "it did not say what it has loaded (`M-7`)".into()));
+            continue;
+        };
+        match warm(lms, link, &known, ttl) {
+            Ok(warmed) => prepared.warmed.push(warmed),
+            Err(e) => prepared.unavailable.push((link.name.clone(), e.to_string())),
+        }
+    }
+    prepared
+}
+
 /// What warming a link did, or did not have to do (`M-16`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Warmed {
