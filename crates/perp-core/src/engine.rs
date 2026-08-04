@@ -766,6 +766,25 @@ impl Gates {
         self
     }
 
+    /// Get the default runtime from the first gate, if available.
+    pub fn default_runtime(&self) -> Option<&crate::runtime::Runtime> {
+        self.gates.first().map(|gate| &gate.runtime)
+    }
+
+    /// Override the runtime for all gates in this set (`L-17`).
+    ///
+    /// Used to route gates through persistent containers when batch-level
+    /// parallelism is enabled. The command itself is never rewritten; only
+    /// the runtime wrapper changes.
+    pub fn with_runtime(mut self, runtime: crate::runtime::Runtime) -> Gates {
+        self.gates = self
+            .gates
+            .into_iter()
+            .map(|gate| gate.in_runtime(runtime.clone()))
+            .collect();
+        self
+    }
+
     pub fn all_green(&self) -> bool {
         !self.results.is_empty() && self.results.iter().all(gate::GateResult::is_green)
     }

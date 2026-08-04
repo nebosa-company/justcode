@@ -489,6 +489,9 @@ impl Driver<'_> {
     }
 
     /// Phase D: pick work off the backlog, do it, then gate it.
+    ///
+    /// Integrates L-17 container orchestration if enabled: creates a persistent
+    /// container for this batch and routes gates through it.
     fn batch(&self, cycle: u32, batch: u32) -> Result<Report> {
         let stage = format!("b{batch}");
         let mut engine = Engine::open(&self.root)?;
@@ -516,6 +519,16 @@ impl Driver<'_> {
             open_branch(&self.root, engine.session().binding(), cycle, batch)
         };
 
+        // L-17: Initialize orchestrator and create container if enabled (`L-17`).
+        let feature_id = format!("c{cycle}/b{batch}");
+        let mut orchestrator = crate::l17::Orchestrator::from_binding(engine.session().binding())?;
+        if orchestrator.enabled() {
+            let workspace = self.root.clone();
+            if let Some((container_id, _mount)) = orchestrator.create_container(&feature_id, &workspace)? {
+                crate::verbose::say("l17", &format!("created persistent container {container_id} for {feature_id}"));
+            }
+        }
+
         // An empty backlog is `L-14`'s exhausted condition, and the engine
         // reaches it by being handed no work rather than by being told.
         let mut agent = Agent::new(
@@ -531,14 +544,28 @@ impl Driver<'_> {
         // Work then gates, as one run, so the leg produces one terminal record
         // and the evidence sits beside the work it is evidence for.
         let target = self.root.join("crates/target");
-        let gates = Gates::from_binding(engine.session().binding(), &target)?
+        let mut gates = Gates::from_binding(engine.session().binding(), &target)?
             .covering(covered.clone());
+
+        // L-17: Route gates through persistent container if enabled (`L-17`).
+        if orchestrator.enabled() {
+            let default_runtime = gates.default_runtime().cloned().unwrap_or(crate::runtime::Runtime::Host);
+            let l17_runtime = orchestrator.runtime_for_feature(&feature_id, &default_runtime);
+            gates = gates.with_runtime(l17_runtime);
+        }
+
         let mut leg = Then::new(agent, gates);
         let mut report = engine.run(cycle, &stage, &mut leg, 0)?;
         // Asked of the gates themselves rather than inferred from the step
         // count, which is a different fact about a different thing.
         report.gates_green = leg.second().verdict();
         let report = report;
+
+        // L-17: Clean up the batch's container when done (`L-17`).
+        if orchestrator.enabled() {
+            orchestrator.cleanup_feature(&feature_id)?;
+            crate::verbose::say("l17", &format!("cleaned up container for {feature_id}"));
+        }
 
         // Green gate, and only then. A red one leaves the tree exactly as it is
         // for someone to look at — the driver stops the cycle on it anyway.

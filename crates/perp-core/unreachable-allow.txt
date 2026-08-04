@@ -65,7 +65,6 @@ engine.rs::with_concurrency
 engine.rs::with_worktrees
 error.rs::is_refusal
 gate.rs::evidence_dir
-gate.rs::in_runtime
 gate.rs::used
 git.rs::commits_for_step
 git.rs::init_branch
@@ -77,10 +76,6 @@ git.rs::with_stashed
 init.rs::created
 job.rs::survives_engine_death
 journal.rs::is_idempotent
-l17.rs::cleanup_feature
-l17.rs::create_container
-l17.rs::enabled
-l17.rs::runtime_for_feature
 ladder.rs::repairs_used
 layout.rs::binding_in
 link.rs::in_flight
