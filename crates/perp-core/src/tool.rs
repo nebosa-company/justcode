@@ -1233,10 +1233,25 @@ pub fn apply(path: &Path, edits: &[(String, String)]) -> Result<String> {
             "no edits — an apply that changes nothing is a read with side effects",
         ));
     }
-    let before = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
+    let raw = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
+    // Matched with one line ending and written back with the file's own.
+    //
+    // `T-8` makes Windows the primary runtime, so nearly every file here is
+    // CRLF — and a model composes its `expect` from what `read` showed it,
+    // which is lines. So every multi-line edit failed its pre-image against
+    // bytes that differed only in the invisible character, and the tool that
+    // exists to batch edits could not make one. Measured: a step spent sixteen
+    // turns discovering this and wrote nothing.
+    //
+    // Writing back in the original ending matters as much as matching: a file
+    // silently converted to LF is a diff on every line of it.
+    let crlf = raw.contains("\r\n");
+    let before = raw.replace("\r\n", "\n");
     let mut working = before.clone();
 
     for (index, (expect, replace)) in edits.iter().enumerate() {
+        let expect = expect.replace("\r\n", "\n");
+        let replace = replace.replace("\r\n", "\n");
         let hits = working.matches(expect.as_str()).count();
         if hits != 1 {
             // Named by position, because the model has to know *which* one to
@@ -1251,7 +1266,7 @@ pub fn apply(path: &Path, edits: &[(String, String)]) -> Result<String> {
                 ),
             ));
         }
-        working = working.replacen(expect.as_str(), replace, 1);
+        working = working.replacen(expect.as_str(), &replace, 1);
     }
 
     if working == before {
@@ -1260,7 +1275,8 @@ pub fn apply(path: &Path, edits: &[(String, String)]) -> Result<String> {
             "every edit replaced text with itself; nothing was written",
         ));
     }
-    crate::atomic::write_atomic(path, &working)?;
+    let out = if crlf { working.replace("\n", "\r\n") } else { working };
+    crate::atomic::write_atomic(path, &out)?;
     Ok(format!("applied {} edit(s) to {}", edits.len(), path.display()))
 }
 
@@ -1460,6 +1476,33 @@ gamma
 
     /// Each edit is verified against the text the previous ones left, which is
     /// what makes two edits to neighbouring lines safe.
+    /// A multi-line edit on a CRLF file (`T-21`, `T-8`).
+    ///
+    /// Windows is the primary runtime, so nearly every file here has CRLF
+    /// endings — and a model composes its `expect` from what `read` showed it,
+    /// which is lines. Matching raw bytes meant every multi-line edit failed on
+    /// the one invisible character, and the tool built to batch edits could not
+    /// make one. Measured: a step spent sixteen turns finding this out and
+    /// wrote nothing.
+    #[test]
+    fn a_multiline_edit_matches_a_crlf_file_and_leaves_it_crlf() {
+        let dir = tmpdir("apply-crlf");
+        let path = dir.join("f.dart");
+        std::fs::write(&path, "class Doc {\r\n\r\n  final int x;\r\n}\r\n").expect("write");
+
+        // Composed with plain newlines, as a model reading lines would.
+        let edits = vec![(
+            "class Doc {\n\n  final int x;".to_string(),
+            "class Doc {\n\n  final int x;\n  final int y;".to_string(),
+        )];
+        apply(&path, &edits).expect("a multi-line expect must match a CRLF file");
+
+        let after = std::fs::read_to_string(&path).expect("read");
+        assert!(after.contains("final int y;"), "the edit landed");
+        assert!(after.contains("\r\n"), "and the file is still CRLF: {after:?}");
+        assert!(!after.contains("\n  final int y;\n}"), "no lone LF crept in");
+    }
+
     #[test]
     fn edits_apply_in_order_against_the_running_text() {
         let dir = tmpdir("apply-order");

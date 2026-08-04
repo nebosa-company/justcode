@@ -182,6 +182,13 @@ pub struct Agent<'a> {
     /// Calls this run refused for want of a person, waiting to be raised into
     /// the queue by the engine (`T-14`).
     approvals: Vec<crate::approval::Ask>,
+    /// How much of the prefix the repo map may occupy (`T-27`).
+    ///
+    /// Configurable, and zero turns it off. Not a test hatch: a repository the
+    /// map describes badly — generated code, one enormous file — is one an
+    /// operator should be able to stop paying for, and measuring whether the
+    /// map earns its bytes needs a way to run without it.
+    map_budget: usize,
     /// Actions a person approved in this cycle, and who approved them
     /// (`T-15`). Refreshed by the engine before every step.
     granted: Vec<(String, String)>,
@@ -236,6 +243,7 @@ impl<'a> Agent<'a> {
             turns: Vec::new(),
             pending: Vec::new(),
             approvals: Vec::new(),
+            map_budget: crate::map::DEFAULT_BUDGET,
             granted: Vec::new(),
             watchdogs: crate::watchdog::Watchdogs::new(),
             tripped: None,
@@ -294,17 +302,26 @@ impl<'a> Agent<'a> {
     /// situation every step was in until now; a step that refuses to begin
     /// because `git ls-files` failed would be worse than the problem.
     fn repo_map(&self) -> String {
+        if self.map_budget == 0 {
+            return String::new();
+        }
         let root = self.host.root.clone();
         let listed = crate::tool::tracked_files(&root);
         if listed.is_empty() {
             return String::new();
         }
-        let map = crate::map::build(&root, &listed, crate::map::DEFAULT_BUDGET, &self.touched);
+        let map = crate::map::build(&root, &listed, self.map_budget, &self.touched);
         if map.is_empty() {
             String::new()
         } else {
             format!("\n\n{map}")
         }
+    }
+
+    /// Set how many bytes of prefix the repo map may use; `0` disables it.
+    pub fn with_map_budget(mut self, bytes: usize) -> Agent<'a> {
+        self.map_budget = bytes;
+        self
     }
 
     /// Run one item to completion, or until it stops making progress.

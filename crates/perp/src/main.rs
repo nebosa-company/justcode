@@ -984,6 +984,12 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
         if mode == Mode::LocalOnly {
             agent = agent.local_only();
         }
+        // `T-27`: the binding may size the repo map, or turn it off with 0.
+        if let Ok(text) = binding.get("map.budget") {
+            if let Ok(bytes) = text.trim().parse::<usize>() {
+                agent = agent.with_map_budget(bytes);
+            }
+        }
 
         let report = engine.run(cycle, stage, &mut agent, 0).map_err(|e| e.to_string())?;
         println!("{}", report.describe());
