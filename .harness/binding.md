@@ -72,6 +72,10 @@ budget.batch.seconds = 5400
 
 map.budget = 0
 
+l17.enabled = true
+l17.engine = docker
+l17.image = rust:latest
+
 git.branch.batch = perp/c{cycle}/b{batch}
 git.branch.init  = perp/c{cycle}/init
 git.push         = approval
