@@ -184,10 +184,16 @@ pub struct Agent<'a> {
     approvals: Vec<crate::approval::Ask>,
     /// How much of the prefix the repo map may occupy (`T-27`).
     ///
-    /// Configurable, and zero turns it off. Not a test hatch: a repository the
-    /// map describes badly — generated code, one enormous file — is one an
-    /// operator should be able to stop paying for, and measuring whether the
-    /// map earns its bytes needs a way to run without it.
+    /// **Zero by default: the map is off unless the binding asks for it.**
+    ///
+    /// Not caution — measurement. Twelve runs over six paired requirements,
+    /// each run both ways from the same commit with the arm order alternated:
+    /// turns −2.9%, tokens +1.7%, cost +21.3%, wall clock +39.8%, and the same
+    /// two of six succeeding either way. It wins two pairs, loses two and ties
+    /// two, which is a coin flip that charges a fifth more for the privilege.
+    ///
+    /// An earlier single pair showed 25% fewer turns and would have been
+    /// reported as a result. Six pairs say it was noise pointing the wrong way.
     map_budget: usize,
     /// Actions a person approved in this cycle, and who approved them
     /// (`T-15`). Refreshed by the engine before every step.
@@ -243,7 +249,7 @@ impl<'a> Agent<'a> {
             turns: Vec::new(),
             pending: Vec::new(),
             approvals: Vec::new(),
-            map_budget: crate::map::DEFAULT_BUDGET,
+            map_budget: 0,
             granted: Vec::new(),
             watchdogs: crate::watchdog::Watchdogs::new(),
             tripped: None,

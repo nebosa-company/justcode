@@ -962,13 +962,41 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
     // running gates. The id is mandatory — the loop does not build work that is
     // not on the record.
     if let Some(requirement) = flag(args, "--requirement") {
-        let brief = flag(args, "--brief").unwrap_or("Do the work this requirement describes.");
-        let item = perp_core::agent::Item::new(
-            requirement,
-            flag(args, "--summary").unwrap_or(requirement),
-            brief,
-        )
-        .map_err(|e| e.to_string())?;
+        // Look the requirement up where ids are minted (`V-9`).
+        //
+        // This used to pass the id as its own summary, so `perp run
+        // --requirement R-17` told the model "R-17" and "do the work this
+        // requirement describes" — and the model's first act was to grep the
+        // repository for its own instructions. `perp cycle` has always read the
+        // backlog; the single-requirement path never did, and the difference
+        // was invisible because every real invocation happened to pass
+        // `--brief`.
+        //
+        // Found by measuring something else: an A/B whose runs all opened with
+        // `grep(pattern=R-17)`.
+        // `requirements_text`, not `read_to_string`: the source is a file or a
+        // directory of them, and reading a directory on Windows returns
+        // "Access is denied" — which this then swallowed into an empty string
+        // and a lookup that found nothing. The first version of this fix had
+        // that bug and looked exactly like the one it was fixing.
+        let source = perp_core::layout::requirements_text(
+            &binding.resolve("path.requirements").map_err(|e| e.to_string())?,
+        );
+        let stated = perp_core::cycle::backlog_all(&source)
+            .into_iter()
+            .find(|(id, _)| id == requirement)
+            .map(|(_, text)| text);
+
+        let summary = flag(args, "--summary")
+            .map(str::to_string)
+            .or_else(|| stated.clone())
+            .unwrap_or_else(|| requirement.to_string());
+        let brief = flag(args, "--brief")
+            .map(str::to_string)
+            .or(stated)
+            .unwrap_or_else(|| "Do the work this requirement describes.".to_string());
+        let item = perp_core::agent::Item::new(requirement, &summary, &brief)
+            .map_err(|e| e.to_string())?;
 
         let links = Links::load(&binding.resolve("path.links").map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;

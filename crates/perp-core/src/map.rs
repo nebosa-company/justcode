@@ -18,6 +18,39 @@
 //! the names they declare, and the map is filled to a byte budget in that
 //! order. What falls off the end is what nothing else refers to.
 //!
+//! ## Off by default, because it was measured and did not pay
+//!
+//! The reasoning above is sound and the map does not deliver on it. Twelve
+//! runs over six paired requirements — each run both ways from the same commit
+//! with the arm order alternated, so drift could not land on one side:
+//!
+//! | | map off | map on |
+//! |---|---|---|
+//! | turns | 18 | 17 |
+//! | tokens | 281,600 | 286,358 |
+//! | wall clock | 114 s | 159 s |
+//! | cost | $0.0092 | $0.0112 |
+//! | succeeded | 2 of 6 | 2 of 6 |
+//!
+//! It wins two pairs, loses two, ties two: a coin flip that charges 21% more
+//! and takes 40% longer. So `map.budget` defaults to `0` and the binding must
+//! ask for it.
+//!
+//! An earlier **single** pair showed 25% fewer turns and 29% fewer tokens. Six
+//! pairs say that was noise pointing the wrong way, which is the more useful
+//! finding: one run of a stochastic model is not a measurement, however much
+//! it agrees with the design.
+//!
+//! What the same twelve runs did show is that four of six requirements failed
+//! in *both* arms. Retrieval was the hypothesis for the exploration stalls;
+//! it is not the binding constraint for this model, and the cause of those
+//! stalls is still open.
+//!
+//! Kept rather than deleted for two reasons: it may be that a lexical map is
+//! too weak and a parsed one would pay — an experiment this one cannot
+//! distinguish from "the idea does not help here" — and six pairs at this
+//! variance rule out a large effect, not a small one.
+//!
 //! ## Lexical, and weaker for it
 //!
 //! Aider's repo map parses with tree-sitter and ranks with PageRank over the
@@ -37,8 +70,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// How much of the prefix the map may occupy. Big enough to be worth reading,
-/// small enough that a prefix-cached prompt is not mostly map (`M-12`).
+/// A sensible size **when the binding turns the map on**. It is off by
+/// default — see the module note. Big enough to be worth reading, small enough
+/// that a prefix-cached prompt is not mostly map (`M-12`).
 pub const DEFAULT_BUDGET: usize = 6_000;
 
 /// Files bigger than this are read for their declarations and not scored for
