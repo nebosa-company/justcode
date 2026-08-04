@@ -36,6 +36,13 @@ pub struct Gate {
     /// and is never rewritten — a binding holding `wsl -d Ubuntu -- cargo test`
     /// works on exactly one machine and stops describing what green means.
     pub runtime: crate::runtime::Runtime,
+    /// Credentials the operator declared this gate may borrow (`S-9`).
+    ///
+    /// Gates only, and deliberately: a gate command is a line the *operator*
+    /// wrote in `binding.md`. A `shell` call is a line the model composed, and
+    /// lending to one would let the model choose where a secret goes — which is
+    /// the thing `S-1` exists to prevent, arriving by the back door.
+    pub lends: Vec<crate::security::Lend>,
 }
 
 impl Gate {
@@ -45,6 +52,7 @@ impl Gate {
         let entries: Vec<(String, String)> =
             binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         let runtime = crate::runtime::Runtime::from_entries(&entries)?;
+        let lends = crate::security::lends_from_entries(&entries);
         let cwd = match binding.get("gate.cwd") {
             Ok(rel) => binding.root().join(rel),
             Err(_) => binding.root().to_path_buf(),
@@ -69,6 +77,7 @@ impl Gate {
                     cwd: cwd.clone(),
                     timeout,
                     runtime: runtime.clone(),
+                    lends: lends.clone(),
                 })
             })
             .collect();
@@ -108,11 +117,23 @@ impl Gate {
         if let Some(complaint) = self_lock_complaint(&self.cwd) {
             return Err(Error::unbound("gate", complaint));
         }
-        let spec = Spec::new(&self.command, &self.cwd, self.timeout).with_env(Env::declared());
+        // `S-9`: the operator said this gate may borrow these, by name. The
+        // values are read here and nowhere else, and never enter `command` —
+        // argv is world-readable in a process listing (`S-2`).
+        let lent = crate::security::Lent::resolve(&self.lends);
+        let mut env = Env::declared();
+        for lend in &lent {
+            let (var, value) = lend.as_env();
+            env = env.with(var, value);
+        }
+        let spec = Spec::new(&self.command, &self.cwd, self.timeout).with_env(env);
         // `T-9`: the command is the binding's; the runtime only decides where
         // it executes. `Runtime::Host` returns it untouched.
         let spec = self.runtime.wrap(&spec)?;
         let run = process::run(&spec)?;
+        // Before the transcript reaches a journal, a verbose line or an
+        // operator's terminal: the child had the value and may have echoed it.
+        let run = scrub(run, &lent);
         crate::verbose::say(
             "gate",
             &format!("{} · {} · {}", self.name, self.command, run.exit.describe()),
@@ -131,6 +152,25 @@ impl Gate {
     pub fn in_runtime(mut self, runtime: crate::runtime::Runtime) -> Gate {
         self.runtime = runtime;
         self
+    }
+}
+
+/// Replace every lent value in a run's output with the mask (`S-2`, `S-9`).
+///
+/// Both streams, because a toolchain writes its diagnostics to whichever it
+/// prefers and a secret echoed on stderr is as leaked as one on stdout. The
+/// command line is not scrubbed — the value never went into it, and a gate
+/// whose *text* matched a secret would be an operator writing the secret into
+/// `binding.md`, which `S-2` already forbids.
+fn scrub(run: Run, lent: &[crate::security::Lent]) -> Run {
+    if lent.is_empty() {
+        return run;
+    }
+    let patterns = crate::security::redactions(lent);
+    Run {
+        stdout_tail: crate::security::redact(&run.stdout_tail, &patterns).text,
+        stderr_tail: crate::security::redact(&run.stderr_tail, &patterns).text,
+        ..run
     }
 }
 
@@ -506,6 +546,7 @@ mod tests {
                 image: "rust:1".into(),
                 engine: "perp-not-a-real-container-engine".into(),
             },
+            lends: Vec::new(),
         };
 
         match gate.run() {
@@ -529,6 +570,68 @@ mod tests {
         }
     }
 
+    /// `S-9` end to end: the child gets the real value, and the transcript
+    /// that goes in the journal does not.
+    ///
+    /// The gate command echoes the variable on purpose — that is the failure
+    /// being tested. A build script logging its own configuration, a test
+    /// printing the request it sent, or `curl -v` all do this without meaning
+    /// to, and `S-2` says the journal must not carry it either way.
+    #[test]
+    fn a_gate_may_borrow_a_credential_without_it_reaching_the_transcript() {
+        let secret = "7c1d-gate-lent-passphrase";
+        std::env::set_var("PERP_TEST_GATE_LEND", secret);
+        let dir = tmpdir("gate-lend");
+
+        let echo = if cfg!(windows) {
+            "cmd /C \"echo token=%PERP_TEST_GATE_LEND%\""
+        } else {
+            "sh -c \"echo token=$PERP_TEST_GATE_LEND\""
+        };
+        let gate = Gate {
+            runtime: crate::runtime::Runtime::Host,
+            name: "build".into(),
+            command: echo.into(),
+            cwd: dir,
+            timeout: Duration::from_secs(30),
+            lends: vec![crate::security::Lend {
+                name: "registry".into(),
+                var: "PERP_TEST_GATE_LEND".into(),
+            }],
+        };
+
+        let result = gate.run().expect("the gate ran");
+        let evidence = result.evidence();
+
+        // The child really did receive it — otherwise this test would pass
+        // against a version that lends nothing at all.
+        assert!(
+            evidence.contains("token=") && !evidence.contains("token=\n"),
+            "the child never got the value: {evidence}"
+        );
+        assert!(!evidence.contains(secret), "the lent value reached the journal: {evidence}");
+        assert!(evidence.contains(crate::security::MASK), "and was masked: {evidence}");
+    }
+
+    /// A gate that borrows nothing is untouched — no mask, no scrubbing pass.
+    #[test]
+    fn a_gate_that_borrows_nothing_has_its_output_left_alone() {
+        let dir = tmpdir("gate-no-lend");
+        let echo =
+            if cfg!(windows) { "cmd /C \"echo plain\"" } else { "sh -c \"echo plain\"" };
+        let gate = Gate {
+            runtime: crate::runtime::Runtime::Host,
+            name: "build".into(),
+            command: echo.into(),
+            cwd: dir,
+            timeout: Duration::from_secs(30),
+            lends: Vec::new(),
+        };
+        let evidence = gate.run().expect("ran").evidence();
+        assert!(evidence.contains("plain"), "{evidence}");
+        assert!(!evidence.contains(crate::security::MASK), "nothing to mask: {evidence}");
+    }
+
     #[test]
     fn a_missing_working_directory_is_an_error_not_a_red_gate() {
         let root = tmpdir("gate-nocwd");
@@ -538,6 +641,7 @@ mod tests {
             command: "cargo test".into(),
             cwd: root.join("does-not-exist"),
             timeout: Duration::from_secs(5),
+            lends: Vec::new(),
         };
         let err = gate.run().expect_err("must refuse");
         assert!(format!("{err}").contains("does not exist"), "{err}");
@@ -549,8 +653,8 @@ mod tests {
         let fail = if cfg!(windows) { "cmd /C \"exit 1\"" } else { "sh -c \"exit 1\"" };
         let pass = if cfg!(windows) { "cmd /C \"exit 0\"" } else { "sh -c \"exit 0\"" };
         let gates = vec![
-            Gate { runtime: crate::runtime::Runtime::Host, name: "lint".into(), command: fail.into(), cwd: dir.clone(), timeout: Duration::from_secs(30) },
-            Gate { runtime: crate::runtime::Runtime::Host, name: "build".into(), command: pass.into(), cwd: dir.clone(), timeout: Duration::from_secs(30) },
+            Gate { runtime: crate::runtime::Runtime::Host, name: "lint".into(), command: fail.into(), cwd: dir.clone(), timeout: Duration::from_secs(30), lends: Vec::new() },
+            Gate { runtime: crate::runtime::Runtime::Host, name: "build".into(), command: pass.into(), cwd: dir.clone(), timeout: Duration::from_secs(30), lends: Vec::new() },
         ];
         let results = run_all(&gates).expect("run");
         assert_eq!(results.len(), 1, "the build must not run after lint went red");
@@ -575,6 +679,7 @@ mod tests {
             command: "cargo build".into(),
             cwd: workspace,
             timeout: Duration::from_secs(5),
+            lends: Vec::new(),
         };
         let err = gate.run().expect_err("must refuse before spawning cargo");
         assert!(format!("{err}").contains("cannot replace a running executable"), "{err}");

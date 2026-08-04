@@ -143,6 +143,21 @@ Environment: no network required for any gate. Cargo must resolve from a warm
 registry cache; a cold-cache failure blocks the batch (NFR 10) rather than
 quietly changing the dependency plan.
 
+**No gate here borrows a credential** (`S-9`), and none should: every gate above
+is offline. A project whose gate needs one — a private registry, an
+authenticated package feed — declares it in the binding block by *variable
+name*:
+
+```
+lend.registry = CARGO_REGISTRY_TOKEN
+```
+
+The value is never written here (`S-2`). It is read from the environment the
+harness itself was started in, set in the gate child's environment and not in
+its command line, and redacted from the transcript before anything is
+journalled. Lending applies to gates only — never to a `shell` call the model
+composed.
+
 If `cargo clippy` is unavailable on the machine, the lint gate is **failed, not
 skipped**, and the batch is blocked with that as the reason.
 

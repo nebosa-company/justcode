@@ -107,7 +107,6 @@ phase.rs::stopped
 probe.rs::fits
 process.rs::containment
 process.rs::inherited
-process.rs::with
 prompt.rs::compact
 prompt.rs::start
 repo.rs::is_blocked

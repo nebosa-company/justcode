@@ -329,6 +329,82 @@ impl LocalOnlyAudit {
     }
 }
 
+// ----------------------------------------------------- credential lending
+
+/// A credential the operator has declared a gate may borrow (`S-9`).
+///
+/// The binding holds the **variable's name**, never its value (`S-2`) — the
+/// harness reads the value out of its own environment at spawn time, hands it
+/// to the child, and redacts it from the transcript on the way back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lend {
+    pub name: String,
+    /// The environment variable to read, in the harness's own environment.
+    pub var: String,
+}
+
+/// Read `lend.<name> = <ENV_VAR>` out of binding entries.
+pub fn lends_from_entries(entries: &[(String, String)]) -> Vec<Lend> {
+    entries
+        .iter()
+        .filter_map(|(key, value)| {
+            key.strip_prefix("lend.")
+                .map(|name| Lend { name: name.to_string(), var: value.trim().to_string() })
+        })
+        .collect()
+}
+
+/// What a lending actually resolved to, ready to hand a child process.
+///
+/// A declared variable that is **not set** is not an error and not a guess: it
+/// is simply absent from the result. `S-5` says the harness never invents a
+/// credential, and inventing includes substituting an empty string for one and
+/// letting the command fail as though the secret were wrong.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lent {
+    pub name: String,
+    pub var: String,
+    value: String,
+}
+
+impl Lent {
+    /// Resolve every declared lending against the harness's own environment.
+    pub fn resolve(lends: &[Lend]) -> Vec<Lent> {
+        lends
+            .iter()
+            .filter_map(|lend| {
+                let value = std::env::var(&lend.var).ok()?;
+                // An empty variable is the same as an unset one here. Lending
+                // "" would satisfy the gate's *shape* and fail its substance,
+                // which is the confusing half of both failures at once.
+                if value.is_empty() {
+                    return None;
+                }
+                Some(Lent { name: lend.name.clone(), var: lend.var.clone(), value })
+            })
+            .collect()
+    }
+
+    /// The pair to set on the child. Deliberately the only way out of this
+    /// type: there is no `value()` accessor, so a caller cannot print one
+    /// without going through [`Lent::redactions`] first.
+    pub fn as_env(&self) -> (String, String) {
+        (self.var.clone(), self.value.clone())
+    }
+}
+
+/// Patterns that scrub every lent value out of a transcript (`S-2`).
+///
+/// The value reached the child, so the child may echo it — a build script that
+/// logs its own configuration, a test that prints the request it sent, a curl
+/// invocation traced with `-v`. Redacting on the way back is what keeps `S-2`'s
+/// "never in a journal record" true for a value the harness itself supplied.
+pub fn redactions(lent: &[Lent]) -> Vec<Pattern> {
+    lent.iter()
+        .map(|l| Pattern { name: format!("lend.{}", l.name), literal: l.value.clone() })
+        .collect()
+}
+
 // ------------------------------------------------------- credential gates
 
 /// Something the loop cannot get past without a credential (`S-5`).
@@ -581,6 +657,64 @@ mod tests {
         let audit = LocalOnlyAudit::of(&leaked, &links);
         assert!(!audit.stayed_local(), "one cloud call breaks the claim");
         assert!(audit.describe().contains("ds-fast"), "and names it: {}", audit.describe());
+    }
+
+    /// `S-2`: the binding names the variable, and never holds the value.
+    #[test]
+    fn a_lending_is_declared_by_variable_name_not_by_value() {
+        let entries = vec![
+            ("lend.registry".to_string(), "PERP_TEST_LEND_TOKEN".to_string()),
+            ("gate.build".to_string(), "cargo build".to_string()),
+        ];
+        let lends = lends_from_entries(&entries);
+        assert_eq!(lends.len(), 1, "only `lend.*` is a lending: {lends:?}");
+        assert_eq!(lends[0].name, "registry");
+        assert_eq!(lends[0].var, "PERP_TEST_LEND_TOKEN");
+    }
+
+    /// `S-5`: a variable that is not set is absent, not empty. Substituting ""
+    /// would be the harness inventing a credential and letting the command fail
+    /// as though the secret were merely wrong.
+    #[test]
+    fn an_unset_or_empty_variable_is_not_lent_as_an_empty_string() {
+        std::env::set_var("PERP_TEST_LEND_EMPTY", "");
+        let lends = vec![
+            Lend { name: "missing".into(), var: "PERP_TEST_LEND_DEFINITELY_UNSET".into() },
+            Lend { name: "blank".into(), var: "PERP_TEST_LEND_EMPTY".into() },
+        ];
+        assert!(Lent::resolve(&lends).is_empty(), "neither is a credential");
+    }
+
+    /// The value reaches the child and nothing else — and a transcript that
+    /// echoes it is scrubbed on the way back (`S-2`).
+    ///
+    /// The value here deliberately looks like **nothing** on the [`ALWAYS`]
+    /// list: a private registry password, a self-hosted token, an internal
+    /// basic-auth string. A vendor-shaped key would be masked by the existing
+    /// prefix rules whether lending scrubbed it or not, so testing with one
+    /// would pass on a version of this that redacted nothing at all.
+    #[test]
+    fn a_lent_value_is_masked_out_of_anything_that_echoes_it() {
+        let secret = "9f3a-internal-registry-passphrase";
+        assert!(
+            !redact(secret, &[]).was_redacted(),
+            "the fixture must not be caught by the standing rules, or it proves nothing"
+        );
+
+        std::env::set_var("PERP_TEST_LEND_TOKEN_2", secret);
+        let lends = vec![Lend { name: "registry".into(), var: "PERP_TEST_LEND_TOKEN_2".into() }];
+        let lent = Lent::resolve(&lends);
+        assert_eq!(lent.len(), 1);
+
+        let (var, value) = lent[0].as_env();
+        assert_eq!(var, "PERP_TEST_LEND_TOKEN_2");
+        assert_eq!(value, secret, "the child gets the real thing");
+
+        let echoed = format!("configuring with token {secret} ...\n");
+        let scrubbed = redact(&echoed, &redactions(&lent));
+        assert!(!scrubbed.text.contains(secret), "the lent value survived: {}", scrubbed.text);
+        assert!(scrubbed.was_redacted(), "and the journal can say it happened");
+        assert!(scrubbed.hits.contains(&"lend.registry".to_string()), "{:?}", scrubbed.hits);
     }
 
     #[test]
