@@ -70,6 +70,8 @@ budget.cycle.seconds = 28800
 budget.batch.money   = 1.00
 budget.batch.seconds = 5400
 
+map.budget = 0
+
 git.branch.batch = perp/c{cycle}/b{batch}
 git.branch.init  = perp/c{cycle}/init
 git.push         = approval
@@ -82,6 +84,8 @@ the wall-clock ones — which is why both exist. **No token limit is declared**:
 tokens are the currency this project has no calibration for yet, and inventing a
 number would produce a ceiling that stops good runs and permits bad ones. It
 goes in once a cycle has run long enough to say what normal looks like.
+
+**Repo map (T-27):** Measured and inconclusive. Prior measurement: 6 paired runs showed 2 wins, 2 losses, 2 ties. No advantage. `map.budget = 0` (disabled) remains the default. Binding now supports `map.budget` for future testing if parsing improves (T-27).
 
 An eight-hour cycle and a dollar is deliberately an overnight run, not a
 weekend: the design target in the vision is *a bill under a dollar* by morning.
