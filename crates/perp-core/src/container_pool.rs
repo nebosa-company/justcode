@@ -3,6 +3,53 @@
 //! Unlike ephemeral gate containers (`--rm`), feature containers persist across
 //! multiple steps. One container per parallel feature, created on demand, kept
 //! running, cleaned up on feature completion.
+//!
+//! # Architecture
+//!
+//! L-17 parallel execution uses persistent containers to isolate independent
+//! features. The lifecycle is:
+//!
+//! 1. **Feature start:** Batch creates a PersistentContainer for the feature.
+//! 2. **Worktree creation:** Feature's worktree is created inside the container.
+//! 3. **Gate execution:** All gates for the feature use `Runtime::PersistentContainer`,
+//!    which routes commands via `docker/podman exec` into the container.
+//! 4. **Feature completion:** Container is stopped and removed, freeing resources.
+//!
+//! This separation from ephemeral gate containers means:
+//! - No `--rm` flag: the container persists across steps
+//! - No `--network none`: containers can reach network services if needed
+//! - Mount point is fixed (`/w`): worktrees are always at `/w` inside the container
+//! - One container per feature: isolation and independent cleanup
+//!
+//! # Usage in the batch orchestrator
+//!
+//! ```text
+//! let mut pool = ContainerPool::new("docker".into(), "rust:latest".into());
+//!
+//! for feature in batch.parallel_features() {
+//!     // Create persistent container for this feature
+//!     let (container_id, mount) = pool.create(&feature.id, &workspace)?;
+//!
+//!     // Create worktree inside container
+//!     let trees = Worktrees::in_container(&repo, &trees_root, container_id.clone());
+//!     let tree = trees.add_worktree(&feature.branch, None)?;
+//!
+//!     // All gates for this feature use PersistentContainer variant
+//!     for gate in feature.gates {
+//!         let runtime = Runtime::PersistentContainer {
+//!             id: container_id.clone(),
+//!             engine: "docker".into(),
+//!             mount: mount.clone(),
+//!         };
+//!         let spec = gate.spec()?;
+//!         let wrapped = runtime.wrap(&spec)?;
+//!         run_gate(&wrapped)?;
+//!     }
+//!
+//!     // Cleanup when feature is done
+//!     pool.cleanup(&feature.id)?;
+//! }
+//! ```
 
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
