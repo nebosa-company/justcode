@@ -117,6 +117,9 @@ pub mod watchdog;
 #[cfg(test)]
 mod testutil;
 
+#[cfg(test)]
+mod l17_integration_test;
+
 pub use binding::Binding;
 pub use agent::{Agent, Item};
 pub use artifact::{Artifact, Provenance};
