@@ -475,7 +475,9 @@ pub fn wire_schemas() -> crate::json::Value {
 /// Runs calls, after classifying them.
 #[derive(Debug)]
 pub struct Host {
-    root: PathBuf,
+    /// The workspace. Readable so a caller can resolve a tool call's path
+    /// against it — `L-13` hashes what a file now *is*, which needs the file.
+    pub(crate) root: PathBuf,
     budget: usize,
     timeout: Duration,
     /// Which hosts `fetch` may reach (`S-4`). Empty means none — a fetch tool

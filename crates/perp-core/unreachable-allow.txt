@@ -4,13 +4,18 @@
 # any NEW entry, and also fails when a listed function becomes reachable - so
 # this list can only shrink, and a line removed is one real gap closed.
 #
-# Three clusters here are not API surface but unwired requirements, found by
-# running the harness rather than by reading it:
-#   approval.rs  - T-14, T-15, T-16. The engine has no approvals queue at all.
-#   local.rs     - M-16, M-17, M-19. No warming, no VRAM lease, no peer health.
-#   watchdog.rs  - L-12, L-13. The repetition and thrash watchdogs are not run.
-# Each is marked done in the requirements source and each has passing tests.
-
+# What is left here that is not API surface:
+#
+#   local.rs    - M-16, M-17, M-19. No model warming, no VRAM lease, no peer
+#                 health. Marked done in the requirements source, never called.
+#   watchdog.rs - NoProgress, deliberately. It is L-11's first and blunter
+#                 reading, counting only workspace changes, which punished a
+#                 model for reading its own work - see MAX_QUIET_TURNS in
+#                 agent.rs. Two rules for one requirement is worse than one, so
+#                 this stays unwired rather than becoming a second opinion.
+#   is_never / needs_approval / is_granted / close_cycle - the classifier and
+#                 the per-cycle rule are used through pattern matching and the
+#                 replay, not through these predicates. Real API surface.
 agent.rs::as_role
 approval.rs::close_cycle
 approval.rs::is_granted
@@ -143,7 +148,6 @@ verify.rs::is_earned
 verify.rs::may_implement
 verify.rs::stashed_at
 verify.rs::symbol
-watchdog.rs::file_written
 watchdog.rs::is_stop
 watchdog.rs::quiet_steps
 watchdog.rs::reverts

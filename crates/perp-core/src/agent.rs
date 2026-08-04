@@ -182,6 +182,18 @@ pub struct Agent<'a> {
     /// Calls this run refused for want of a person, waiting to be raised into
     /// the queue by the engine (`T-14`).
     approvals: Vec<crate::approval::Ask>,
+    /// `L-12` and `L-13`: the same call made over and over, and a file edited
+    /// back to something it has already been.
+    ///
+    /// `NoProgress` deliberately stays out of this. It is `L-11`'s first and
+    /// blunter reading — it counts only workspace changes, which punished a
+    /// model for reading its own work before reporting, and is why
+    /// [`MAX_QUIET_TURNS`] exists in the shape it does. Two rules for one
+    /// requirement is worse than one.
+    watchdogs: crate::watchdog::Watchdogs,
+    /// Set when a watchdog trips, so the turn loop can end the step with the
+    /// reason rather than carrying on to the next call.
+    tripped: Option<String>,
     /// Workspace paths this run's calls wrote to, in first-touch order.
     ///
     /// `G-3` refuses `git add .` — a batch stages the files its steps touched,
@@ -221,6 +233,8 @@ impl<'a> Agent<'a> {
             turns: Vec::new(),
             pending: Vec::new(),
             approvals: Vec::new(),
+            watchdogs: crate::watchdog::Watchdogs::new(),
+            tripped: None,
             touched: Vec::new(),
             at_step: None,
             delivered: Vec::new(),
@@ -488,6 +502,17 @@ impl<'a> Agent<'a> {
                     // fourth-turn grep reset the quiet counter and made
                     // `L-11`'s watchdog unreachable.
                     let (mut results, progressed) = self.run_calls(&calls);
+
+                    // A watchdog that trips ends the step. `L-12` and `L-13`
+                    // both say "is an error", and an error the loop carries on
+                    // through is a warning wearing the word.
+                    if let Some(reason) = self.tripped.take() {
+                        transcript.push_str(&format!("\n[watchdog] {reason}\n"));
+                        return Done::Failed {
+                            summary: format!("{}: {reason}", item.requirement),
+                            detail: transcript,
+                        };
+                    }
                     if learned || progressed {
                         quiet = 0;
                     } else {
@@ -550,6 +575,18 @@ impl<'a> Agent<'a> {
         let mut out = String::new();
         let mut progressed = false;
         for call in calls {
+            // `L-12`: the same call with the same arguments, over and over, is
+            // an error rather than a retry. The signature set above answers a
+            // different question — whether a turn *learned* anything — and a
+            // repeat merely failed to count as learning. Nothing stopped it, so
+            // a model could ask the same thing until the turn ceiling.
+            if let crate::watchdog::Watch::Stop { reason } =
+                self.watchdogs.call(&call.signature())
+            {
+                self.tripped = Some(reason);
+                return (out, progressed);
+            }
+
             // `T-14`: a call that needs a person is enqueued, not merely
             // refused. Refusing was all that happened before — the model was
             // told "needs approval", nothing recorded that anyone had been
@@ -592,6 +629,34 @@ impl<'a> Agent<'a> {
                         crate::tool::Tool::Write | crate::tool::Tool::Patch | crate::tool::Tool::Delete
                     ) {
                         progressed = true;
+
+                        // A write makes every earlier call a different
+                        // question. `read(path=f.txt)` before and after a write
+                        // to `f.txt` has the same signature and not the same
+                        // answer, and counting it as repetition kills a model
+                        // for checking its own work — which is the exact
+                        // failure `MAX_QUIET_TURNS` was widened to avoid, met
+                        // again from the other direction. `L-12` is about a
+                        // loop asking the same question of an unchanged
+                        // workspace; once the workspace moves, the window is
+                        // about the old one.
+                        self.watchdogs.repetition = crate::watchdog::Repetition::default();
+
+                        // `L-13`: a file edited back to content it has already
+                        // held is thrash — the loop undoing itself one turn at
+                        // a time. Read from disk rather than from the call,
+                        // because `patch` carries a fragment and the thing that
+                        // matters is what the file now *is*.
+                        if let Some(path) = call.get("path") {
+                            let full = self.host.root.join(path);
+                            if let Ok(bytes) = std::fs::read(&full) {
+                                if let crate::watchdog::Watch::Stop { reason } =
+                                    self.watchdogs.file_written(&full, &bytes)
+                                {
+                                    self.tripped = Some(reason);
+                                }
+                            }
+                        }
                     }
                     self.record_touched(call);
                     output.render()
@@ -1433,6 +1498,62 @@ path: f.txt
     /// expensive to answer that way, and the answer is cheaper said than found.
     ///
     /// Asserted through the transport rather than off the string, because a
+    /// `L-13`: a file written back to content it has already held is thrash.
+    ///
+    /// The loop undoing itself one turn at a time — A, then B, then A again.
+    /// Every individual write is progress by `L-24`'s measure, so the quiet
+    /// counter never fires and `L-12` never sees a repeat, because the calls
+    /// differ. Nothing watched for this at all: `Thrash` was written, tested,
+    /// and had no caller.
+    #[test]
+    fn writing_a_file_back_to_what_it_was_is_thrash() {
+        let dir = tmpdir("agent-thrash");
+        std::fs::write(dir.join("f.txt"), "start
+").expect("write");
+
+        // A, B, A, B — each write is a real change, and the pair goes nowhere.
+        let mut script: Vec<&str> = Vec::new();
+        for _ in 0..4 {
+            script.push("```perp-call
+tool: write
+path: f.txt
+content: a
+```");
+            script.push("```perp-call
+tool: write
+path: f.txt
+content: b
+```");
+        }
+        script.push("Done.");
+
+        let transport = Scripted::new(script);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-13", "go back and forth", "try").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        let Done::Failed { summary, .. } = &done else {
+            panic!("thrash must end the step, not be tolerated: {done:?}");
+        };
+        assert!(
+            summary.contains("f.txt"),
+            "it must name the file it is thrashing, or nobody can act on it: {summary}"
+        );
+        assert!(
+            agent.turns.len() < 8,
+            "it must stop partway, not run the whole script: {} turns",
+            agent.turns.len()
+        );
+    }
+
     /// standing instruction that is built and not sent is worth nothing.
     #[test]
     fn the_standing_instructions_tell_a_step_to_say_what_it_is_about_to_do() {
@@ -1830,11 +1951,14 @@ command: echo hi
         let task = Work::next(&mut agent).expect("one item");
         let done = agent.perform(&task);
         let Done::Failed { summary, .. } = &done else { panic!("{done:?}") };
-        assert!(summary.contains("changed nothing"), "the watchdog fired: {summary}");
-        // Five: the first is a signature never made before and so is
-        // information; the four after it are repeats that changed nothing. With
-        // `shell` counted as progress this ran to the ceiling instead.
-        assert_eq!(agent.turns.len(), 5, "one informative turn, then four that were not");
+        assert!(
+            summary.contains("ran 3 times"),
+            "the repetition rule fired, and said what repeated: {summary}"
+        );
+        // Three: `L-12` stops on the third identical call. With `shell`
+        // counted as progress this ran to the hundred-turn ceiling instead,
+        // which is what `L-24` fixed and what this still guards.
+        assert_eq!(agent.turns.len(), 3, "stopped on the third identical call");
     }
 
     #[test]
@@ -1864,15 +1988,25 @@ command: echo hi
         let task = Work::next(&mut agent).expect("one item");
         let done = agent.perform(&task);
         let Done::Failed { summary, .. } = &done else { panic!("{done:?}") };
-        assert!(summary.contains("changed nothing"), "the no-progress rule fired: {summary}");
-        // The literal, not the constant. Asserting `== MAX_QUIET_TURNS` moves with
-        // the mutation, so raising the ceiling to the turn cap stayed green in a
-        // red run: the spinner would have burned every turn the cap allows and
-        // the test would still have agreed with it.
+        // `L-12`, not `L-11`. Both apply and the repetition bound is tighter —
+        // three identical calls against a workspace that has not moved, versus
+        // four quiet turns — so it is the one that fires, and it names the
+        // actual fault instead of the symptom. Before `L-12` was wired nothing
+        // stopped a repeat at all and this fell through to the quiet counter.
+        assert!(
+            summary.contains("ran 3 times"),
+            "the repetition rule fired, and said what repeated: {summary}"
+        );
+        // The literal, not the constant. Asserting `== MAX_QUIET_TURNS` moves
+        // with the mutation, so raising the ceiling to the turn cap stayed green
+        // in a red run: the spinner would have burned every turn the cap allows
+        // and the test would still have agreed with it.
         //
-        // Five, not four: the first read is a signature never made before, so it
-        // is information and resets the count. The four after it are repeats.
-        assert_eq!(agent.turns.len(), 5, "one informative turn, then four that were not");
+        // Three, not five. It was five while the quiet counter was the only
+        // thing watching — one informative turn and four repeats. `L-12` stops
+        // it on the third identical call instead, which is two turns and two
+        // model calls sooner for the same conclusion.
+        assert_eq!(agent.turns.len(), 3, "stopped on the third identical call");
     }
 
     #[test]
