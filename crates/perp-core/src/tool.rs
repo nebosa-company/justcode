@@ -2196,4 +2196,50 @@ line 50
         let err = host.run(&Call::new(Tool::Read)).expect_err("no path");
         assert!(format!("{err}").contains("needs `path`"), "{err}");
     }
+
+    /// End-to-end validation of the `launch()` tool for V-6 automation.
+    ///
+    /// Exercises the full path: classification → execution → browser command generation.
+    #[test]
+    fn launch_tool_end_to_end() {
+        let (host, _root) = host();
+
+        // Test 1: classification is auto (safe, no approval needed)
+        let call = Call::new(Tool::Launch).arg("url", "https://example.com");
+        let policy = classify(&call);
+        assert_eq!(policy, Policy::Auto, "launch() should auto-classify as safe");
+
+        // Test 2: execution succeeds and generates platform-specific command
+        let output = host.run(&call).expect("launch should execute");
+        assert!(output.text.contains("opened https://example.com"), "output should name the URL");
+        assert!(output.text.contains("with:"), "output should show command that ran");
+        assert!(output.text.contains("exit code"), "output should include exit status");
+
+        // Test 3: wait parameter is optional
+        let call_with_wait = Call::new(Tool::Launch)
+            .arg("url", "http://localhost:3000")
+            .arg("wait", "5");
+        let output = host
+            .run(&call_with_wait)
+            .expect("launch with wait param should execute");
+        assert!(output.text.contains("waited: 5s"), "should respect wait parameter");
+
+        // Test 4: bad URLs are rejected before execution
+        let bad_url = Call::new(Tool::Launch).arg("url", "not-a-url");
+        let err = host.run(&bad_url).expect_err("bad URL should be refused");
+        assert!(
+            format!("{err}").contains("does not start with"),
+            "should validate URL format"
+        );
+
+        // Test 5: file:// URLs are accepted (local files)
+        let file_call = Call::new(Tool::Launch).arg("url", "file:///tmp/test.html");
+        let output = host.run(&file_call).expect("file:// should work");
+        assert!(output.text.contains("file:///tmp/test.html"), "should handle file URLs");
+
+        // Test 6: output has the expected structure (not wrapped in execute path,
+        // wrapping happens at render time when sending to model)
+        assert!(!output.text.is_empty(), "output should not be empty");
+        assert!(output.tool == Tool::Launch, "output tool should be Launch");
+    }
 }
