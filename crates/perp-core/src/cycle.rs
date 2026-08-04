@@ -506,6 +506,17 @@ impl Driver<'_> {
         // Everything this cycle already attempted comes off the list first.
         let seen = engine.session().journal().read_all()?;
         let items = remaining(&source, &seen, cycle, self.items_per_batch);
+        // `O-10`: what the same slice left on the backlog, so the agent can
+        // name it against the item it took instead. Recomputed rather than
+        // threaded out of `remaining` itself, which stays pure and unaware of
+        // the decision log.
+        let done = attempted(&seen, cycle);
+        let passed_over: Vec<String> = backlog(&source, usize::MAX)
+            .into_iter()
+            .filter(|item| !done.contains(&item.requirement))
+            .skip(items.len())
+            .map(|item| item.requirement)
+            .collect();
         // Taken before the items move into the agent: the gate cites these too,
         // so each requirement in the batch can reach the transcript that cleared
         // it (`G-6`).
@@ -537,7 +548,8 @@ impl Driver<'_> {
             self.health,
             crate::agent::host_for(&self.root),
             items,
-        );
+        )
+        .picked_over(passed_over);
         if self.mode == crate::link::Mode::LocalOnly {
             agent = agent.local_only();
         }

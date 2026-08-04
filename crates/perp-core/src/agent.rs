@@ -225,6 +225,11 @@ pub struct Agent<'a> {
     /// gate that runs afterwards cites these and not the batch's whole list, so
     /// a requirement that delivered nothing cannot collect the green.
     delivered: Vec<String>,
+    /// Open requirements the batch left for later — `remaining()`'s backlog
+    /// minus `items` (`O-10`). Carried only to name what was passed over when
+    /// the first item's decision is written; empty for a batch that took the
+    /// whole backlog.
+    passed_over: Vec<String>,
     now: fn() -> i64,
 }
 
@@ -256,8 +261,15 @@ impl<'a> Agent<'a> {
             touched: Vec::new(),
             at_step: None,
             delivered: Vec::new(),
+            passed_over: Vec::new(),
             now: crate::time::now,
         }
+    }
+
+    /// Requirements the batch left on the backlog for a later one (`O-10`).
+    pub fn picked_over(mut self, passed_over: Vec<String>) -> Agent<'a> {
+        self.passed_over = passed_over;
+        self
     }
 
     pub fn local_only(mut self) -> Agent<'a> {
@@ -651,6 +663,24 @@ impl<'a> Agent<'a> {
                 }
                 Next::Dropped { from, to, why } => {
                     transcript.push_str(&format!("\n[dropped {from:?} → {to:?}: {why}]\n"));
+                    // `O-10`: a rung dropped on the degradation ladder is a
+                    // fork (`M-8`) — the loop chose the rung below over
+                    // repairing at this one again, and `why` is the part a
+                    // later reader cannot get back from the outcome alone.
+                    if let Some(step) = self.at_step.clone() {
+                        self.pending.push(
+                            crate::decision::Decision::new(
+                                to.as_str(),
+                                vec![from.as_str().to_string()],
+                                why.clone(),
+                                crate::decision::Decider::Rule { cites: "M-8".into() },
+                                step,
+                                (self.now)(),
+                            )
+                            .for_requirement(item.requirement.clone())
+                            .to_record(),
+                        );
+                    }
                     // The instructions change with the rung, so the system
                     // message is rebuilt rather than appended to.
                     messages[0] = Message::system(self.system(&ladder));
@@ -935,6 +965,29 @@ impl Work for Agent<'_> {
         let Some(item) = self.items.get(self.at).cloned() else {
             return Done::Blocked { why: "the item disappeared between planning and running".into() };
         };
+        // `O-10`: which requirement the batch took next, and what it left on
+        // the backlog. Written once, against the batch's first item — the
+        // pick is a batch-level fork (`remaining()`'s slice), not a per-item
+        // one, and every item in `self.items` was chosen over the same rest.
+        if self.at == 0 && !self.passed_over.is_empty() {
+            if let Some(step) = self.at_step.clone() {
+                self.pending.push(
+                    crate::decision::Decision::new(
+                        item.requirement.clone(),
+                        self.passed_over.clone(),
+                        format!(
+                            "backlog order: {} taken this batch, {} left for a later one (`O-10`)",
+                            self.items.len(),
+                            self.passed_over.len()
+                        ),
+                        crate::decision::Decider::Rule { cites: "O-10".into() },
+                        step,
+                        (self.now)(),
+                    )
+                    .to_record(),
+                );
+            }
+        }
         self.at += 1;
         self.work(&item)
     }
@@ -1619,6 +1672,39 @@ path: f.txt
         let done = agent.perform(&task);
         assert!(matches!(done, Done::Ok { .. }), "{done:?}");
         assert_eq!(Work::touched(&agent), vec!["out.txt".to_string()]);
+    }
+
+    /// `O-10`: which requirement the batch took next, and what it left on the
+    /// backlog, is a fork — `remaining()`'s slice — and gets a decision record
+    /// against the first item's step. A batch that took the whole backlog
+    /// leaves nothing passed over, and writes none (`picked_over(vec![])`).
+    #[test]
+    fn taking_an_item_over_the_rest_of_the_backlog_is_a_decision() {
+        let dir = tmpdir("agent-o10-picked");
+        let transport = Scripted::new(vec!["```perp-call\ntool: write\npath: out.txt\ncontent: <<EOF\nhi\nEOF\n```", "Done."]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("V-13", "write it", "write out.txt").expect("item")],
+        )
+        .picked_over(vec!["T-2".into(), "T-3".into()]);
+        let step = crate::step::StepId::new(1, "b1", 1).expect("step");
+        Work::at_step(&mut agent, &step);
+
+        let task = Work::next(&mut agent).expect("one item");
+        agent.perform(&task);
+
+        let records = Work::drain_records(&mut agent);
+        let decisions = crate::decision::log(&records);
+        let found = decisions
+            .iter()
+            .find(|d| d.decider == crate::decision::Decider::Rule { cites: "O-10".into() })
+            .expect("the O-10 decision is in the drained records");
+        assert_eq!(found.chose, "V-13");
+        assert_eq!(found.over, vec!["T-2".to_string(), "T-3".to_string()]);
     }
 
     /// A refused write is not a write. `V-12` refuses the requirements source,
