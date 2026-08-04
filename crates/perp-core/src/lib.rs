@@ -64,6 +64,7 @@ pub mod approval;
 pub mod artifact;
 pub mod atomic;
 pub mod binding;
+pub mod browser;
 pub mod btw;
 pub mod budget;
 pub mod capture;

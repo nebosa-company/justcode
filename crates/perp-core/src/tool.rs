@@ -82,6 +82,8 @@ pub enum Tool {
     Plan,
     /// A command against a throwaway worktree (`T-26`).
     SandboxRun,
+    /// Open a URL in the default browser and capture evidence (`V-6` automation).
+    Launch,
 }
 
 impl Tool {
@@ -103,6 +105,7 @@ impl Tool {
         Tool::Refs,
         Tool::Plan,
         Tool::SandboxRun,
+        Tool::Launch,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -124,6 +127,7 @@ impl Tool {
             Tool::Refs => "refs",
             Tool::Plan => "plan",
             Tool::SandboxRun => "sandbox_run",
+            Tool::Launch => "launch",
         }
     }
 
@@ -155,6 +159,7 @@ impl Tool {
             Tool::Refs => (&["name"], &["name", "path"]),
             Tool::Plan => (&["steps"], &["steps"]),
             Tool::SandboxRun => (&["command"], &["command", "at", "timeout"]),
+            Tool::Launch => (&["url"], &["url", "wait"]),
         }
     }
 
@@ -178,6 +183,7 @@ impl Tool {
             Tool::Refs => "refs(name, [path]) — where a name is declared and used, by symbol rather than substring. Prefer this over `grep` for a type or function name",
             Tool::Plan => "plan(steps) — say what you are about to do, as a JSON array of short strings. One call, before your first edit. The engine compares it with what happened",
             Tool::SandboxRun => "sandbox_run(command, [at], [timeout]) — run a command against a throwaway copy of the repository at commit `at` (default HEAD), leaving your working tree untouched. Use it to see whether a test fails without your change",
+            Tool::Launch => "launch(url, [wait]) — open a URL in the default browser and capture evidence (`V-6` automation). `wait` is seconds to wait for the page to load (default 2). Returns exit code and the command that was run",
         }
     }
 }
@@ -444,6 +450,8 @@ pub fn classify(call: &Call) -> Policy {
             "fetching a URL reaches a machine that is not this one, and what comes \
              back is untrusted content",
         ),
+
+        Tool::Launch => Policy::Auto,
 
         Tool::Shell => {
             let command = call.get("command").unwrap_or_default().to_ascii_lowercase();
@@ -895,6 +903,14 @@ impl Host {
                 self.confined(command)?;
                 let at = call.get("at").unwrap_or("HEAD");
                 return self.in_sandbox(command, at, self.asked_timeout(call));
+            }
+
+            Tool::Launch => {
+                // Open a URL in the default browser (`V-6` automation).
+                let url = call.need("url")?;
+                let wait = call.get("wait").and_then(|s| s.parse().ok());
+                let result = crate::browser::launch_url(url, wait)?;
+                result.evidence()
             }
 
             Tool::Fetch => {
