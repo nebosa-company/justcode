@@ -652,6 +652,34 @@ other durable output of a cycle deserves the same treatment.
 | ✅ ~~`O-6`~~ | Notification sink is pluggable (OS notifier, webhook, mail) and is **outbound only**, with exactly one exception: a reply may carry a `/btw` note and nothing else. **Approvals never arrive over the network.** The phone tells you something needs you; you still walk to the machine. Resolved 2026-07-29 — the authentication problem is removed rather than solved, because one bug in a signature check reopens the approval boundary. |
 | ✅ ~~`O-7`~~ | Cycle metrics (Perpetum F.5) are appended to the state file's history table by the engine, from counted facts, not from a summary. |
 
+### 9.2 The decision log
+
+The journal records what happened. It does not record **why this and not that**,
+and those are different questions: `O-1` can reconstruct what the loop believed
+at any step, and cannot say what else it considered.
+
+The gap is not theoretical. Over one day of running this harness, the coder role
+was escalated from one model to another, a threshold's default polarity was
+reversed, five tests were rewritten because they encoded an assumption rather
+than a requirement, one requirement was committed knowingly red, and two
+explanations of a failure were advanced and then withdrawn as wrong. Every one
+of those was a decision with alternatives. None of them is in the journal. They
+survive in commit messages, which are prose, unindexed, and attached to a diff
+rather than to the step that prompted them — and the two *withdrawn* ones, which
+are the most useful to a reader, survive nowhere at all.
+
+`session::Decision` is not this. It is `L-7`'s recovery choice about a single
+step left in flight, and deliberately narrow.
+
+| id | Requirement |
+|---|---|
+| `O-8` | A **decision** is a journal record with: what was chosen, what else was available, why, who decided, and the step it belongs to. A record naming only the choice is an outcome and not a decision — "the coder is `ds-pro`" is a fact; "`ds-pro` over `ds-fast`, because `ds-fast` declined this requirement five times" is a decision. The alternatives are the part that cannot be reconstructed afterwards, and so are the part that must be written down. |
+| `O-9` | Every decision names its **decider**, and there are exactly three: `rule` — the engine applied a stated rule, and cites it; `model` — the model chose, and the record names the link and model as `M-10` does for artefacts; `person` — an operator chose, and is named. A decision with no decider is refused rather than attributed to the harness, because "the system decided" is what a person says when nobody looked. |
+| `O-10` | The engine writes a decision wherever it already picks between alternatives, and these are not optional: which link answered a role and which were passed over (`M-9`); a rung dropped on the degradation ladder (`M-8`); which requirement was taken next and what was passed over; a watchdog ending a step (`L-11`–`L-13`); a reality check finding work already present (`V-1`); a gate-fix attempt abandoned at the second try (`L-16`); and an approval granted, refused or expired (`T-14`–`T-16`). Each of those is a fork the loop takes silently today. |
+| `O-11` | A decision can be **superseded**, and the superseding record names the one it replaces and says what changed. Nothing is edited or removed: `L-3` makes the journal append-only, and a decision log that quietly loses its reversals is worse than none, because it reads as though nobody was ever wrong. A reversal is the most useful record in the log — it is the only one that carries what was learned. |
+| `O-12` | `perp decisions [--since <step>] [--decider <who>]` lists them, and `perp explain` renders the decisions bearing on a requirement alongside its evidence chain (`C-7`). A decision log nobody can query is a second journal. |
+| `O-13` | The decision log is **derived from the journal** and is never a second source of truth (`O-1`, `L-4`). It is rendered as an artifact (`A-1`) with provenance (`A-6`), and replaying the same journal produces the same log on any machine (`N-5`). A decision the model merely asserted it made is not in the log; only one the engine enacted is — `V-2`'s rule about self-reported success, applied to self-reported reasoning. |
+
 ### 9.1 JustCode integration
 
 Speculative, and the reason this document lives in this repo.
