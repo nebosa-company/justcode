@@ -68,6 +68,8 @@ pub mod browser;
 pub mod btw;
 pub mod budget;
 pub mod capture;
+/// Release notes, derived from commits rather than narrated (`O-14`).
+pub mod changelog;
 pub mod chat;
 pub mod client;
 pub mod command;

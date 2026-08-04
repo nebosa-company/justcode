@@ -141,6 +141,12 @@ usage:
       never stored, so the same journal gives the same log anywhere. Filter by
       `--since` a step id, or by `--decider`.
 
+  perp changelog --since <ref> [--until <ref>] [--root <dir>]
+      Commits between two refs, grouped by the `Requirement:` trailer each one
+      carries and nothing else - no model narrates it. A commit with no
+      trailer is listed apart rather than folded into a neighbour's section.
+      `--until` defaults to `HEAD`.
+
   perp approvals [--root <dir>]
       What is waiting for a person: what was asked for, why, the command it
       would run, and the requirement it serves. Rebuilt from the journal, so a
@@ -250,6 +256,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("unlock") => cmd_unlock(&args[1..]),
         Some("approvals") => cmd_approvals(&args[1..]),
         Some("decisions") => cmd_decisions(&args[1..]),
+        Some("changelog") => cmd_changelog(&args[1..]),
         Some("approve") => cmd_answer(&args[1..], true),
         Some("reject") => cmd_answer(&args[1..], false),
         Some("rewind") => cmd_rewind(&args[1..]),
@@ -1616,6 +1623,34 @@ fn cmd_decisions(args: &[&str]) -> std::result::Result<(), String> {
         }
         println!();
     }
+    Ok(())
+}
+
+/// Release notes, derived from the commits themselves (`O-14`).
+///
+/// `git log <since>..<until>`, grouped by the `Requirement:` trailer (`G-2`)
+/// each commit already carries. No prose is generated — a commit with no
+/// trailer is listed apart rather than folded into a neighbour's section
+/// (`T-6`), and the operator pastes what they want into `release-notes.md`.
+fn cmd_changelog(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let Some(since) = flag(args, "--since") else {
+        return Err("which range? `perp changelog --since <ref> [--until <ref>]`".into());
+    };
+    let until = flag(args, "--until").unwrap_or("HEAD");
+
+    let source_path = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
+    let source = perp_core::layout::requirements_text(&source_path);
+
+    let repo = perp_core::git::Repo::at(binding.root());
+    let raw = repo.log_between(since, until).map_err(|e| e.to_string())?;
+    let entries = perp_core::changelog::parse(&raw);
+
+    if entries.is_empty() {
+        println!("no commits between {since} and {until}");
+        return Ok(());
+    }
+    print!("{}", perp_core::changelog::render(&entries, &source));
     Ok(())
 }
 

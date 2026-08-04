@@ -513,6 +513,34 @@ impl Repo {
         Ok(run.stdout_tail.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
     }
 
+    /// The raw log between two refs, one record per commit, `sha`, `subject`
+    /// and `body` separated by `\x1f` and commits by `\x1e` (`O-14`).
+    ///
+    /// `%b` rather than a grep for the trailer: the body can run to several
+    /// lines before it, and a format string that only asked for the trailer
+    /// line would need its own second flag to say which commits had none —
+    /// this way a commit missing `Requirement:` is a body with no such line
+    /// in it, indistinguishable from any other absence in the data itself.
+    ///
+    /// Whole, not tailed (`T-20`): a changelog over forty commits truncated to
+    /// forty lines would drop most of them, silently, which is exactly what
+    /// `T-6` exists to prevent.
+    pub fn log_between(&self, since: &str, until: &str) -> Result<String> {
+        let range = format!("{since}..{until}");
+        let run = self.run_unchecked_keeping_all(&[
+            "log",
+            &range,
+            "--format=%H%x1f%s%x1f%b%x1e",
+        ])?;
+        if !run.is_success() {
+            return Err(Error::unbound(
+                format!("git log {range}"),
+                format!("{}: {}", run.exit.describe(), run.stderr_tail.trim()),
+            ));
+        }
+        Ok(run.stdout_tail)
+    }
+
     /// The commits that carry a step's trailer (`G-8`).
     ///
     /// A feature's commits are contiguous and findable, which is what makes a
@@ -712,6 +740,38 @@ mod tests {
         let out = repo.plumbing(&["diff", "--cached", "--stat"]).expect("stat");
         assert!(!out.contains("only the last"), "nothing was cut: {out}");
         assert_eq!(out, repo.plumbing_all(&["diff", "--cached", "--stat"]).expect("all"));
+    }
+
+    /// `O-14`: the raw range comes back whole, with the trailer intact in the
+    /// body — the part [`crate::changelog::parse`] reads.
+    #[test]
+    fn log_between_returns_every_commit_in_the_range_with_its_body() {
+        let repo = repo("git-o14-log-between");
+        let base = repo.head_sha().expect("base sha");
+
+        std::fs::write(repo.root().join("a.txt"), "a\n").expect("write");
+        repo.stage(&["a.txt"]).expect("stage");
+        repo.commit(
+            &CommitMessage::new("Add a.txt").with_body("why a").for_requirements(["L-3"]),
+        )
+        .expect("commit a");
+
+        std::fs::write(repo.root().join("b.txt"), "b\n").expect("write");
+        repo.stage(&["b.txt"]).expect("stage");
+        repo.commit(
+            &CommitMessage::new("Add b.txt").with_body("why b").for_requirements(["L-4", "L-5"]),
+        )
+        .expect("commit b");
+
+        let raw = repo.log_between(&base, "HEAD").expect("log");
+        let entries = crate::changelog::parse(&raw);
+
+        assert_eq!(entries.len(), 2, "{raw}");
+        // `git log` orders newest first.
+        assert_eq!(entries[0].subject, "Add b.txt");
+        assert_eq!(entries[0].requirements, vec!["L-4".to_string(), "L-5".to_string()]);
+        assert_eq!(entries[1].subject, "Add a.txt");
+        assert_eq!(entries[1].requirements, vec!["L-3".to_string()]);
     }
 
     #[test]
