@@ -182,6 +182,9 @@ pub struct Agent<'a> {
     /// Calls this run refused for want of a person, waiting to be raised into
     /// the queue by the engine (`T-14`).
     approvals: Vec<crate::approval::Ask>,
+    /// Actions a person approved in this cycle, and who approved them
+    /// (`T-15`). Refreshed by the engine before every step.
+    granted: Vec<(String, String)>,
     /// `L-12` and `L-13`: the same call made over and over, and a file edited
     /// back to something it has already been.
     ///
@@ -233,6 +236,7 @@ impl<'a> Agent<'a> {
             turns: Vec::new(),
             pending: Vec::new(),
             approvals: Vec::new(),
+            granted: Vec::new(),
             watchdogs: crate::watchdog::Watchdogs::new(),
             tripped: None,
             touched: Vec::new(),
@@ -597,6 +601,42 @@ impl<'a> Agent<'a> {
             // request goes on the record, and the step carries on with
             // whatever else it can do.
             if let crate::approval::Policy::Approve { reason } = crate::tool::classify(call) {
+                // `T-15`: already approved, this cycle, for this exact action.
+                //
+                // Without this the queue was write-only. A person could grant a
+                // request and nothing would ever act on it — the loop asked,
+                // was answered, and asked again next time it came round, which
+                // is a queue that wastes the one resource it exists to spend.
+                //
+                // Matched on the signature and the cycle together. Not the
+                // request id, which the loop has no way to know when it comes
+                // back; and not the signature alone, because a grant that
+                // outlived its cycle is the thing `T-15` forbids.
+                if let Some((_, by)) =
+                    self.granted.iter().find(|(what, _)| what == &call.signature())
+                {
+                    let by = by.clone();
+                    let rendered = match self.host.run_approved(call, &by) {
+                        Ok(output) => {
+                            self.record_touched(call);
+                            progressed = true;
+                            output.render()
+                        }
+                        // `T-13` reaches here: an approval does not unlock a
+                        // `never`, and the refusal names who tried.
+                        Err(e) => Output::refusal(call.tool, &format!("{e}")).render(),
+                    };
+                    out.push_str(&format!(
+                        "
+{}
+[approved by {by} for this cycle (`T-15`)]
+{rendered}
+",
+                        call.signature()
+                    ));
+                    continue;
+                }
+
                 self.approvals.push(crate::approval::Ask {
                     what: call.signature(),
                     why: reason.clone(),
@@ -848,6 +888,10 @@ impl Work for Agent<'_> {
 
     fn drain_approvals(&mut self) -> Vec<crate::approval::Ask> {
         std::mem::take(&mut self.approvals)
+    }
+
+    fn granted(&mut self, actions: Vec<(String, String)>) {
+        self.granted = actions;
     }
 
     fn at_step(&mut self, step: &crate::step::StepId) {

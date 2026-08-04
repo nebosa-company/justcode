@@ -150,6 +150,14 @@ pub trait Work {
         Vec::new()
     }
 
+    /// Actions a person has approved **in this cycle**, and who approved them
+    /// (`T-15`).
+    ///
+    /// Told before each step, because the answer changes between them — that
+    /// is the whole point of a queue somebody answers while the loop runs. A
+    /// work that cached this once would act on yesterday's permission.
+    fn granted(&mut self, _actions: Vec<(String, String)>) {}
+
     /// Calls this work refused for want of a person, to be raised into the
     /// queue (`T-14`).
     ///
@@ -327,6 +335,20 @@ impl Engine {
         // claims they are available when it has somewhere to put them.
         self.concurrency.admit(in_flight, self.worktrees.is_some())?;
 
+        // `T-15`, the other half: a grant belongs to the cycle it was given in
+        // and to no later one. Dropped here rather than at the end of the
+        // previous cycle, because a cycle can end by being killed — and a rule
+        // enforced only on the clean path is not enforced. Whatever survived in
+        // the journal from an earlier cycle stops counting the moment a new one
+        // starts.
+        let dropped = self.approvals.close_cycle(cycle);
+        if dropped > 0 {
+            crate::verbose::say(
+                "approvals",
+                &format!("{dropped} from an earlier cycle no longer count (`T-15`)"),
+            );
+        }
+
         let started = (self.now)();
         let owner = Lock::this_process(started);
         let first = self.session.next_step(cycle, stage)?;
@@ -424,6 +446,10 @@ impl Engine {
             self.record_reality_check(&step, &task)?;
 
             work.at_step(&step);
+            // `T-15`: what a person has approved for *this* cycle, refreshed
+            // before every step — the queue is answered while the loop runs, so
+            // reading it once would act on a stale answer.
+            work.granted(self.approvals.granted_in(cycle));
             let step_for_verdict = step.clone();
             let guard = self.session.begin_for(
                 step,

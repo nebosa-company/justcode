@@ -243,6 +243,29 @@ impl Queue {
         parked
     }
 
+    /// Every action approved in this cycle, and who approved it (`T-15`).
+    ///
+    /// Keyed on what was asked for rather than on the request id, because that
+    /// is what the loop has when it comes back round. A step that wanted
+    /// `git push origin main` and wants it again knows the signature; it has no
+    /// idea which numbered request that was, and neither should it — an id is a
+    /// handle for a person answering the queue.
+    ///
+    /// The cycle is half the key and not a detail. The same action in the next
+    /// cycle is a different question asked in different circumstances, and
+    /// `T-15` says a grant does not travel.
+    pub fn granted_in(&self, cycle: u32) -> Vec<(String, String)> {
+        self.entries
+            .iter()
+            .filter_map(|entry| match &entry.verdict {
+                Verdict::Granted { by, .. } if entry.request.cycle == cycle => {
+                    Some((entry.request.what.clone(), by.clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Is this specific action approved *now*, in *this* cycle (`T-15`)?
     ///
     /// Per action and per cycle: a grant from last cycle is not a grant.
@@ -401,6 +424,59 @@ impl Draft {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `T-15`: a grant is per action **and** per cycle.
+    ///
+    /// The half that was missing. `granted_in` had no caller, so a person could
+    /// answer the queue and nothing would ever act on the answer — the loop
+    /// asked, was answered, and asked again next time round.
+    #[test]
+    fn a_grant_applies_to_its_own_cycle_and_no_later_one() {
+        let mut queue = Queue::new();
+        let id = queue.raise(
+            Ask {
+                what: "git(args=push origin main)".into(),
+                why: "pushing reaches other people".into(),
+                command: None,
+                diff: None,
+                requirement: Some("G-5".into()),
+            }
+            .into_request(step(), 3, 1_700_000_000),
+        );
+        queue.grant(id, "ivelin", 1_700_000_010).expect("grant");
+
+        assert_eq!(
+            queue.granted_in(3),
+            vec![("git(args=push origin main)".to_string(), "ivelin".to_string())],
+            "the loop can find its own action by signature, which is all it knows"
+        );
+        assert!(
+            queue.granted_in(4).is_empty(),
+            "and cannot find it next cycle — that is the whole of `T-15`"
+        );
+    }
+
+    /// Closing a cycle drops what came before it, whatever the verdict.
+    #[test]
+    fn closing_a_cycle_drops_earlier_grants() {
+        let mut queue = Queue::new();
+        let old = queue.raise(
+            Ask {
+                what: "git(args=push origin main)".into(),
+                why: "reaches other people".into(),
+                command: None,
+                diff: None,
+                requirement: None,
+            }
+            .into_request(step(), 3, 1_700_000_000),
+        );
+        queue.grant(old, "ivelin", 1_700_000_010).expect("grant");
+
+        let dropped = queue.close_cycle(4);
+
+        assert_eq!(dropped, 1, "the cycle-3 grant is gone, not merely ignored");
+        assert!(queue.granted_in(3).is_empty(), "and cannot be found by looking for cycle 3");
+    }
 
     /// The queue must outlive the process that raised it (`N-2`, `T-14`).
     ///

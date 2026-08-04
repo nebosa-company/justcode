@@ -17,7 +17,6 @@
 #                 the per-cycle rule are used through pattern matching and the
 #                 replay, not through these predicates. Real API surface.
 agent.rs::as_role
-approval.rs::close_cycle
 approval.rs::is_granted
 approval.rs::is_never
 approval.rs::needs_approval
@@ -133,7 +132,6 @@ state.rs::steps_recorded
 stream.rs::is_complete
 stream.rs::parse_cli_line
 stream.rs::parse_line
-tool.rs::run_approved
 tool.rs::with_budget
 tool.rs::with_egress
 tool.rs::with_timeout
