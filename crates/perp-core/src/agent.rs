@@ -367,6 +367,11 @@ impl<'a> Agent<'a> {
         let mut transcript = String::new();
         let mut turns = 0;
         let mut quiet = 0;
+        // Turns that produced neither a new call signature nor a change to the
+        // workspace (`L-28`). Cumulative, where `quiet` is consecutive: that
+        // one bounds "has this step got anywhere lately", this one bounds "has
+        // it got anywhere at all".
+        let mut unproductive: u32 = 0;
         // Every call signature this step has already made (`L-12`).
         let mut asked: std::collections::HashSet<String> = std::collections::HashSet::new();
         // `L-23`: journalled once, on the turn that makes the first call.
@@ -389,16 +394,34 @@ impl<'a> Agent<'a> {
                 };
             }
             // `L-25` told it at `TELL_AFTER_TURNS`; this is the acting on it.
-            // A step that has read for twice as long as it took to warn it and
-            // still written nothing is stuck, and `L-11`'s quiet counter cannot
-            // see it because every novel read counts as learning.
-            if turns > GIVE_UP_AFTER_TOLD && self.touched.len() == touched_before {
+            //
+            // **Turns that learned nothing**, not turns. This counted raw turns
+            // and killed a step that had written nothing by sixteen — which was
+            // right when a repository was two hundred lines and wrong once it
+            // was not. Measured on Janitor at 1,345 lines: `J-9` and `J-10`
+            // each spent every one of their sixteen turns on ten reads, three
+            // greps and a glob, all of them novel, and were ended for being
+            // stuck before either had written a line. Nothing was repeated and
+            // nothing was wasted; orienting simply costs more in a larger tree,
+            // and a fixed turn count does not know that.
+            //
+            // `unproductive` counts only turns that returned neither a new call
+            // signature nor a change to the workspace — the same measure `L-11`
+            // already keeps a few lines up, and whose comment says the quiet
+            // counter "cannot see it because every novel read counts as
+            // learning". That property is the point rather than the problem: a
+            // model reading its way into an unfamiliar file is working, and one
+            // re-reading what it has already read is not.
+            //
+            // [`MAX_TURNS`] is still the cost bound, so a step that keeps
+            // learning forever is stopped by the ceiling and not by this.
+            if unproductive > GIVE_UP_AFTER_TOLD && self.touched.len() == touched_before {
                 return Done::Failed {
                     summary: format!(
-                        "{} read for {} turns and wrote nothing — told at {TELL_AFTER_TURNS} \
-                         (`L-25`) and ended at {GIVE_UP_AFTER_TOLD} (`L-11`)",
-                        item.requirement,
-                        turns - 1
+                        "{} spent {unproductive} turns learning nothing and wrote nothing — \
+                         told at {TELL_AFTER_TURNS} (`L-25`) and ended at \
+                         {GIVE_UP_AFTER_TOLD} (`L-11`)",
+                        item.requirement
                     ),
                     detail: transcript,
                 };
@@ -634,6 +657,7 @@ impl<'a> Agent<'a> {
                         quiet = 0;
                     } else {
                         quiet += 1;
+                        unproductive += 1;
                     }
                     // `L-25`: told while it can still act. The same measure
                     // `V-13` ends the step on, read one turn at a time instead
@@ -654,6 +678,7 @@ impl<'a> Agent<'a> {
                 }
                 Next::Repair { complaint, attempt, .. } => {
                     quiet += 1;
+                    unproductive += 1;
                     transcript.push_str(&format!("\n[repair {attempt}: {complaint}]\n"));
                     messages.push(Message::assistant(content));
                     messages.push(Message::user(format!(
@@ -1724,6 +1749,76 @@ path: f.txt
     /// green by trying to mark itself done — which is the exact move `V-12`
     /// exists to stop.
     #[test]
+    fn a_step_reading_its_way_into_a_large_tree_is_not_stuck() {
+        // `L-28`. This rule counted raw turns, so a step that had written
+        // nothing by sixteen was ended — right when a repository was two
+        // hundred lines, wrong once it was not. Measured on Janitor at 1,345
+        // lines: `J-9` and `J-10` each spent all sixteen turns on ten reads,
+        // three greps and a glob, every one of them novel, and were ended for
+        // being stuck before either had written a line.
+        //
+        // Twenty distinct reads here — well past `GIVE_UP_AFTER_TOLD` — and
+        // then a write. Each read is a new call signature, so none of them is
+        // an unproductive turn.
+        let dir = tmpdir("agent-l28-orienting");
+        for n in 0..20 {
+            std::fs::write(dir.join(format!("f{n}.txt")), format!("file {n}\n")).expect("write");
+        }
+        let mut replies: Vec<String> = (0..20)
+            .map(|n| format!("Reading.\n\n```perp-call\ntool: read\npath: f{n}.txt\n```"))
+            .collect();
+        replies.push(
+            "Now writing.\n\n```perp-call\ntool: write\npath: out.txt\ncontent: <<EOF\ndone\nEOF\n```"
+                .to_string(),
+        );
+        replies.push("Done.".to_string());
+        let scripted: Vec<&str> = replies.iter().map(String::as_str).collect();
+
+        let transport = Scripted::new(scripted);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-28", "orient then write", "read a lot, then write").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        assert!(
+            matches!(done, Done::Ok { .. }),
+            "twenty novel reads is orienting, not being stuck: {done:?}"
+        );
+        assert_eq!(Work::touched(&agent), vec!["out.txt".to_string()]);
+    }
+
+    /// And the rule still bites when the turns really are teaching nothing.
+    #[test]
+    fn a_step_repeating_itself_is_still_ended() {
+        let dir = tmpdir("agent-l28-repeating");
+        std::fs::write(dir.join("f.txt"), "x\n").expect("write");
+        // The same call, over and over: no new signature, no write.
+        let reply = "Looking again.\n\n```perp-call\ntool: read\npath: f.txt\n```";
+        let transport = Scripted::new(vec![reply; 30]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-28", "go in circles", "read the same file").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        assert!(matches!(done, Done::Failed { .. }), "circling is still stuck: {done:?}");
+        assert!(Work::touched(&agent).is_empty());
+    }
+
+    #[test]
     fn an_apply_counts_as_having_changed_something() {
         // `T-21`'s `apply` tells the model to prefer it over several `patch`
         // calls, and it was missing from `record_touched` — so a step that used
@@ -2233,12 +2328,26 @@ command: echo hi
     /// wrote nothing, with the notice printed four times and no effect.
     #[test]
     fn a_step_that_only_ever_reads_is_ended_and_not_merely_told() {
+        // `L-28` changed what bounds this, and the change is worth stating.
+        // Novel reads are turns that learned something, so the give-up rule no
+        // longer ends them — that false positive is exactly what it was changed
+        // to stop, after `J-9` and `J-10` were killed mid-orientation in a
+        // 1,345-line tree. What still holds is that such a step **fails rather
+        // than passes**, and that `MAX_TURNS` bounds it. Reading forever is now
+        // a cost question, answered by that ceiling and by
+        // `budget.batch.tokens`, rather than by a turn count that could not
+        // tell orienting from circling.
         let dir = tmpdir("agent-l11-enforced");
-        for n in 0..60 {
-            std::fs::write(dir.join(format!("f{n}.txt")), "x\n").expect("write");
+        let scripted = MAX_TURNS as usize + 10;
+        for n in 0..scripted {
+            std::fs::write(dir.join(format!("f{n}.txt")), "x
+").expect("write");
         }
-        let reads: Vec<String> = (0..60)
-            .map(|n| format!("```perp-call\ntool: read\npath: f{n}.txt\n```"))
+        let reads: Vec<String> = (0..scripted)
+            .map(|n| format!("```perp-call
+tool: read
+path: f{n}.txt
+```"))
             .collect();
         let transport = Scripted::new(reads.iter().map(String::as_str).collect());
         let links = links();
@@ -2257,13 +2366,17 @@ command: echo hi
             panic!("a step that wrote nothing must fail, not pass: {done:?}");
         };
         assert!(
-            summary.contains("wrote nothing"),
-            "it must say what was wrong with it, not merely that it stopped: {summary}"
+            summary.contains("ceiling"),
+            "it must say what stopped it: {summary}"
         );
         assert!(
-            transport.seen.borrow().len() <= GIVE_UP_AFTER_TOLD as usize + 1,
-            "it must end near the give-up bound, not run on to the {MAX_TURNS}-turn ceiling: \
-             {} turns",
+            transport.seen.borrow().len() > GIVE_UP_AFTER_TOLD as usize,
+            "novel reads are not unproductive turns and must not trip the give-up rule: {} turns",
+            transport.seen.borrow().len()
+        );
+        assert!(
+            transport.seen.borrow().len() <= MAX_TURNS as usize + 1,
+            "and `MAX_TURNS` is still the bound: {} turns",
             transport.seen.borrow().len()
         );
     }
