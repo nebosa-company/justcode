@@ -236,17 +236,54 @@ impl Artifact {
 }
 
 /// Every external reference in a page, so a failure can name what it found.
+///
+/// What counts is a construct that **fetches**, not a URL that appears. The
+/// first version looked for a bare `http://` or `https://` anywhere in the
+/// page, which cannot tell a stylesheet the browser will go and get from an
+/// error message that happens to quote an address — and the harness quotes
+/// them faithfully, because `L-16` keeps a blocked batch's error verbatim.
+///
+/// Measured on Janitor, where the board and the conflict register failed to
+/// render on every run: the journal held `https://status.claude.com` eight
+/// times, from Anthropic's own 529 text, and `https://www.gnu.org` twice from a
+/// gate transcript. Nothing on the page fetched anything.
+///
+/// An `<a href>` is deliberately not a reference. `A-2` is about a page that
+/// renders without the network, and a link the reader may choose to follow
+/// costs nothing until they do.
 pub fn external_references(html: &str) -> Vec<String> {
-    const REACHES_OUT: &[&str] = &[
-        "http://", "https://", "//cdn", "<script src", "<link rel=\"stylesheet\" href",
-        "@import", "url(http",
-    ];
+    // Where a browser goes and gets something: an attribute it loads, a
+    // stylesheet import, or a CSS `url()`.
+    const FETCHERS: &[&str] = &["src=", "url(", "@import"];
+    const SCHEMES: &[&str] = &["http://", "https://", "//"];
+
     let lower = html.to_ascii_lowercase();
-    REACHES_OUT
-        .iter()
-        .filter(|needle| lower.contains(&needle.to_ascii_lowercase()))
-        .map(|needle| (*needle).to_string())
-        .collect()
+    let mut found: Vec<String> = Vec::new();
+    let mut note = |what: String| {
+        if !found.contains(&what) {
+            found.push(what);
+        }
+    };
+
+    // A stylesheet is fetched whatever its URL looks like, so the tag itself is
+    // the finding — this is the one case where the construct alone is enough.
+    if lower.contains("<link rel=\"stylesheet\"") || lower.contains("<link rel=stylesheet") {
+        note("<link rel=\"stylesheet\"".to_string());
+    }
+
+    for fetcher in FETCHERS {
+        let mut from = 0;
+        while let Some(at) = lower[from..].find(fetcher) {
+            let start = from + at + fetcher.len();
+            // Past the quote or whitespace the value may open with.
+            let value = lower[start..].trim_start_matches(['"', '\'', ' ']);
+            if let Some(scheme) = SCHEMES.iter().find(|s| value.starts_with(**s)) {
+                note(format!("{fetcher}{scheme}"));
+            }
+            from = start;
+        }
+    }
+    found
 }
 
 /// Where an artifact is going.
@@ -604,6 +641,47 @@ mod tests {
             assert_eq!(path.parent(), Some(dir_in(root).as_path()), "{kind}");
             assert!(path.to_string_lossy().ends_with(".html"), "{kind}");
         }
+    }
+
+    /// `A-2` is about a page that renders without the network, and a URL
+    /// **quoted in text** is not one the browser will go and get.
+    ///
+    /// The check scanned for a bare `https://` anywhere in the page, so a
+    /// journal entry that quoted an address failed it. Measured on Janitor: the
+    /// board and the conflict register failed to render on every run because
+    /// the journal held `https://status.claude.com` eight times, from
+    /// Anthropic's own 529 text — which `L-16` keeps verbatim on purpose.
+    #[test]
+    fn a_url_a_page_only_mentions_is_not_a_reference_it_fetches() {
+        let quoted = "<!doctype html><p>API Error: 529 Overloaded.                       If it persists, check https://status.claude.com.</p>";
+        assert!(
+            external_references(quoted).is_empty(),
+            "quoting an address is not fetching it: {:?}",
+            external_references(quoted)
+        );
+
+        // And the constructs that do fetch are still refused.
+        for fetches in [
+            r#"<script src="https://cdn.example/x.js"></script>"#,
+            r#"<img src="http://example/x.png">"#,
+            r#"<link rel="stylesheet" href="https://example/x.css">"#,
+            r#"<style>@import "https://example/x.css";</style>"#,
+            r#"<style>body{background:url(https://example/x.png)}</style>"#,
+            r#"<script src="//cdn.example/x.js"></script>"#,
+        ] {
+            assert!(
+                !external_references(fetches).is_empty(),
+                "this one really does reach out: {fetches}"
+            );
+        }
+
+        // A link the reader may choose to follow costs nothing until they do.
+        let linked = r#"<a href="https://example/docs">the requirement</a>"#;
+        assert!(
+            external_references(linked).is_empty(),
+            "an anchor is not a fetch: {:?}",
+            external_references(linked)
+        );
     }
 
     #[test]
