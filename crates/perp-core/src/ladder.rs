@@ -329,6 +329,31 @@ pub fn parse_block(content: &str) -> Result<Vec<Call>> {
     Ok(calls)
 }
 
+/// How deep the brackets are after reading `line`, starting from `depth`.
+///
+/// Only `[` and `{` count, and only outside a string — `"a]b"` closes nothing.
+/// A backslash escapes whatever follows it, so `"\\""` is a quote in a string
+/// rather than the end of one.
+fn bracket_depth(line: &str, depth: i32) -> i32 {
+    let mut depth = depth;
+    let mut in_string = false;
+    let mut escaped = false;
+    for c in line.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' if in_string => escaped = true,
+            '"' => in_string = !in_string,
+            '[' | '{' if !in_string => depth += 1,
+            ']' | '}' if !in_string => depth -= 1,
+            _ => {}
+        }
+    }
+    depth
+}
+
 fn parse_lines(body: &str) -> Result<Call> {
     let bad = |reason: String| Error::refused("tool block", reason);
     let mut tool: Option<Tool> = None;
@@ -345,6 +370,47 @@ fn parse_lines(body: &str) -> Result<Call> {
             return Err(bad(format!("`{line}` is not `key: value`")));
         };
         let (key, value) = (key.trim(), value.trim());
+
+        // A value that opens a JSON bracket runs until the brackets balance.
+        //
+        // `apply`'s `edits` is a JSON array, and a model handed "a JSON array"
+        // pretty-prints one — which every line-oriented reading of this format
+        // refuses on the second line, with `` `]` is not `key: value` ``. The
+        // heredoc below could carry it and nothing told the model to reach for
+        // one, so the natural output was rejected and the natural repair was to
+        // produce the same shape again.
+        //
+        // Measured on Janitor: `J-13` and `J-17` each burned two attempts and
+        // sixteen turns apiece. The model had composed the *correct* edit both
+        // times; only the framing was refused. The same call written on one
+        // line had worked in an earlier batch, so this failed intermittently on
+        // formatting rather than on anything about the work.
+        //
+        // Counting brackets, not parsing JSON: this crate has no JSON reader
+        // for arbitrary text (`N-11`), and the question here is only where the
+        // value ends. Quotes are tracked so a bracket inside a string does not
+        // close the value, and a backslash escapes the next character.
+        if value.starts_with('[') || value.starts_with('{') {
+            let mut collected = vec![value.to_string()];
+            let mut depth = bracket_depth(value, 0);
+            while depth > 0 {
+                let Some(next) = lines.next() else {
+                    return Err(bad(format!(
+                        "`{key}` opened a bracket that never closed — a JSON value must \
+                         balance, or use `{HEREDOC}END`"
+                    )));
+                };
+                depth = bracket_depth(next, depth);
+                collected.push(next.trim().to_string());
+            }
+            let text = collected.join("");
+            match key {
+                "tool" => tool = Some(Tool::parse(text.trim())?),
+                "requirement" => requirement = Some(text.trim().to_string()),
+                _ => args.push((key.to_string(), text)),
+            }
+            continue;
+        }
 
         // `key: <<END` takes everything up to a line that is just `END`, kept
         // exactly as written. See [`HEREDOC`].
@@ -426,6 +492,71 @@ fn strip_fence(text: &str) -> &str {
 mod tests {
     use super::*;
     use crate::probe::{Capabilities, Source};
+
+    /// A pretty-printed JSON value is a value, not a parse error.
+    ///
+    /// `apply`'s `edits` is a JSON array, and a model told "a JSON array"
+    /// pretty-prints one. Every line after the first then failed the
+    /// `key: value` reading with `` `]` is not `key: value` ``, so the natural
+    /// output was refused and the natural repair produced the same shape again.
+    ///
+    /// Janitor's `J-13` and `J-17` each burned two attempts and sixteen turns
+    /// on this. The model had composed the correct edit both times; only the
+    /// framing was rejected — and the same call written on one line had worked
+    /// in an earlier batch, so it failed on formatting rather than on anything
+    /// about the work.
+    #[test]
+    fn a_json_value_may_be_pretty_printed_across_lines() {
+        let reply = "```perp-call\n\
+                     tool: apply\n\
+                     path: src/scan.rs\n\
+                     edits: [\n\
+                       {\"expect\": \"rule.id\", \"replace\": \"rule.id()\"},\n\
+                       {\"expect\": \"rule.mode\", \"replace\": \"rule.mode()\"}\n\
+                     ]\n\
+                     ```";
+        let calls = parse_block(reply).expect("a pretty-printed array is a value");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].tool, crate::tool::Tool::Apply);
+        assert_eq!(calls[0].get("path"), Some("src/scan.rs"));
+
+        let edits = calls[0].get("edits").expect("the edits survived");
+        assert!(edits.starts_with('[') && edits.ends_with(']'), "{edits}");
+        assert!(edits.contains("rule.id()"), "{edits}");
+        assert!(edits.contains("rule.mode()"), "{edits}");
+        // One line, so whatever reads it next sees a plain JSON array.
+        assert!(!edits.contains('\n'), "the value is joined: {edits}");
+    }
+
+    /// A bracket inside a string is text, not structure — otherwise an edit
+    /// that replaces `]` would end the value early.
+    #[test]
+    fn a_bracket_inside_a_string_does_not_close_the_value() {
+        let reply = "```perp-call\n\
+                     tool: apply\n\
+                     path: f.rs\n\
+                     edits: [\n\
+                       {\"expect\": \"a[0]\", \"replace\": \"a.first()\"}\n\
+                     ]\n\
+                     ```";
+        let calls = parse_block(reply).expect("brackets in strings are text");
+        assert!(calls[0].get("edits").expect("edits").contains("a[0]"));
+    }
+
+    /// And one that never closes says so, rather than swallowing the rest of
+    /// the block.
+    #[test]
+    fn an_unclosed_bracket_is_refused_with_the_reason() {
+        let reply = "```perp-call\n\
+                     tool: apply\n\
+                     path: f.rs\n\
+                     edits: [\n\
+                       {\"expect\": \"x\"}\n\
+                     ```";
+        let err = parse_block(reply).expect_err("an unbalanced value is not a value");
+        let text = format!("{err}");
+        assert!(text.contains("never closed"), "{text}");
+    }
 
     fn caps(native: bool, schema: bool) -> Capabilities {
         Capabilities {
