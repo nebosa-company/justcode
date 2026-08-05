@@ -435,10 +435,25 @@ impl Engine {
                 tokens: carried.tokens + spend.tokens,
                 money: carried.money + spend.money,
             };
-            if let Verdict::Exhausted { .. } = self.budgets.check(report.spend, report.spend) {
+            // The two scopes get the two figures. `check` has always taken them
+            // separately and the engine had always passed the same value twice,
+            // which was a smell while that value was one run's spend and became
+            // a bug the moment `L-10`'s carry-forward went in above: the batch
+            // ceiling was then compared against the *cycle's* accumulated
+            // total, so a `budget.batch.tokens` lower than the cycle's parked
+            // the whole cycle once cumulative spend passed it — before doing
+            // any work at all.
+            //
+            // Measured on Janitor: `0 steps — parked: budget: batch tokens —
+            // 1712557 of 1500000`, on a batch that had spent nothing.
+            //
+            // A batch's spend is this run's. The carry-forward is a fact about
+            // the cycle and belongs only to the cycle.
+            let batch_spend = Spend { seconds: elapsed, ..spend };
+            if let Verdict::Exhausted { .. } = self.budgets.check(report.spend, batch_spend) {
                 let park = self
                     .budgets
-                    .check(report.spend, report.spend)
+                    .check(report.spend, batch_spend)
                     .park()
                     .unwrap_or_else(|| Park::budget("exhausted"));
                 self.record_end(cycle, stage, None, Some(&park))?;
@@ -1162,6 +1177,56 @@ mod tests {
 
         let last = records(&root).pop().expect("a record");
         assert_eq!(last.detail.as_deref(), Some("stop=park"));
+    }
+
+    /// The batch ceiling is a fact about the batch, not about the cycle.
+    ///
+    /// `check` takes the two spends separately and the engine passed the same
+    /// value to both. Harmless while that value was one run's spend; a bug the
+    /// moment the cycle's carry-forward went into it, because the batch ceiling
+    /// then saw the cycle's running total and parked a batch that had spent
+    /// nothing. A cycle already past `budget.batch.tokens` could do no further
+    /// work at all, whatever its own ceiling said.
+    #[test]
+    fn a_batch_ceiling_is_not_charged_for_what_the_cycle_already_spent() {
+        let root = workspace("engine-budget-scopes");
+
+        // 250 tokens already on this cycle's ledger, from a previous run.
+        let spent = crate::Record::outcome(
+            StepId::new(7, "b1", 1).expect("step"),
+            1_700_000_000,
+            true,
+            "a model call",
+        );
+        let spent = crate::Record {
+            extra: vec![
+                ("link".to_string(), crate::json::Value::str("here")),
+                ("cache_miss".to_string(), crate::json::Value::int(200)),
+                ("output_tokens".to_string(), crate::json::Value::int(50)),
+            ],
+            ..spent
+        };
+        Journal::at(root.join(".harness/journal.jsonl")).append(&spent).expect("append");
+
+        // A batch ceiling the cycle is already past, and a cycle ceiling it is
+        // not. The batch itself spends nothing.
+        let budgets = Budgets {
+            cycle: Budget::none().tokens(10_000),
+            batch: Budget::none().tokens(100),
+        };
+        let mut engine = Engine::open(&root).expect("open").with_budgets(budgets);
+        let mut work = Fixed::new(tasks(2));
+        work.spend = Spend::default();
+
+        let report = engine.run(7, "b2", &mut work, 0).expect("run");
+
+        assert!(
+            report.park.is_none(),
+            "a batch that spent nothing must not be parked for the cycle's history: {:?}",
+            report.park
+        );
+        assert!(report.steps > 0, "and it must actually do its work");
+        assert_eq!(report.spend.tokens, 250, "while the cycle still counts what it spent");
     }
 
     /// `L-10`: a restart does not hand the cycle its budget back.
