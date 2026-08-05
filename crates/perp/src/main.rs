@@ -777,12 +777,49 @@ fn cmd_ask(args: &[&str]) -> std::result::Result<(), String> {
 /// The failure this catches is quiet — a batch file naming `L-99`, a plan built
 /// around a requirement that does not exist, and nobody noticing until the
 /// cycle that tries to build it.
+/// `perp check markers` — the reconcile `binding.md` has always specified.
+///
+/// *"A marker without a matching journal entry is not believed. The reconcile
+/// step in C.1 checks markers against the code, not against each other."* That
+/// step did not exist; `derive_marker` was written for it and had no caller.
+///
+/// It **checks and never writes**. `V-12` refuses the requirements source to
+/// every writing tool and `cycle.rs` says the loop may not set a `✅`; a person
+/// reads the evidence and marks. This only says where the file and the journal
+/// disagree.
+fn cmd_check_markers(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let source_path = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
+    let source = perp_core::layout::requirements_text(&source_path);
+    if source.trim().is_empty() {
+        return Err(format!("{}: no requirements found", source_path.display()));
+    }
+    let journal = Journal::at(binding.resolve("out.journal").map_err(|e| e.to_string())?);
+    let records = journal.read_all().map_err(|e| e.to_string())?;
+
+    let claimed = perp_core::cycle::marked(&source);
+    let check = perp_core::verify::check_markers(&claimed, &records);
+
+    print!("{}", check.describe());
+    if check.is_clean() {
+        return Ok(());
+    }
+    Err(format!(
+        "{} marker(s) the journal does not support. A person marks after reading the \
+         evidence (`V-2`, `V-12`); this only says which claims the journal cannot back.",
+        check.disagreements.len()
+    ))
+}
+
 fn cmd_check(args: &[&str]) -> std::result::Result<(), String> {
     let which = positionals(args).first().copied().unwrap_or("ids");
     match which {
         "ids" => {}
         "citations" => return cmd_check_citations(args),
-        other => return Err(format!("unknown check `{other}` — `ids` or `citations`")),
+        "markers" => return cmd_check_markers(args),
+        other => {
+            return Err(format!("unknown check `{other}` — `ids`, `citations` or `markers`"))
+        }
     }
 
     let binding = load(args).map_err(|e| e.to_string())?;

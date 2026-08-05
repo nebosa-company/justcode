@@ -133,7 +133,6 @@ tool.rs::with_egress
 tool.rs::with_timeout
 verify.rs::allows_gate_fix
 verify.rs::counts_as_done
-verify.rs::derive_marker
 verify.rs::is_earned
 verify.rs::may_implement
 verify.rs::stashed_at

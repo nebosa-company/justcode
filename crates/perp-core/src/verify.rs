@@ -334,6 +334,19 @@ impl Marker {
         }
     }
 
+    /// The word a person reads in a check's output. The symbol alone is a poor
+    /// error message — `⛔` and `🚧` are one glyph apart in a terminal.
+    pub fn name(self) -> &'static str {
+        match self {
+            Marker::Open => "open",
+            Marker::InProgress => "in progress",
+            Marker::Done => "done",
+            Marker::Blocked => "blocked",
+            Marker::Gated => "gated",
+            Marker::Conflicting => "conflicting",
+        }
+    }
+
     /// Only these count as delivered. Gated is never one of them (`V-8`).
     pub fn counts_as_done(self) -> bool {
         self == Marker::Done
@@ -345,6 +358,103 @@ impl Marker {
 /// The engine writes markers; the model proposes. A requirement is done when
 /// an outcome record says so *and* carries evidence — a summary alone is a
 /// claim, not a transcript.
+/// A marker the journal does not support (`V-7`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Disagreement {
+    pub requirement: String,
+    /// What the requirements source says.
+    pub claimed: Marker,
+    /// What the journal's records actually support.
+    pub derived: Marker,
+}
+
+/// What checking every marker against the journal found (`V-7`).
+///
+/// The three buckets are kept apart on purpose, and `V-11` is why: a checker
+/// that reports "no disagreements" while silently having checked nothing is
+/// indistinguishable from one that checked everything and found it sound. What
+/// was *not* checked, and why, is part of the answer rather than a footnote.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MarkerCheck {
+    pub checked: usize,
+    pub disagreements: Vec<Disagreement>,
+    /// The journal has no record citing these at all, so it has nothing to say
+    /// about them. Not evidence of a wrong marker — evidence of a marker this
+    /// engine cannot see the evidence for, which is the ordinary case for work
+    /// done before `journal.jsonl` existed.
+    pub unseen: Vec<String>,
+    /// `⛔` and `🔶`. [`derive_marker`] has no path to either — they are a
+    /// person's judgement about the world outside the repository, and a journal
+    /// cannot confirm or refute one. Excluded rather than reported as wrong.
+    pub not_derivable: Vec<String>,
+}
+
+impl MarkerCheck {
+    pub fn is_clean(&self) -> bool {
+        self.disagreements.is_empty()
+    }
+
+    pub fn describe(&self) -> String {
+        let mut out = String::new();
+        for entry in &self.disagreements {
+            out.push_str(&format!(
+                "  {} claims {} — the journal supports {}\n",
+                entry.requirement,
+                entry.claimed.name(),
+                entry.derived.name(),
+            ));
+        }
+        out.push_str(&format!(
+            "\n{} checked, {} disagreeing, {} with no journal record, {} not derivable\n",
+            self.checked,
+            self.disagreements.len(),
+            self.unseen.len(),
+            self.not_derivable.len(),
+        ));
+        if !self.unseen.is_empty() {
+            out.push_str(
+                "A requirement with no journal record is not checked and not believed either — \
+                 the engine has no evidence to read. Work predating `journal.jsonl` lands here.\n",
+            );
+        }
+        out
+    }
+}
+
+/// Check every claimed marker against what the journal supports (`V-7`).
+///
+/// **This does not write markers, and nothing here can.** `V-12` refuses the
+/// requirements source to every writing tool, and `cycle.rs` says plainly that
+/// the loop may not set a `✅` — a loop that awards itself one is a loop whose
+/// status is worth nothing. `binding.md` already asked for exactly this
+/// instead: *"a marker without a matching journal entry is not believed"*, and
+/// a reconcile step that checks markers against the evidence. A person still
+/// marks; this says when the file and the journal disagree.
+pub fn check_markers(claimed: &[(String, Marker)], records: &[Record]) -> MarkerCheck {
+    let mut out = MarkerCheck::default();
+    for (requirement, claimed) in claimed {
+        if matches!(claimed, Marker::Gated | Marker::Conflicting) {
+            out.not_derivable.push(requirement.clone());
+            continue;
+        }
+        let seen = records.iter().any(|r| r.requirements.iter().any(|id| id == requirement));
+        if !seen {
+            out.unseen.push(requirement.clone());
+            continue;
+        }
+        out.checked += 1;
+        let derived = derive_marker(records, requirement);
+        if derived != *claimed {
+            out.disagreements.push(Disagreement {
+                requirement: requirement.clone(),
+                claimed: *claimed,
+                derived,
+            });
+        }
+    }
+    out
+}
+
 pub fn derive_marker(records: &[Record], requirement: &str) -> Marker {
     let mine: Vec<&Record> = records
         .iter()
@@ -354,9 +464,26 @@ pub fn derive_marker(records: &[Record], requirement: &str) -> Marker {
     if mine.is_empty() {
         return Marker::Open;
     }
-    if mine.iter().any(|r| r.kind == Kind::Outcome && r.ok == Some(false)) {
+    // The *last* outcome decides, not any outcome ever.
+    //
+    // This read `any(ok == false)`, so a requirement that failed in one batch
+    // and passed in a later one was blocked for good — the journal is
+    // append-only (`L-3`), so the failure never stops being in it. Measured on
+    // this repository the moment `check_markers` gave the function its first
+    // caller: `V-11` and `T-19` both run `false, true, true, false, true` and
+    // both came back blocked, which is a fair description of neither.
+    //
+    // A defect that could not show up while nothing called this, which is the
+    // argument the reachability list has been making all along.
+    let Some(last) = mine.iter().rev().find(|r| r.kind == Kind::Outcome) else {
+        // Intents and nothing else: started, never closed.
+        return Marker::InProgress;
+    };
+    if last.ok == Some(false) {
         return Marker::Blocked;
     }
+    // `V-2`: green is not enough on its own — an outcome that carries no
+    // transcript is a claim, and a claim is not evidence.
     let delivered = mine.iter().any(|record| {
         record.kind == Kind::Outcome
             && record.ok == Some(true)
@@ -1099,6 +1226,83 @@ mod tests {
                 .with_detail("error: it does not compile"),
         ];
         assert_eq!(derive_marker(&records, "L-3"), Marker::Blocked);
+    }
+
+    /// `V-7`: a requirement that failed and was then fixed is not blocked
+    /// forever.
+    ///
+    /// The journal is append-only (`L-3`), so the failure never stops being in
+    /// it — and the derivation read "any outcome ever failed". Measured on this
+    /// repository the moment `check_markers` gave the function its first
+    /// caller: `V-11` and `T-19` both run `false, true, true, false, true` and
+    /// both came back blocked. Fifteen of thirty markers were flagged on this
+    /// alone.
+    #[test]
+    fn the_last_outcome_decides_not_any_outcome_ever() {
+        let step = |n: u32| StepId::new(1, "b1", n).expect("step");
+        let records = vec![
+            Record::outcome(step(1), 100, false, "gate red")
+                .for_requirements(["L-3"])
+                .with_detail("error: it does not compile"),
+            Record::outcome(step(2), 200, true, "gate green")
+                .for_requirements(["L-3"])
+                .with_detail("$ cargo test\nexit 0"),
+        ];
+        assert_eq!(
+            derive_marker(&records, "L-3"),
+            Marker::Done,
+            "fixed is fixed; the failure stays in the journal but stops being the answer"
+        );
+
+        // And the other order still blocks — this is about recency, not about
+        // preferring good news.
+        let regressed = vec![records[1].clone(), records[0].clone()];
+        assert_eq!(derive_marker(&regressed, "L-3"), Marker::Blocked);
+    }
+
+    /// `V-7`: the reconcile `binding.md` always specified — check, never write.
+    #[test]
+    fn a_marker_the_journal_cannot_back_is_reported_and_the_rest_bucketed() {
+        let step = |n: u32| StepId::new(1, "b1", n).expect("step");
+        let records = vec![
+            // Claimed done, and the journal agrees.
+            Record::outcome(step(1), 100, true, "did it")
+                .for_requirements(["L-3"])
+                .with_detail("$ cargo test\nexit 0"),
+            // Claimed done, but the outcome carries no transcript — a claim,
+            // not evidence (`V-2`).
+            Record::outcome(step(2), 200, true, "closed by the operator")
+                .for_requirements(["L-4"]),
+        ];
+        let claimed = vec![
+            ("L-3".to_string(), Marker::Done),
+            ("L-4".to_string(), Marker::Done),
+            ("M-25".to_string(), Marker::Gated),
+            ("T-99".to_string(), Marker::Done),
+        ];
+
+        let check = check_markers(&claimed, &records);
+
+        assert_eq!(check.checked, 2, "only what the journal mentions is checked");
+        assert_eq!(check.disagreements.len(), 1);
+        assert_eq!(check.disagreements[0].requirement, "L-4");
+        assert_eq!(check.disagreements[0].claimed, Marker::Done);
+        assert_eq!(check.disagreements[0].derived, Marker::InProgress);
+        // A journal cannot confirm or refute a judgement about the outside
+        // world, so it is excluded rather than reported as wrong.
+        assert_eq!(check.not_derivable, vec!["M-25".to_string()]);
+        // Work the engine has no evidence for is not checked, and not called
+        // wrong either.
+        assert_eq!(check.unseen, vec!["T-99".to_string()]);
+        assert!(!check.is_clean());
+
+        // `V-11`: what was *not* checked is part of the answer. A checker that
+        // reports nothing wrong while having checked nothing looks identical to
+        // one that checked everything.
+        let described = check.describe();
+        assert!(described.contains("2 checked"), "{described}");
+        assert!(described.contains("1 with no journal record"), "{described}");
+        assert!(described.contains("1 not derivable"), "{described}");
     }
 
     #[test]

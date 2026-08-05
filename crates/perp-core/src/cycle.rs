@@ -82,6 +82,12 @@ pub fn remaining(source: &str, records: &[crate::journal::Record], cycle: u32, l
 /// would be a wrong number where an absent one is honest. No row in this
 /// repository carries it today.
 pub fn markers(source: &str) -> Vec<crate::verify::Marker> {
+    marked(source).into_iter().map(|(_, marker)| marker).collect()
+}
+
+/// The same, with each requirement's id — what a check needs in order to say
+/// *which* marker it disbelieves (`V-7`).
+pub fn marked(source: &str) -> Vec<(String, crate::verify::Marker)> {
     use crate::verify::Marker;
     let mut out = Vec::new();
     for line in source.lines() {
@@ -123,7 +129,7 @@ pub fn markers(source: &str) -> Vec<crate::verify::Marker> {
         if !is_requirement_id(&id) {
             continue;
         }
-        out.push(marker);
+        out.push((id, marker));
     }
     out
 }
