@@ -213,6 +213,13 @@ pub struct Prepared {
     /// Links that will not be used, and why — a peer that is not there, or a
     /// host with no room left.
     pub unavailable: Vec<(String, String)>,
+    /// The lease, as it stands after warming (`M-17`, `M-31`).
+    ///
+    /// Returned rather than dropped. `prepare` used to build a [`Vram`] on its
+    /// own stack and let it fall out of scope on the way out, so the lease
+    /// existed for the length of the function that created it and protected
+    /// nothing afterwards — which is the whole window `M-17` is about.
+    pub vram: Vram,
 }
 
 impl Prepared {
@@ -243,9 +250,10 @@ pub fn prepare(
     links: &[&Link],
     facts: &dyn Fn(&Link) -> Option<ModelFacts>,
     ttl: Duration,
+    vram: Vram,
 ) -> Prepared {
     let mut prepared = Prepared::default();
-    let mut vram = Vram::new();
+    let mut vram = vram;
     let peers = Peers::probe(lms);
 
     for link in links {
@@ -265,6 +273,13 @@ pub fn prepare(
             continue;
         }
         let Some(known) = facts(link) else {
+            // `M-31`: the slot goes back. A claim that is not followed by a
+            // load is a reservation for a model that does not exist, and the
+            // next link on the same host was refused for it — with an error
+            // naming a model nothing had loaded. Seen on a machine whose
+            // LM Studio had only an embedding model resident: every local link
+            // took this branch, and each one held a slot on the way out.
+            vram.release(link);
             prepared
                 .unavailable
                 .push((link.name.clone(), "it did not say what it has loaded (`M-7`)".into()));
@@ -272,9 +287,15 @@ pub fn prepare(
         };
         match warm(lms, link, &known, ttl) {
             Ok(warmed) => prepared.warmed.push(warmed),
-            Err(e) => prepared.unavailable.push((link.name.clone(), e.to_string())),
+            Err(e) => {
+                // The same reasoning: the load was attempted and failed, so
+                // the host has the room the claim was holding.
+                vram.release(link);
+                prepared.unavailable.push((link.name.clone(), e.to_string()));
+            }
         }
     }
+    prepared.vram = vram;
     prepared
 }
 
@@ -360,6 +381,31 @@ impl Vram {
     pub fn with_capacity(mut self, host: impl Into<String>, models: u32) -> Vram {
         self.capacity.push((host.into(), models.max(1)));
         self
+    }
+
+    /// Read `vram.<host> = <models>` out of binding entries (`M-31`).
+    ///
+    /// Without this the default of one applied to every host and could not be
+    /// changed from anywhere, so a rig with room for two 7B models was told it
+    /// had room for one — `M-17`'s lease refusing a load the hardware would
+    /// have taken. A capacity is a fact about a machine, which is what
+    /// `binding.md` is for.
+    ///
+    /// An unparseable or zero value is skipped rather than treated as zero: a
+    /// host that may hold no models at all is not a configuration, it is a
+    /// typo, and honouring it would refuse every link on that host with a
+    /// message about VRAM.
+    pub fn from_entries(entries: &[(String, String)]) -> Vram {
+        let mut vram = Vram::new();
+        for (key, value) in entries {
+            let Some(host) = key.strip_prefix("vram.") else { continue };
+            let Ok(models) = value.trim().parse::<u32>() else { continue };
+            if models == 0 {
+                continue;
+            }
+            vram = vram.with_capacity(host, models);
+        }
+        vram
     }
 
     fn capacity_of(&self, host: &str) -> u32 {
@@ -627,6 +673,103 @@ mod tests {
         let mut vram = Vram::new().with_capacity(host_of(here), 2);
         vram.claim(here).expect("first");
         vram.claim(links.get("also-here").expect("also-here")).expect("second");
+    }
+
+    /// `M-31`: a capacity is a fact about a machine, and `binding.md` is where
+    /// those live. Before this the default of one applied everywhere and could
+    /// not be changed from anywhere.
+    #[test]
+    fn a_hosts_capacity_comes_from_the_binding() {
+        let links = links();
+        let here = links.get("here").expect("here");
+        let also = links.get("also-here").expect("also-here");
+
+        let entries = vec![
+            (format!("vram.{}", host_of(here)), "2".to_string()),
+            ("gate.build".to_string(), "cargo build".to_string()),
+        ];
+        let mut vram = Vram::from_entries(&entries);
+        vram.claim(here).expect("first");
+        vram.claim(also).expect("the binding said this host holds two");
+    }
+
+    /// A typo must not quietly become a host that may hold nothing, which
+    /// would refuse every link on it with a message about VRAM.
+    #[test]
+    fn an_unreadable_or_zero_capacity_falls_back_to_the_default() {
+        let links = links();
+        let here = links.get("here").expect("here");
+        let host = host_of(here);
+
+        for bad in ["nonsense", "0", "-1", ""] {
+            let entries = vec![(format!("vram.{host}"), bad.to_string())];
+            let mut vram = Vram::from_entries(&entries);
+            vram.claim(here).expect("the default still admits one");
+            assert!(
+                vram.claim(links.get("also-here").expect("also")).is_err(),
+                "`{bad}` must not widen the default"
+            );
+        }
+    }
+
+    /// `M-31`, the live bug: a claim that is not followed by a load holds a
+    /// slot for a model that does not exist.
+    ///
+    /// This is the branch that fired on a real machine — LM Studio was up with
+    /// only an embedding model resident, so `facts` returned `None` for every
+    /// local link. Each one claimed, bailed, and kept its slot, and the second
+    /// link on the host was then refused with an error naming a model nothing
+    /// had loaded.
+    #[test]
+    fn a_link_that_never_loaded_does_not_keep_holding_the_host() {
+        let links = links();
+        let here = links.get("here").expect("here");
+        let also = links.get("also-here").expect("also-here");
+        let both: Vec<&Link> = vec![here, also];
+
+        // Nothing reports any facts, so every link takes the `M-7` branch.
+        let prepared = prepare(
+            &Lms::new().with_program("perp-no-such-lms"),
+            &both,
+            &|_| None,
+            Duration::from_secs(60),
+            Vram::new(),
+        );
+
+        // Both are unavailable, and — the point — *neither* is refused for
+        // want of room, because the one that bailed gave its slot back.
+        assert_eq!(prepared.unavailable.len(), 2, "{:?}", prepared.unavailable);
+        for (link, why) in &prepared.unavailable {
+            assert!(
+                !why.contains("would not fit"),
+                "{link} was refused for a model that never loaded: {why}"
+            );
+        }
+        assert!(
+            prepared.vram.resident_on(&host_of(here)).is_empty(),
+            "the lease still holds {:?}",
+            prepared.vram.resident_on(&host_of(here))
+        );
+    }
+
+    /// `M-31`: the lease comes back out rather than falling off the stack.
+    #[test]
+    fn the_lease_survives_the_call_that_built_it() {
+        let links = links();
+        let here = links.get("here").expect("here");
+        let prepared = prepare(
+            &Lms::new().with_program("perp-no-such-lms"),
+            &[here],
+            &|_| None,
+            Duration::from_secs(60),
+            Vram::new().with_capacity(host_of(here), 3),
+        );
+        // The capacity handed in is the capacity handed back — the returned
+        // lease is the one that was used, not a fresh default.
+        let mut vram = prepared.vram;
+        for link in [here, links.get("also-here").expect("also")] {
+            vram.claim(link).expect("room for three was configured and survived");
+        }
     }
 
     #[test]

@@ -89,6 +89,13 @@ tokens are the currency this project has no calibration for yet, and inventing a
 number would produce a ceiling that stops good runs and permits bad ones. It
 goes in once a cycle has run long enough to say what normal looks like.
 
+**VRAM (`M-17`, `M-31`):** No `vram.*` line is declared here, so every host
+keeps the default of **one model**. A machine with room for more says so by
+host, exactly as `host_of` names it — `vram.host:localhost:1234 = 2`, or
+`vram.device:KUR = 2` for an LM Link peer. The lease refuses the second load
+rather than queueing it, because a second large model on one GPU is an
+out-of-memory error several minutes later rather than a wait.
+
 **Repo map (T-27):** Measured and inconclusive. Prior measurement: 6 paired runs showed 2 wins, 2 losses, 2 ties. No advantage. `map.budget = 0` (disabled) remains the default. Binding now supports `map.budget` for future testing if parsing improves (T-27).
 
 An eight-hour cycle and a dollar is deliberately an overnight run, not a

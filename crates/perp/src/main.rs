@@ -533,11 +533,20 @@ fn warm_local_links(
         found
     };
 
+    // `M-31`: how much each host may hold is a fact about a machine, so it
+    // comes from the binding. With nothing declared every host keeps the
+    // default of one, which is what it had before there was a way to say
+    // otherwise.
+    let entries: Vec<(String, String)> =
+        binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    let vram = perp_core::local::Vram::from_entries(&entries);
+
     let prepared = perp_core::local::prepare(
         &lms,
         &local,
         &facts,
         std::time::Duration::from_secs(perp_core::local::DEFAULT_TTL_SECS),
+        vram,
     );
     if verbose && !prepared.describe().is_empty() {
         eprint!("· warm\n{}", prepared.describe());
