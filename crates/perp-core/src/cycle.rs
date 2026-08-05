@@ -928,6 +928,20 @@ fn blocked_why(failed: u32, gates_green: Option<bool>) -> String {
 ///
 /// Artifacts went the same way earlier and for the weaker version of the same
 /// reason; the state file is the one the rule was actually written about.
+/// What a batch commits alongside its work: the journal, and nothing else.
+///
+/// **Not the artifacts.** They were staged here and `perp init` writes a
+/// `.gitignore` that ignores them, for a reason it states plainly — each one is
+/// a projection of the journal, regenerable with `perp artifact all`, and
+/// committing them means seven files churning on every closed step for no
+/// information the journal does not already hold. So the harness was asking git
+/// to stage what the harness had told git to ignore, `git add` exited 1, and
+/// **every landing failed**: `land_batch` returned the error, `L-29`'s warning
+/// carried it, and until that warning had a reader the batch simply reported
+/// success with nothing committed. Janitor's `J-19` was written, staged and
+/// lost exactly this way.
+///
+/// The journal is the evidence. A rendering of it is not more evidence.
 fn evidence_paths(root: &std::path::Path, binding: &crate::Binding) -> Vec<String> {
     let mut paths = Vec::new();
     if let Ok(path) = binding.get("out.journal") {
@@ -935,10 +949,6 @@ fn evidence_paths(root: &std::path::Path, binding: &crate::Binding) -> Vec<Strin
         if root.join(&path).exists() {
             paths.push(path);
         }
-    }
-    let artifacts = crate::artifact::DIR.to_string();
-    if root.join(&artifacts).exists() {
-        paths.push(artifacts);
     }
     paths
 }
@@ -1442,7 +1452,16 @@ out.state = .harness/state.md
 
         let paths = evidence_paths(&dir, &binding);
         assert!(paths.contains(&".harness/journal.jsonl".to_string()), "{paths:?}");
-        assert!(paths.contains(&crate::artifact::DIR.to_string()), "{paths:?}");
+        // And **not** the artifacts, though they are sitting right there.
+        // `perp init` writes a `.gitignore` that ignores them, so staging them
+        // made `git add` exit 1 and every landing fail — the harness asking git
+        // to stage what the harness had told git to ignore. Janitor's `J-19`
+        // was written, staged and lost that way, and the reason was invisible
+        // until `L-29` gave the warning a reader.
+        assert!(
+            !paths.contains(&crate::artifact::DIR.to_string()),
+            "a rendering of the journal is not more evidence than the journal: {paths:?}"
+        );
         assert!(
             !paths.contains(&".harness/state.md".to_string()),
             "a path the binding names but nothing has written is not staged: {paths:?}"
