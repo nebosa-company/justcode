@@ -355,6 +355,31 @@ impl<A: crate::engine::Work, B: crate::engine::Work> crate::engine::Work for The
         self.first.at_step(step);
         self.second.at_step(step);
     }
+
+    /// `V-5`: forward the review to whichever half just ran.
+    ///
+    /// Without this the trait default answers `None`, and a batch is always a
+    /// `Then` — so the engine asked the *wrapper* for a verdict, got nothing,
+    /// and no verifier ever ran. `Agent::review` was written, tested, and
+    /// unreachable through the only path that reaches an agent.
+    ///
+    /// That is the second time `V-5` has shipped unrun. Its own doc comment
+    /// records the first: `verify::independence` tested, the renderer tested,
+    /// `Role::Verifier` in the router, and every one of 129 calls made as
+    /// `coder`. Implementing `Agent::review` fixed the half that was missing and
+    /// left this one. Janitor's first batch: fifteen calls, all `coder`, no
+    /// verdict.
+    ///
+    /// Keyed on `on_second` rather than trying both, so the agent is reviewed
+    /// after each of its own steps and the gates — which have nothing to review
+    /// — are not asked on its behalf.
+    fn review(&mut self) -> Option<String> {
+        if self.on_second {
+            self.second.review()
+        } else {
+            self.first.review()
+        }
+    }
 }
 
 /// What one phase of the cycle did.
@@ -1150,6 +1175,76 @@ path.requirements = .harness/perpetum.md
     /// Cycle 10 filed three green gates against `L-23`, `M-29` and `M-27` on a
     /// cycle that changed no source at all. The gates were real and green; they
     /// had measured a tree none of those requirements had touched.
+    /// `V-5`: a `Then` must forward the review to the half that ran.
+    ///
+    /// The default is `None`, and a batch is always a `Then`, so the engine
+    /// asked the wrapper for a verdict and got nothing — no verifier ever ran
+    /// through the only path that reaches an agent. Janitor's first batch made
+    /// fifteen calls, every one as `coder`, and recorded no verdict.
+    ///
+    /// The second time this requirement has shipped unrun: `Agent::review`'s
+    /// own doc records the first, when 129 calls went out as `coder` and the
+    /// configured verifier was asked for nothing.
+    #[test]
+    fn a_review_is_not_swallowed_by_the_wrapper_around_the_agent() {
+        use crate::engine::{Done, Task, Work};
+
+        /// A half that has something to say about its own work.
+        #[derive(Default)]
+        struct Reviewed {
+            done: bool,
+        }
+        impl Work for Reviewed {
+            fn next(&mut self) -> Option<Task> {
+                if self.done {
+                    return None;
+                }
+                Some(Task::new("work"))
+            }
+            fn perform(&mut self, _task: &Task) -> Done {
+                self.done = true;
+                Done::ok("wrote something")
+            }
+            fn spend(&self) -> Spend {
+                Spend::default()
+            }
+            fn review(&mut self) -> Option<String> {
+                Some("verdict: a second link read it".into())
+            }
+        }
+
+        /// A half with nothing to review — a gate.
+        #[derive(Default)]
+        struct Silent;
+        impl Work for Silent {
+            fn next(&mut self) -> Option<Task> {
+                None
+            }
+            fn perform(&mut self, _task: &Task) -> Done {
+                Done::ok("gate")
+            }
+            fn spend(&self) -> Spend {
+                Spend::default()
+            }
+        }
+
+        let mut leg = Then::new(Reviewed::default(), Silent);
+
+        // While the first half is running, its verdict reaches the engine.
+        let task = Work::next(&mut leg).expect("the first half has work");
+        leg.perform(&task);
+        assert_eq!(
+            Work::review(&mut leg).as_deref(),
+            Some("verdict: a second link read it"),
+            "the agent's review must not be swallowed by the wrapper (`V-5`)"
+        );
+
+        // Once it has handed over, the gates are asked instead — and a gate has
+        // nothing to review, so the agent is not re-reviewed on its behalf.
+        assert!(Work::next(&mut leg).is_none(), "both halves are spent");
+        assert_eq!(Work::review(&mut leg), None, "a gate reviews nothing");
+    }
+
     #[test]
     fn a_gate_cites_only_the_requirements_that_delivered() {
         use crate::engine::{Done, Task, Work};
