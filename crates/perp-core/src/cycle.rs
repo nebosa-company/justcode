@@ -589,13 +589,18 @@ impl Driver<'_> {
         cycle: u32,
         stage: &str,
         report: &Report,
+        base: Option<&str>,
     ) -> Result<()> {
+        // No base, no red run. Without a commit to compare against there is no
+        // "tree without the change", and running it anyway would compare the
+        // work with itself — which is the bug this argument exists to fix.
+        let Some(base) = base else { return Ok(()) };
         let Ok(gate) = crate::gate::Gate::named(engine.session().binding(), "test") else {
             return Ok(());
         };
         let repo = crate::git::Repo::at(&self.root);
 
-        let mut change = repo.plumbing_all(&["diff", "HEAD"]).unwrap_or_default();
+        let mut change = repo.plumbing_all(&["diff", base]).unwrap_or_default();
         // The untracked half. `status --porcelain` marks these `??`; their whole
         // content is new, so every line of it counts as added.
         for line in repo.plumbing_all(&["status", "--porcelain"]).unwrap_or_default().lines() {
@@ -613,7 +618,7 @@ impl Driver<'_> {
             return Ok(());
         }
 
-        let red = crate::verify::RedRun::perform(&repo, &gate, "HEAD")?;
+        let red = crate::verify::RedRun::perform(&repo, &gate, base)?;
         let verdict = red.verdict();
         crate::verbose::say("v-18", &format!("red run: {}", verdict.describe()));
 
@@ -673,6 +678,20 @@ impl Driver<'_> {
         } else {
             open_branch(&self.root, engine.session().binding(), cycle, batch)
         };
+
+        // `V-18`: where this batch started, for the red run below.
+        //
+        // Captured **here**, before any step runs, and not read as `HEAD` later.
+        // A step commits what it touched as it goes (`T-22`), so by the time the
+        // red run happens `HEAD` already contains the work — and a red run whose
+        // "without the change" tree *has* the change compiles the same code
+        // twice, passes both times, and reports `ProvesNothing` about a test it
+        // never actually tried.
+        //
+        // Measured on Janitor's first batch: the agent checkpointed at
+        // `c1/b1/s01`, the red run ran at `s04`, and eleven real tests were
+        // written off as proving nothing.
+        let base = crate::git::Repo::at(&self.root).head_sha().ok();
 
         // L-17: Initialize orchestrator and create container if enabled (`L-17`).
         let feature_id = format!("c{cycle}/b{batch}");
@@ -747,7 +766,7 @@ impl Driver<'_> {
         //
         // Before the commit below, deliberately: the batch's edits are still
         // uncommitted here, so `HEAD` is the tree without them.
-        if let Err(e) = self.red_run(&mut engine, cycle, &stage, &report) {
+        if let Err(e) = self.red_run(&mut engine, cycle, &stage, &report, base.as_deref()) {
             crate::verbose::say("v-18", &format!("red run skipped: {e}"));
         }
 

@@ -184,8 +184,12 @@ impl RedRun {
     /// throwaway worktree at `at` is the same tree without the change, and the
     /// live tree is never touched.
     ///
-    /// `at` is normally `HEAD` — inside a batch the agent's edits are not
-    /// committed yet, so `HEAD` *is* the tree without them.
+    /// `at` is **where the work started**, which is not `HEAD`. A step commits
+    /// what it touched as it goes (`T-22`), so by the time a batch's red run
+    /// happens `HEAD` already contains the change — and comparing against it
+    /// compiles the same code twice, passes both times, and reports
+    /// `ProvesNothing` about a test it never tried. Janitor's first batch wrote
+    /// eleven real tests and had them written off exactly that way.
     ///
     /// The gate runs **with** the change first: it is the result the loop needs
     /// either way, so a sandbox that cannot be built costs the verdict rather
@@ -194,14 +198,22 @@ impl RedRun {
         let with = gate.run()?;
 
         // Whether the tree differs from `at` at all. Empty means both runs were
-        // over identical trees and neither result means anything (`V-10`) — the
-        // honest answer for a step that wrote nothing.
+        // over identical trees and neither result means anything (`V-10`).
         //
-        // `status --porcelain` rather than `diff HEAD`, because a diff does not
-        // mention **untracked** files: a step whose whole change is a new test
-        // file would have read as "the tree never differed" and had its verdict
-        // thrown away, which is the opposite of what `V-3` is for.
-        let change = repo.plumbing_all(&["status", "--porcelain"]).unwrap_or_default();
+        // Measured against `at`, not against `HEAD`. Those are the same thing
+        // only while nothing has been committed since, and a step commits what
+        // it touched as it goes (`T-22`) — so `status --porcelain` alone called
+        // a batch's committed work "no change at all". Both halves matter: the
+        // diff carries everything committed since `at` *and* the working tree,
+        // and the untracked names carry a new file, which a diff never mentions
+        // and which is how a new test usually arrives.
+        let mut change = repo.plumbing_all(&["diff", at]).unwrap_or_default();
+        for line in repo.plumbing_all(&["status", "--porcelain"]).unwrap_or_default().lines() {
+            if let Some(path) = line.trim().strip_prefix("?? ") {
+                change.push_str(path);
+                change.push('\n');
+            }
+        }
 
         // The repository's own path is in the name, not just the gate's.
         // Without it every red run in one process shares a directory: `at` is
@@ -1106,6 +1118,37 @@ mod tests {
             std::fs::read_to_string(root.join("marker.txt")).expect("read"),
             "new\n",
             "the working tree must survive the red run unchanged"
+        );
+    }
+
+    /// `V-18`: work **committed** since the baseline is still the change.
+    ///
+    /// The bug this pins, found on Janitor's first real batch. A step commits
+    /// what it touched as it goes (`T-22`), so passing `HEAD` compared the work
+    /// against itself: same code both runs, both green, `ProvesNothing` — and
+    /// eleven real tests written off as proving nothing. The baseline has to be
+    /// where the batch *started*.
+    #[test]
+    fn a_change_already_committed_is_still_measured_against_where_work_began() {
+        let (repo, root) = red_repo("verify-red-committed", "old\n");
+        let base = repo.head_sha().expect("the starting sha");
+
+        // The work, committed — which is what a checkpointing step leaves.
+        std::fs::write(root.join("marker.txt"), "new\n").expect("write");
+        repo.stage(&["marker.txt"]).expect("stage");
+        repo.commit(&crate::git::CommitMessage::new("Do the work")).expect("commit");
+
+        // Against where the batch began: red without it, green with it.
+        let red = RedRun::perform(&repo, &looks_for_new(&root), &base).expect("red run");
+        assert_eq!(red.verdict(), RedVerdict::Earned, "{}", red.evidence());
+
+        // And against `HEAD` — the old behaviour — the same work proves
+        // nothing, because `HEAD` is now the work.
+        let against_head = RedRun::perform(&repo, &looks_for_new(&root), "HEAD").expect("red run");
+        assert_eq!(
+            against_head.verdict(),
+            RedVerdict::NotActuallyChanged,
+            "comparing committed work against HEAD compares it with itself"
         );
     }
 
