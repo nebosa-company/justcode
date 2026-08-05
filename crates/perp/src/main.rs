@@ -242,6 +242,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         Some("gate") => cmd_gate(&args[1..]),
         Some("resume") => cmd_resume(&args[1..]),
         Some("check") => cmd_check(&args[1..]),
+        Some("redrun") => cmd_redrun(&args[1..]),
         Some("links") => cmd_links(&args[1..]),
         Some("ask") => cmd_ask(&args[1..]),
         Some("cost") => cmd_cost(&args[1..]),
@@ -827,6 +828,42 @@ fn cmd_check_markers(args: &[&str]) -> std::result::Result<(), String> {
         "{} marker(s) the journal does not support. A person marks after reading the \
          evidence (`V-2`, `V-12`); this only says which claims the journal cannot back.",
         check.disagreements.len()
+    ))
+}
+
+/// `perp redrun --gate <name> [--at <ref>]` — `V-3`'s red run.
+///
+/// Runs the gate against the tree **without** the working-tree change (a
+/// throwaway worktree at `--at`, default `HEAD`) and then **with** it, stores
+/// both transcripts, and says whether the test earned its place. A test that
+/// passes both ways does not satisfy Perpetum's gate 4.
+///
+/// Operator-invoked, and that is the limitation worth naming: `V-3` says a new
+/// test *must* be run this way, and nothing in the batch does it automatically
+/// yet. Making that automatic needs a rule for "this change added a test" that
+/// holds for any project, and a decision about paying for a second gate run on
+/// every step. Until then the mechanism exists, runs, and is a command rather
+/// than a promise.
+fn cmd_redrun(args: &[&str]) -> std::result::Result<(), String> {
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let name = flag(args, "--gate")
+        .ok_or_else(|| "which gate? `perp redrun --gate test`".to_string())?;
+    let at = flag(args, "--at").unwrap_or("HEAD");
+
+    let gate = perp_core::gate::Gate::named(&binding, name).map_err(|e| e.to_string())?;
+    let repo = perp_core::git::Repo::at(binding.root());
+    let red = perp_core::verify::RedRun::perform(&repo, &gate, at).map_err(|e| e.to_string())?;
+
+    // The transcripts, not just the verdict — a red run reported as a verdict
+    // alone is the self-reported success `V-2` refuses.
+    print!("{}", red.evidence());
+
+    if red.verdict().is_earned() {
+        return Ok(());
+    }
+    Err(format!(
+        "the red run did not earn a green: {} (`V-3`)",
+        red.verdict().describe()
     ))
 }
 

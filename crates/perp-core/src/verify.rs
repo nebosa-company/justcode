@@ -170,6 +170,72 @@ impl RedRun {
         self
     }
 
+    /// Actually run it (`V-3`).
+    ///
+    /// The type was written, tested, and never executed: nothing built a
+    /// `RedRun`, so a test that cannot fail passed the gate exactly like one
+    /// that earns its place — the lie this mechanism exists to catch, going
+    /// uncaught.
+    ///
+    /// **Through a worktree, not a stash.** The original design stashed the
+    /// change, ran the gate and put it back, which `T-26` was built to make
+    /// unnecessary: an unattended loop that dies between the stash and the pop
+    /// leaves the operator's work in a ref they have to know to look for. A
+    /// throwaway worktree at `at` is the same tree without the change, and the
+    /// live tree is never touched.
+    ///
+    /// `at` is normally `HEAD` — inside a batch the agent's edits are not
+    /// committed yet, so `HEAD` *is* the tree without them.
+    ///
+    /// The gate runs **with** the change first: it is the result the loop needs
+    /// either way, so a sandbox that cannot be built costs the verdict rather
+    /// than the gate.
+    pub fn perform(repo: &Repo, gate: &crate::gate::Gate, at: &str) -> Result<RedRun> {
+        let with = gate.run()?;
+
+        // Whether the tree differs from `at` at all. Empty means both runs were
+        // over identical trees and neither result means anything (`V-10`) — the
+        // honest answer for a step that wrote nothing.
+        //
+        // `status --porcelain` rather than `diff HEAD`, because a diff does not
+        // mention **untracked** files: a step whose whole change is a new test
+        // file would have read as "the tree never differed" and had its verdict
+        // thrown away, which is the opposite of what `V-3` is for.
+        let change = repo.plumbing_all(&["status", "--porcelain"]).unwrap_or_default();
+
+        // The repository's own path is in the name, not just the gate's.
+        // Without it every red run in one process shares a directory: `at` is
+        // almost always `HEAD` and gate names repeat across workspaces, so two
+        // running at once would hand each other their worktrees. Found by two
+        // tests in this file doing exactly that.
+        let scratch = std::env::temp_dir().join(format!(
+            "perp-redrun-{}-{}",
+            std::process::id(),
+            crate::watchdog::content_hash(
+                format!("{at}|{}|{}", gate.name, repo.root().display()).as_bytes()
+            )
+        ));
+        let _ = std::fs::remove_dir_all(&scratch);
+        repo.add_worktree(&scratch, at)?;
+
+        // The gate's working directory, in the copy rather than the live tree.
+        // `gate.cwd` is absolute and under the repository, so the same relative
+        // path is the same place in the worktree.
+        let relative =
+            gate.cwd.strip_prefix(repo.root()).unwrap_or(std::path::Path::new(""));
+        let sandboxed = crate::gate::Gate { cwd: scratch.join(relative), ..gate.clone() };
+        let without = sandboxed.run();
+
+        // Removed before the result is examined, so an error path cannot leave
+        // one behind — `G-11` says a worktree is never left stale, and a
+        // sandbox that outlives its command is a stale worktree with a friendly
+        // name.
+        repo.remove_worktree(&scratch);
+        let _ = std::fs::remove_dir_all(&scratch);
+
+        Ok(RedRun::new(without?, with, b"", change.as_bytes()))
+    }
+
     pub fn verdict(&self) -> RedVerdict {
         if self.hash_without == self.hash_with {
             return RedVerdict::NotActuallyChanged;
@@ -881,6 +947,95 @@ mod tests {
     /// The open backlog, for the tests below.
     fn open(ids: &[&str]) -> BTreeSet<String> {
         ids.iter().map(|id| (*id).to_string()).collect()
+    }
+
+    /// A real repository with one committed file, for the red run.
+    #[allow(clippy::expect_used)]
+    fn red_repo(tag: &str, committed: &str) -> (Repo, std::path::PathBuf) {
+        let root = crate::testutil::tmpdir(tag);
+        let repo = Repo::at(&root);
+        for args in [
+            vec!["init", "-q", "-b", "perp/fixture"],
+            vec!["config", "user.email", "loop@perpetum.test"],
+            vec!["config", "user.name", "Perpetum test"],
+            vec!["config", "commit.gpgsign", "false"],
+        ] {
+            repo.run_unchecked(&args).expect("git");
+        }
+        std::fs::write(root.join("marker.txt"), committed).expect("write");
+        repo.stage(&["marker.txt"]).expect("stage");
+        repo.commit(&crate::git::CommitMessage::new("Add the marker")).expect("commit");
+        (repo, root)
+    }
+
+    /// A gate that passes only when `marker.txt` contains `new`.
+    fn looks_for_new(root: &std::path::Path) -> crate::gate::Gate {
+        let command = if cfg!(windows) {
+            "cmd /C \"findstr new marker.txt\""
+        } else {
+            "sh -c \"grep new marker.txt\""
+        };
+        crate::gate::Gate {
+            name: "check".into(),
+            command: command.into(),
+            cwd: root.to_path_buf(),
+            timeout: std::time::Duration::from_secs(60),
+            runtime: crate::runtime::Runtime::Host,
+            lends: Vec::new(),
+            offline: false,
+        }
+    }
+
+    /// `V-3`: the red run, actually run.
+    ///
+    /// Red without the change, green with it, against a real repository and a
+    /// real gate. Nothing built one of these before, so a test that could not
+    /// fail passed the gate exactly like one that earns its place.
+    #[test]
+    fn a_test_that_earns_its_place_fails_without_the_change_and_passes_with_it() {
+        let (repo, root) = red_repo("verify-red-earned", "old\n");
+        // The change, uncommitted — which is where a batch's edits live.
+        std::fs::write(root.join("marker.txt"), "new\n").expect("write");
+
+        let red = RedRun::perform(&repo, &looks_for_new(&root), "HEAD").expect("red run");
+
+        assert_eq!(red.verdict(), RedVerdict::Earned, "{}", red.evidence());
+        assert!(!red.without.is_green(), "the tree without the change must fail");
+        assert!(red.with.is_green(), "and the tree with it must pass");
+        // `V-2`: both transcripts are kept, not just the verdict.
+        assert!(red.evidence().contains("without the change"), "{}", red.evidence());
+        assert!(red.evidence().contains("with the change"), "{}", red.evidence());
+
+        // The live tree is untouched — no stash, nothing to restore.
+        assert_eq!(
+            std::fs::read_to_string(root.join("marker.txt")).expect("read"),
+            "new\n",
+            "the working tree must survive the red run unchanged"
+        );
+    }
+
+    /// The lie the mechanism exists for: a test that passes either way.
+    #[test]
+    fn a_test_that_cannot_fail_proves_nothing() {
+        let (repo, root) = red_repo("verify-red-useless", "new\n");
+        // A change that has nothing to do with what the gate checks.
+        std::fs::write(root.join("unrelated.txt"), "whatever\n").expect("write");
+
+        let red = RedRun::perform(&repo, &looks_for_new(&root), "HEAD").expect("red run");
+
+        assert_eq!(red.verdict(), RedVerdict::ProvesNothing, "{}", red.evidence());
+        assert!(!red.verdict().is_earned(), "and it does not satisfy gate 4");
+    }
+
+    /// `V-10`: a step that changed nothing gets a meaningless result and is
+    /// told so, rather than handed a green.
+    #[test]
+    fn a_red_run_over_an_unchanged_tree_is_meaningless() {
+        let (repo, root) = red_repo("verify-red-unchanged", "new\n");
+
+        let red = RedRun::perform(&repo, &looks_for_new(&root), "HEAD").expect("red run");
+
+        assert_eq!(red.verdict(), RedVerdict::NotActuallyChanged, "{}", red.evidence());
     }
 
     /// `V-15`, on the change that argued for it.
