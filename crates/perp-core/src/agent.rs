@@ -907,7 +907,19 @@ impl<'a> Agent<'a> {
     /// "did this step do anything" question (`V-13`).
     fn record_touched(&mut self, call: &Call) {
         use crate::tool::Tool;
-        if !matches!(call.tool, Tool::Write | Tool::Patch | Tool::Delete) {
+        // `apply` belongs here as much as `patch` does. `T-21` added it as the
+        // better multi-edit path — "prefer this over several `patch` calls" is
+        // what its own description tells the model — and it was left out of
+        // this list, so every write made through it was invisible to the four
+        // things that read `touched`.
+        //
+        // Measured on Janitor's third batch. The step applied six edits to
+        // `rule.rs` and forty-seven lines landed on disk; `L-25` then told the
+        // model "nothing has been written, patched or deleted yet", `V-13`
+        // failed the step for changing nothing, and `commit_step` staged an
+        // empty set, so the work was left uncommitted in the tree. The tool
+        // worked perfectly and nothing downstream knew it had run.
+        if !matches!(call.tool, Tool::Write | Tool::Patch | Tool::Delete | Tool::Apply) {
             return;
         }
         let Some(path) = call.get("path") else { return };
@@ -1711,6 +1723,51 @@ path: f.txt
     /// and if that refusal counted as progress the loop could close a step
     /// green by trying to mark itself done — which is the exact move `V-12`
     /// exists to stop.
+    #[test]
+    fn an_apply_counts_as_having_changed_something() {
+        // `T-21`'s `apply` tells the model to prefer it over several `patch`
+        // calls, and it was missing from `record_touched` — so a step that used
+        // it wrote to disk and reported having changed nothing.
+        //
+        // Janitor's third batch, exactly: six edits applied to `rule.rs`,
+        // forty-seven lines on disk, `L-25` telling the model nothing had been
+        // written, `V-13` failing the step, and `commit_step` staging an empty
+        // set so the work never left the working tree.
+        let dir = tmpdir("agent-apply-touched");
+        std::fs::write(dir.join("f.txt"), "before\n").expect("write");
+
+        let edits = r#"[{"expect": "before", "replace": "after"}]"#;
+        let transport = Scripted::new(vec![
+            &format!(
+                "Editing it.\n\n```perp-call\ntool: apply\npath: f.txt\nedits: {edits}\n```"
+            ),
+            "Done.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("T-21", "edit it", "apply an edit").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        assert_eq!(
+            std::fs::read_to_string(dir.join("f.txt")).expect("read"),
+            "after\n",
+            "the edit reached the disk"
+        );
+        assert_eq!(
+            Work::touched(&agent),
+            vec!["f.txt".to_string()],
+            "and the step knows it (`V-13`, `G-3`)"
+        );
+        assert!(matches!(done, Done::Ok { .. }), "a step that wrote is not a step that read: {done:?}");
+    }
+
     #[test]
     fn a_refused_write_is_not_progress() {
         let dir = tmpdir("agent-refused-write");
