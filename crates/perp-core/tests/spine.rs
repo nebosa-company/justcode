@@ -87,7 +87,7 @@ fn the_state_file_is_a_projection_and_survives_a_rewrite() {
 
     journal.append(&Record::intent(step("c1/b1/s01"), 10, "first")).expect("a");
     journal.append(&Record::outcome(step("c1/b1/s01"), 20, true, "first")).expect("b");
-    let long = render(&replay(&journal.read_all().expect("read")), 1_700_000_000);
+    let long = render(&replay(&journal.read_all().expect("read")), 1_700_000_000, None);
     write_atomic(&state_path, &long).expect("write");
 
     journal
@@ -96,7 +96,7 @@ fn the_state_file_is_a_projection_and_survives_a_rewrite() {
                 .with_detail("error: something specific and verbatim"),
         )
         .expect("c");
-    let longer = render(&replay(&journal.read_all().expect("read")), 1_700_000_000);
+    let longer = render(&replay(&journal.read_all().expect("read")), 1_700_000_000, None);
     write_atomic(&state_path, &longer).expect("rewrite");
 
     let on_disk = std::fs::read_to_string(&state_path).expect("read state");

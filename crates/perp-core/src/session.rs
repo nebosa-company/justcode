@@ -132,6 +132,10 @@ pub struct StepGuard<'a> {
     /// and `/explain <id>` finds an intent with no result — which is how a
     /// requirement with a green gate reads as never worked on (`C-7`).
     requirements: Vec<String>,
+    /// The requirements source, for `V-8`'s counts. `None` when the binding
+    /// does not resolve one — the state file then simply has no Requirements
+    /// section, rather than one full of zeroes that reads as "nothing left".
+    requirements_source: Option<PathBuf>,
     closed: bool,
 }
 
@@ -178,7 +182,16 @@ impl StepGuard<'_> {
             return Ok(());
         };
         let projection = replay(&self.journal.read_all()?);
-        crate::atomic::write_atomic(path, &crate::state::render(&projection, time::now()))
+        // `V-8`: counted from the source's own markers each time the state is
+        // rewritten, so the figure cannot drift from the file it describes.
+        let counts = self.requirements_source.as_ref().map(|path| {
+            let source = crate::layout::requirements_text(path);
+            crate::verify::Counts::of(&crate::cycle::markers(&source))
+        });
+        crate::atomic::write_atomic(
+            path,
+            &crate::state::render(&projection, time::now(), counts.as_ref()),
+        )
     }
 }
 
@@ -265,6 +278,7 @@ impl Session {
             state_path: self.binding.resolve("out.state").ok(),
             step,
             requirements: requirements.to_vec(),
+            requirements_source: self.binding.resolve("path.requirements").ok(),
             closed: false,
         })
     }

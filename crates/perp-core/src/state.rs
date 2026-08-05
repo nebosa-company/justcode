@@ -135,7 +135,7 @@ pub fn replay(records: &[Record]) -> Projection {
 
 /// Render the state file (`L-4`). Generated — the header says so, because a
 /// hand-edit here is a bug that looks like a fact.
-pub fn render(projection: &Projection, at: i64) -> String {
+pub fn render(projection: &Projection, at: i64, counts: Option<&crate::verify::Counts>) -> String {
     let mut out = String::new();
 
     let cycle = projection.cycle.map(|c| c.to_string()).unwrap_or_else(|| "—".into());
@@ -170,6 +170,28 @@ pub fn render(projection: &Projection, at: i64) -> String {
         projection.done.len(),
         projection.blocked.len()
     ));
+
+    // `V-8`: requirements, counted by what they actually are. Steps and
+    // requirements are different things and the line above counts steps —
+    // a reader wanting "how much is delivered" was being handed neither.
+    //
+    // `describe` never prints `done / total`, because a gated item drifts into
+    // the numerator the moment somebody rounds. "8 of 8 delivered" while three
+    // wait on a human is the specific lie the requirement names.
+    if let Some(counts) = counts {
+        // "Delivery", not "Requirements" — `## Requirements touched` is
+        // already a section below, and a reader scanning for one heading
+        // finding the other is a worse failure than a duller name.
+        out.push_str("## Delivery\n\n");
+        out.push_str(&format!("- {}\n", counts.describe()));
+        if counts.gated > 0 || counts.blocked > 0 || counts.conflicting > 0 {
+            out.push_str(
+                "- Gated, blocked and conflicting are counted apart from delivered, and stay \
+                 that way until their reason changes (`V-8`).\n",
+            );
+        }
+        out.push('\n');
+    }
 
     out.push_str("## Blocked\n\n");
     if projection.blocked.is_empty() {
@@ -318,7 +340,7 @@ mod tests {
         let projection = replay(&records);
         assert_eq!(projection.pending_btw.len(), 1, "a note is not waiting for anything");
 
-        let rendered = render(&projection, 1_700_000_000);
+        let rendered = render(&projection, 1_700_000_000, None);
         let section = rendered
             .split("## Waiting from `/btw`")
             .nth(1)
@@ -340,7 +362,7 @@ mod tests {
         let mut records = closed_pair("c1/b1/s01", true, "did a thing");
         records.extend(closed_pair("c2/b1/s02", false, "gate build is red"));
 
-        let rendered = render(&replay(&records), 100);
+        let rendered = render(&replay(&records), 100, None);
         assert!(rendered.contains("## History"), "{rendered}");
         assert!(rendered.contains("| Cycle | Steps |"), "the header is one definition");
         assert!(rendered.contains("| 1 | 1 | 0 |"), "cycle 1: one step, none red:\n{rendered}");
@@ -353,8 +375,34 @@ mod tests {
 
     #[test]
     fn a_state_file_with_no_asides_carries_no_empty_heading() {
-        let rendered = render(&replay(&closed_pair("c1/b1/s01", true, "did a thing")), 100);
+        let rendered = render(&replay(&closed_pair("c1/b1/s01", true, "did a thing")), 100, None);
+        assert!(
+            !rendered.contains("## Delivery"),
+            "no source, no section — better than a row of zeroes reading as nothing left"
+        );
         assert!(!rendered.contains("Waiting from"), "{rendered}");
+    }
+
+    /// `V-8`: the state file counts requirements apart from steps, and gated
+    /// apart from delivered.
+    #[test]
+    fn the_state_file_counts_gated_work_apart_from_delivered() {
+        let counts = crate::verify::Counts {
+            done: 5,
+            gated: 2,
+            blocked: 1,
+            ..crate::verify::Counts::default()
+        };
+        let rendered =
+            render(&replay(&closed_pair("c1/b1/s01", true, "did a thing")), 100, Some(&counts));
+
+        assert!(rendered.contains("## Delivery"), "{rendered}");
+        assert!(rendered.contains("5 of 8 delivered"), "{rendered}");
+        assert!(rendered.contains("2 gated"), "{rendered}");
+        assert!(rendered.contains("1 blocked"), "{rendered}");
+        // The lie the requirement names: five delivered must never read as
+        // "5 of 5" because the gated ones were folded in or dropped.
+        assert!(!rendered.contains("5 of 5"), "{rendered}");
     }
 
     fn closed_pair(id: &str, ok: bool, summary: &str) -> Vec<Record> {
@@ -369,7 +417,7 @@ mod tests {
         let projection = replay(&[]);
         assert_eq!(projection.open_step, None);
         assert!(projection.done.is_empty());
-        assert!(render(&projection, 0).contains("Nothing recorded yet"));
+        assert!(render(&projection, 0, None).contains("Nothing recorded yet"));
     }
 
     #[test]
@@ -387,7 +435,7 @@ mod tests {
         let projection = replay(&records);
         assert_eq!(projection.open_step, Some(step("c1/b1/s04")));
         assert_eq!(projection.open_summary.as_deref(), Some("write the projection"));
-        assert!(render(&projection, 0).contains("Reconcile before continuing"));
+        assert!(render(&projection, 0, None).contains("Reconcile before continuing"));
     }
 
     #[test]
@@ -403,7 +451,7 @@ mod tests {
         assert_eq!(projection.blocked.len(), 1);
         assert_eq!(projection.blocked[0].detail.as_deref(), Some(transcript));
 
-        let rendered = render(&projection, 0);
+        let rendered = render(&projection, 0, None);
         assert!(rendered.contains("unresolved import"), "the error survives to the file");
         assert!(rendered.contains("`N-9`"), "the requirement is cited");
     }
@@ -413,8 +461,8 @@ mod tests {
         // `O-1`: the same journal renders the same state, every time.
         let mut records = closed_pair("c1/b1/s01", true, "one");
         records.extend(closed_pair("c1/b1/s02", false, "two"));
-        let first = render(&replay(&records), 1_700_000_000);
-        let second = render(&replay(&records), 1_700_000_000);
+        let first = render(&replay(&records), 1_700_000_000, None);
+        let second = render(&replay(&records), 1_700_000_000, None);
         assert_eq!(first, second);
     }
 
@@ -434,7 +482,7 @@ mod tests {
     fn steps_are_listed_in_step_order_not_outcome_order() {
         let mut records = closed_pair("c1/b1/s02", false, "later, blocked");
         records.extend(closed_pair("c1/b1/s01", true, "earlier, done"));
-        let rendered = render(&replay(&records), 0);
+        let rendered = render(&replay(&records), 0, None);
         let first = rendered.find("c1/b1/s01").unwrap_or(usize::MAX);
         let second = rendered.find("c1/b1/s02").unwrap_or(0);
         assert!(first < second, "the table sorts by step id:\n{rendered}");

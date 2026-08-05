@@ -70,6 +70,64 @@ pub fn remaining(source: &str, records: &[crate::journal::Record], cycle: u32, l
         .collect()
 }
 
+/// Every requirement's marker, in source order (`V-8`).
+///
+/// The counting half of `V-8` needs to know what each row *is*, not just which
+/// rows are open — `backlog` answers "what is left to work on" and throws the
+/// marker away getting there, which is why "8 of 8 delivered" could be printed
+/// while three of them waited on a human.
+///
+/// `❌` (won't do) has no [`Marker`] variant and is skipped rather than
+/// mapped onto a neighbour: counting a declined requirement as conflicting
+/// would be a wrong number where an absent one is honest. No row in this
+/// repository carries it today.
+pub fn markers(source: &str) -> Vec<crate::verify::Marker> {
+    use crate::verify::Marker;
+    let mut out = Vec::new();
+    for line in source.lines() {
+        let line = line.trim();
+        if !line.starts_with('|') {
+            continue;
+        }
+        let mut cells = line.trim_matches('|').split('|');
+        let (Some(first), Some(text)) = (cells.next(), cells.next()) else { continue };
+        if text.trim().is_empty() {
+            continue;
+        }
+        let first = first.trim();
+        // Read before stripping, then confirm what is left is really an id —
+        // a table of contents row starting with the same glyph is not a
+        // requirement.
+        let marker = if first.starts_with('✅') {
+            Marker::Done
+        } else if first.starts_with('🟡') {
+            Marker::InProgress
+        } else if first.starts_with('🚧') {
+            Marker::Blocked
+        } else if first.starts_with('⛔') {
+            Marker::Gated
+        } else if first.starts_with('🔶') {
+            Marker::Conflicting
+        } else if first.starts_with('❌') {
+            continue;
+        } else {
+            Marker::Open
+        };
+        let id = first
+            .trim_start_matches(['✅', '🟡', '⛔', '🔶', '❌', '🚧'])
+            .replace('~', "")
+            .trim()
+            .trim_matches('`')
+            .trim()
+            .to_string();
+        if !is_requirement_id(&id) {
+            continue;
+        }
+        out.push(marker);
+    }
+    out
+}
+
 /// Every requirement in the source with its text, done or not.
 ///
 /// `backlog` skips anything already marked, because it answers "what is left to
@@ -153,7 +211,19 @@ pub fn backlog(source: &str, limit: usize) -> Vec<Item> {
         if !line.starts_with('|') {
             continue;
         }
-        if line.contains('✅') || line.contains('⛔') || line.contains('🔶') || line.contains('❌') {
+        // `V-8`: a gated item is never re-picked without its reason changing,
+        // and `🚧` is on that list. It was excluded only by accident before —
+        // the id parser strips `🟡` and nothing else, so `🚧 \`L-3\`` failed
+        // `is_requirement_id` and fell out one line further down. Correct, and
+        // for a reason that had nothing to do with the rule it was keeping;
+        // anyone teaching the parser to strip markers would have silently put
+        // blocked work back in the backlog.
+        if line.contains('✅')
+            || line.contains('⛔')
+            || line.contains('🔶')
+            || line.contains('❌')
+            || line.contains('🚧')
+        {
             continue;
         }
         let mut cells = line.trim_matches('|').split('|');
@@ -1068,6 +1138,57 @@ out.state = .harness/state.md
 | ❌ `X-11` | declined |\n\
 | 🔶 `I-3` | conflicting |\n\
 | not a row | ignored |\n";
+
+    /// `V-8`: the counting half. A marker is read as what it is, so gated and
+    /// blocked can be counted apart from delivered.
+    #[test]
+    fn every_marker_is_read_as_what_it_is() {
+        use crate::verify::{Counts, Marker};
+        let source = "| ✅ ~~`L-1`~~ | done |\n\
+                      | 🟡 `L-2` | in progress |\n\
+                      | `L-3` | open |\n\
+                      | 🚧 `L-4` | blocked |\n\
+                      | ⛔ `L-5` | gated |\n\
+                      | 🔶 `L-6` | conflicting |\n\
+                      | not a row | ignored |\n";
+        let markers = markers(source);
+        assert_eq!(
+            markers,
+            vec![
+                Marker::Done,
+                Marker::InProgress,
+                Marker::Open,
+                Marker::Blocked,
+                Marker::Gated,
+                Marker::Conflicting
+            ]
+        );
+
+        let counts = Counts::of(&markers);
+        assert_eq!(counts.done, 1);
+        assert_eq!(counts.gated, 1);
+        assert_eq!(counts.blocked, 1);
+        assert_eq!(counts.total(), 6);
+        // The lie `V-8` names: never `done / total`.
+        assert!(counts.describe().starts_with("1 of 6 delivered"), "{}", counts.describe());
+        assert!(counts.describe().contains("1 gated"), "{}", counts.describe());
+    }
+
+    /// `V-8`: a blocked requirement is not re-picked.
+    ///
+    /// It was already excluded, but by accident — the id parser strips `🟡`
+    /// and nothing else, so `🚧 \`L-3\`` failed `is_requirement_id` further
+    /// down. Correct for a reason unrelated to the rule it was keeping, which
+    /// is a correctness that anyone teaching the parser to strip markers would
+    /// have removed without noticing. Now it is on the exclusion list and this
+    /// says so.
+    #[test]
+    fn a_blocked_requirement_is_not_picked_up_again() {
+        let source = "| 🚧 `L-3` | blocked: it does not compile |\n| `L-4` | open work |\n";
+        let picked = backlog(source, 10);
+        let ids: Vec<&str> = picked.iter().map(|i| i.requirement.as_str()).collect();
+        assert_eq!(ids, vec!["L-4"], "blocked work stays blocked until its reason changes");
+    }
 
     #[test]
     fn the_backlog_is_what_the_requirements_source_says_is_open() {

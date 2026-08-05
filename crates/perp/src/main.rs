@@ -349,6 +349,19 @@ fn load(args: &[&str]) -> Result<Binding> {
 /// Read here rather than inside `Client` because the client is handed a
 /// transport and links, not a binding, and giving it one would make every
 /// caller that has no binding invent something to satisfy it.
+/// Requirements counted by what they are, for the state file (`V-8`).
+///
+/// Every renderer of that file must use this, including the one that
+/// *re-renders it to check it is current* — `L-4` calls the file a projection
+/// and "matches" means re-rendering produces the same bytes, so a comparison
+/// that skipped the counts would report every state file as stale the moment
+/// one was written with them.
+fn requirement_counts(binding: &Binding) -> Option<perp_core::verify::Counts> {
+    let path = binding.resolve("path.requirements").ok()?;
+    let source = perp_core::layout::requirements_text(&path);
+    Some(perp_core::verify::Counts::of(&perp_core::cycle::markers(&source)))
+}
+
 fn redaction(binding: &Binding) -> Vec<perp_core::security::Pattern> {
     let entries: Vec<(String, String)> =
         binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect();
@@ -473,7 +486,8 @@ fn cmd_state(args: &[&str]) -> Result<()> {
     let binding = load(args)?;
     let journal = Journal::at(binding.resolve("out.journal")?);
     let projection = replay(&journal.read_all()?);
-    let rendered = render(&projection, time::now());
+    let counts = requirement_counts(&binding);
+    let rendered = render(&projection, time::now(), counts.as_ref());
 
     match flag(args, "--out") {
         Some("-") => print!("{rendered}"),
@@ -1140,7 +1154,8 @@ fn cmd_phase(args: &[&str]) -> std::result::Result<(), String> {
     // would report every state file as stale the moment the clock moved.
     let state_matches = match binding.resolve("out.state") {
         Ok(path) => match std::fs::read_to_string(&path) {
-            Ok(text) => without_timestamp(&text) == without_timestamp(&render(&projection, 0)),
+            Ok(text) => without_timestamp(&text)
+                    == without_timestamp(&render(&projection, 0, requirement_counts(&binding).as_ref())),
             Err(_) => false,
         },
         Err(_) => true,
@@ -1478,7 +1493,9 @@ fn run_command(
 ) -> std::result::Result<String, String> {
     match command {
         Command::Explain { subject } => Ok(Chain::build(subject, records).render()),
-        Command::Status => Ok(render(&replay(records), time::now())),
+        Command::Status => {
+            Ok(render(&replay(records), time::now(), requirement_counts(binding).as_ref()))
+        }
         Command::Cost => {
             let total = Ledger::replay(records).total();
             Ok(format!(
