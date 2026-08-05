@@ -112,6 +112,7 @@ const STORAGE = {
   newFavourites: "justcode.newFavourites",
   session: "justcode.session",
   terminalDock: "justcode.terminalDock",
+  harnessVerbose: "justcode.harnessVerbose",
   perpPanel: "justcode.perpPanel",
   perpWidth: "justcode.perpWidth",
 };
@@ -240,6 +241,11 @@ let harness = { root: null, initRoot: null, requirements: [] };
 
 let theme = "dark";
 let showToolbar = true;
+// `I-7`: whether a cycle is started with `--verbose`. Off by default — the log
+// is the last run's console and a log full of prompts is one nobody reads —
+// and read at startup, so it applies to the next cycle rather than one in
+// flight.
+let harnessVerbose = localStorage.getItem(STORAGE.harnessVerbose) === "true";
 let showStatusbar = true;
 // Off by default: in source code most identifiers are "misspelled".
 let spellcheck = false;
@@ -2154,6 +2160,11 @@ function setToolbarVisible(visible) {
   localStorage.setItem(STORAGE.toolbar, String(visible));
 }
 
+function setHarnessVerbose(on) {
+  harnessVerbose = on;
+  localStorage.setItem(STORAGE.harnessVerbose, String(on));
+}
+
 function setStatusbarVisible(visible) {
   showStatusbar = visible;
   dom.app.classList.toggle("hide-statusbar", !visible);
@@ -2830,6 +2841,18 @@ function buildMenus() {
           { label: t("harness.vision"), icon: "file", run: () => openHarnessFile("vision.md") },
           { label: t("harness.binding"), icon: "file", run: () => openHarnessFile("binding.md") },
           { label: t("harness.links"), icon: "link", run: () => openHarnessFile("links.md") },
+          { separator: true },
+          // `I-7`. The flag is read at startup, so this is a setting for the
+          // next cycle and not a switch on the one running.
+          {
+            label: t("harness.verbose"),
+            icon: "brain",
+            checked: () => harnessVerbose,
+            run: () => setHarnessVerbose(!harnessVerbose),
+          },
+          // Where that output already goes: both streams of a cycle are
+          // redirected here, truncated per start.
+          { label: t("harness.runLog"), icon: "file", run: () => openHarnessFile("cycle.log") },
         ],
       },
       { separator: true },
@@ -3881,7 +3904,7 @@ async function startCycle() {
   if (!size) return;
 
   try {
-    await invoke("perp_start", { batches: size.batches, items: size.items, root });
+    await invoke("perp_start", { batches: size.batches, items: size.items, root, verbose: harnessVerbose });
   } catch (error) {
     // A refusal is the interesting case: the harness holds a write lock, so a
     // second cycle is exactly the mistake this reports rather than swallows.

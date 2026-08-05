@@ -157,6 +157,8 @@ export const EN = {
   "harness.vision": "Vision",
   "harness.binding": "Binding",
   "harness.links": "Links",
+  "harness.verbose": "Verbose runs",
+  "harness.runLog": "Run log",
   "harness.noApprovals": "No pending approvals.",
   "harness.doneHint": "Journalled steps that finished — not batches or requirements. A requirement is usually one step plus a share of its batch's gate.",
   "harness.spendHint": "{total} spent so far, counted from what the models reported.",

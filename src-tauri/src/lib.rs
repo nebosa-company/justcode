@@ -711,7 +711,7 @@ fn perp_run(subcommand: String, args: Vec<String>, root: String) -> Result<Strin
 /// Everything the harness refuses stays refused. This starts a cycle; it cannot
 /// approve one, and `git.push = approval` still means a person says yes.
 #[tauri::command]
-fn perp_start(batches: u32, items: u32, root: String) -> Result<String, String> {
+fn perp_start(batches: u32, items: u32, root: String, verbose: bool) -> Result<String, String> {
     if !(1..=64).contains(&batches) || !(1..=32).contains(&items) {
         return Err(format!(
             "{batches} batches x {items} items is outside what this can start (1-64 by 1-32)"
@@ -731,7 +731,15 @@ fn perp_start(batches: u32, items: u32, root: String) -> Result<String, String> 
         .arg("--batches")
         .arg(batches.to_string())
         .arg("--items")
-        .arg(items.to_string())
+        .arg(items.to_string());
+    // `I-7`: the reasoning, kept. Everything `--verbose` prints goes to stderr,
+    // and both streams already land in the log below — so this is the whole of
+    // making it available, and `Harness -> Settings -> Run log` is where it is
+    // read. Off unless asked: a log full of prompts is a log nobody reads.
+    if verbose {
+        command.arg("--verbose");
+    }
+    command
         .arg("--root")
         .arg(&root)
         // To a file, not a pipe and not `null`.
