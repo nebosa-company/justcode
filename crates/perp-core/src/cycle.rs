@@ -408,6 +408,19 @@ impl Outcome {
         for leg in &self.legs {
             out.push_str(&format!("  {} · {}\n", leg.phase, leg.report.describe()));
             out.push_str(&format!("       {}\n", leg.advanced));
+            // `L-29`: what the leg had to say for itself.
+            //
+            // `Report::warnings` had seven writers and no reader outside a
+            // test. A batch that landed its work said so into a `Vec` nobody
+            // printed, and — the half that costs something — so did one that
+            // could not commit at all: `land_batch` records "gate was green but
+            // nothing was committed" with the real error, and the run reported
+            // "stopped: the backlog is exhausted" and nothing else. Measured on
+            // Janitor, where `J-19` was written, staged, and never committed,
+            // and the reason existed the whole time in a field with no reader.
+            for warning in &leg.report.warnings {
+                out.push_str(&format!("       · {warning}\n"));
+            }
         }
         out.push_str(&format!("ended in phase {}\n", self.ended_in));
         match (&self.stop, &self.parked) {
@@ -1057,6 +1070,60 @@ path.requirements = .harness/perpetum.md
         repo.stage(&[".harness"]).expect("stage");
         repo.run_unchecked(&["commit", "-q", "-m", "The starting point"]).expect("seed");
         repo
+    }
+
+    /// `L-29`: a leg's warnings reach the reader.
+    ///
+    /// `Report::warnings` had seven writers and no reader outside a test — and
+    /// three tests asserting the warning *arrives*, which was true and not the
+    /// question. `land_batch` records "gate was green but nothing was
+    /// committed" with the real error; on Janitor that happened, `J-19`'s work
+    /// sat staged and uncommitted, and the run said only "stopped: the backlog
+    /// is exhausted".
+    #[test]
+    fn a_legs_warnings_are_printed_and_not_only_stored() {
+        let report = Report {
+            steps: 4,
+            failed: 0,
+            stop: None,
+            park: None,
+            spend: Spend::default(),
+            took_over: None,
+            first_step: None,
+            last_step: None,
+            controls: Vec::new(),
+            warnings: vec![
+                "gate was green but nothing was committed: boom".into(),
+                "committed J-19 as abc1234".into(),
+            ],
+            approvals_raised: 0,
+            gates_green: None,
+        };
+
+        let outcome = Outcome {
+            cycle: 5,
+            legs: vec![Leg {
+                phase: Phase::D,
+                report,
+                advanced: "stays in D".into(),
+            }],
+            stop: None,
+            parked: None,
+            spend: Spend::default(),
+            ended_in: Phase::D,
+        };
+
+        let text = outcome.describe();
+        assert!(
+            text.contains("nothing was committed: boom"),
+            "a failed landing must reach the reader, verbatim:
+{text}"
+        );
+        assert!(
+            text.contains("committed J-19 as abc1234"),
+            "and so must a successful one — it is the only confirmation there is:
+{text}"
+        );
     }
 
     /// `V-18`: a batch that added a test records a red run.

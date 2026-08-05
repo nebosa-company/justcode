@@ -1200,6 +1200,12 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
         for turn in &agent.turns {
             println!("  turn: {} rung, {} calls, via {}", turn.rung, turn.calls, turn.link);
         }
+        // `L-29`: the same field the cycle now prints. A single-requirement run
+        // lands its work through the same `land_batch`, so it can fail to
+        // commit in the same silence.
+        for warning in &report.warnings {
+            println!("  · {warning}");
+        }
         return match &report.stop {
             Some(perp_core::phase::Stop::BatchBlocked { why, .. }) => Err(format!("blocked: {why}")),
             _ if report.failed > 0 => Err(format!("{} steps failed", report.failed)),
