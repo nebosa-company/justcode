@@ -1388,6 +1388,36 @@ mod tests {
         assert!(body.contains("[redacted]"), "{body}");
     }
 
+    /// `S-3`'s configurable half, on the wire.
+    ///
+    /// The standing prefixes catch a vendor key whether the operator
+    /// configured anything or not, so a test with a `sk-` string in it passes
+    /// against a client that ignores its patterns entirely — which is what the
+    /// client did: `redact` started empty, `with_redaction` had no caller, and
+    /// a `redact.*` line in the binding was documented and inert. The secret
+    /// here is shaped like nothing on the standing list, so it reaches the wire
+    /// unless the operator's own pattern is actually carried.
+    #[test]
+    fn an_operators_own_pattern_reaches_the_wire_not_just_the_standing_list() {
+        let secret = "shipyard.internal.example";
+        let transport = Canned::new(vec![Canned::ok(CHAT)]);
+        let client = Client::new(&transport).with_redaction(vec![crate::security::Pattern {
+            name: "internal-host".into(),
+            literal: secret.into(),
+        }]);
+        let links = links();
+        let cloud = links.get("cloud").expect("the cloud link");
+
+        let request =
+            ChatRequest::new(vec![Message::user(format!("deploy target is {secret}, ok?"))]);
+        client.chat(cloud, &request).expect("the call happened");
+
+        let sent = transport.bodies.borrow();
+        let body = sent.first().expect("a body went out");
+        assert!(!body.contains(secret), "the operator's secret reached the wire: {body}");
+        assert!(body.contains("[redacted]"), "{body}");
+    }
+
     #[test]
     fn a_local_link_gets_the_prompt_unredacted() {
         // Redacting on the way to the operator's own GPU buys nothing and makes

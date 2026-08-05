@@ -336,6 +336,25 @@ fn load(args: &[&str]) -> Result<Binding> {
     Ok(binding)
 }
 
+/// The operator's own redaction patterns, from `redact.<name> = <literal>`
+/// (`S-3`).
+///
+/// `S-3` says outbound content is redacted against a **configurable** set, and
+/// the configurable half did not exist: `Client::redact` started empty, its
+/// setter had no caller, and the binding reader had none either — so a
+/// `redact.*` line was documented, plausible, and inert, and only the standing
+/// vendor prefixes ever fired. An operator's internal hostname or customer name
+/// went to a cloud link in the clear.
+///
+/// Read here rather than inside `Client` because the client is handed a
+/// transport and links, not a binding, and giving it one would make every
+/// caller that has no binding invent something to satisfy it.
+fn redaction(binding: &Binding) -> Vec<perp_core::security::Pattern> {
+    let entries: Vec<(String, String)> =
+        binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    perp_core::security::patterns_from_entries(&entries)
+}
+
 fn cmd_init(args: &[&str]) -> Result<()> {
     let root = root_of(args);
     for entry in perp_core::init::run(&root)? {
@@ -709,7 +728,7 @@ fn cmd_ask(args: &[&str]) -> std::result::Result<(), String> {
     messages.push(Message::user(prompt));
 
     let transport = Curl::new();
-    let mut client = Client::new(&transport);
+    let mut client = Client::new(&transport).with_redaction(redaction(&binding));
     let served = client
         .call(&links, role, &ChatRequest::new(messages), &AssumeHealthy, mode, time::now())
         .map_err(|e| e.to_string())?;
@@ -1050,7 +1069,7 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
         let transport = Curl::new();
         let mode = if args.contains(&"--local-only") { Mode::LocalOnly } else { Mode::Any };
         let mut agent = perp_core::agent::Agent::new(
-            Client::new(&transport),
+            Client::new(&transport).with_redaction(redaction(&binding)),
             &links,
             &AssumeHealthy,
             perp_core::agent::host_for(binding.root()),
@@ -1253,7 +1272,7 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
     }
 
     let transport = Curl::new();
-    let mut client = Client::new(&transport);
+    let mut client = Client::new(&transport).with_redaction(redaction(&binding));
     let stdin = std::io::stdin();
 
     let lines: Box<dyn Iterator<Item = std::io::Result<String>>> = match once {

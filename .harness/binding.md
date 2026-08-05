@@ -89,6 +89,19 @@ tokens are the currency this project has no calibration for yet, and inventing a
 number would produce a ceiling that stops good runs and permits bad ones. It
 goes in once a cycle has run long enough to say what normal looks like.
 
+**Redaction (`S-3`, `S-10`):** No `redact.*` line is declared here, so only the
+standing vendor prefixes apply. A project with a secret shaped like nothing on
+that list — an internal hostname, a customer name, a project codename — adds it
+by name:
+
+```
+redact.internal-host = shipyard.internal.example
+```
+
+Matched literally, not as a pattern, and applied to everything on its way to a
+`cloud` link. A `local` link is left alone (`M-4`): redacting a prompt on its
+way to the operator's own GPU buys nothing.
+
 **VRAM (`M-17`, `M-31`):** No `vram.*` line is declared here, so every host
 keeps the default of **one model**. A machine with room for more says so by
 host, exactly as `host_of` names it — `vram.host:localhost:1234 = 2`, or

@@ -6,8 +6,11 @@
 #
 # What is left here that is not API surface:
 #
-#   local.rs    - M-16, M-17, M-19. No model warming, no VRAM lease, no peer
-#                 health. Marked done in the requirements source, never called.
+#   local.rs    - `unload` and `estimate`. Warming, the VRAM lease and peer
+#                 health are wired now (M-16, M-19, and M-31 for the lease);
+#                 what is left is eviction, which stays out deliberately -
+#                 evicting a model an operator loaded is a policy decision, not
+#                 a mechanical one.
 #   watchdog.rs - NoProgress, deliberately. It is L-11's first and blunter
 #                 reading, counting only workspace changes, which punished a
 #                 model for reading its own work - see MAX_QUIET_TURNS in
@@ -48,7 +51,6 @@ client.rs::chat
 client.rs::models_method
 client.rs::protocol_from
 client.rs::with_egress
-client.rs::with_redaction
 control.rs::inbound_reply
 control.rs::leaves_the_machine
 control.rs::rewind_policy
@@ -117,10 +119,8 @@ runtime.rs::is_host
 runtime.rs::trim_eol
 security.rs::allowed
 security.rs::allowing_links
-security.rs::credential_gate
 security.rs::gate_environment
 security.rs::instruction
-security.rs::patterns_from_entries
 security.rs::was_redacted
 session.rs::nursery
 session.rs::stop

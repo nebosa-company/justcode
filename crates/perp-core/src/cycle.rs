@@ -542,8 +542,21 @@ impl Driver<'_> {
 
         // An empty backlog is `L-14`'s exhausted condition, and the engine
         // reaches it by being handed no work rather than by being told.
+        // `S-3`: the operator's own patterns, not just the standing vendor
+        // prefixes. This is the client that carries a batch's prompts — repo
+        // text, file contents, gate output — to whichever link answers, so it
+        // is the one that most needs them.
+        let redact = {
+            let entries: Vec<(String, String)> = engine
+                .session()
+                .binding()
+                .entries()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            crate::security::patterns_from_entries(&entries)
+        };
         let mut agent = Agent::new(
-            crate::client::Client::new(self.transport),
+            crate::client::Client::new(self.transport).with_redaction(redact),
             self.links,
             self.health,
             crate::agent::host_for(&self.root),

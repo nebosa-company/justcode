@@ -916,6 +916,20 @@ impl Work for Gates {
                 if green {
                     Done::ok_with(format!("gate {name} is green"), evidence)
                 } else {
+                    // `S-5`: an authentication wall is not a red gate. A red
+                    // gate is information and the loop retries it (`L-16`);
+                    // retrying a 401 changes nothing, and the obvious next
+                    // thing a model reaches for after a failed retry is a
+                    // credential — from the environment, from a config file,
+                    // from a guess. `Blocked` rather than `Failed` is what
+                    // stops that path existing: no retry, and the reason
+                    // carries the verbatim wall.
+                    //
+                    // A gate that may legitimately need one says so in the
+                    // binding instead, and borrows it (`S-9`).
+                    if let Some(wall) = crate::security::credential_gate(&name, &evidence) {
+                        return Done::Blocked { why: wall.to_string() };
+                    }
                     Done::Failed { summary: format!("gate {name} is red"), detail: evidence }
                 }
             }
@@ -1248,6 +1262,88 @@ mod tests {
         assert!(
             !task.requirements.contains(&"V-2".to_string()),
             "and never the harness's own id, which the target has never heard of"
+        );
+    }
+
+    /// `S-5`: a gate that hits an authentication wall is blocked, not retried.
+    ///
+    /// The distinction is the whole requirement. A red gate is information and
+    /// the loop gets another go at it (`L-16`); a 401 is the same answer every
+    /// time, and the obvious thing a model reaches for after a failed retry is
+    /// a credential. `Done::Blocked` is what stops that path existing.
+    #[test]
+    fn a_gate_that_hits_an_authentication_wall_is_blocked_rather_than_retried() {
+        let root = tmpdir("engine-credential-wall");
+        std::fs::create_dir_all(root.join(".harness")).expect("dirs");
+        std::fs::write(root.join(".harness/perpetum.md"), "# requirements\n").expect("reqs");
+        // A gate that fails the way a push against an expired token does.
+        let wall = if cfg!(windows) {
+            "cmd /C \"echo fatal: Authentication failed for https://example.test/ & exit 1\""
+        } else {
+            "sh -c \"echo 'fatal: Authentication failed for https://example.test/'; exit 1\""
+        };
+        std::fs::write(
+            root.join(".harness/binding.md"),
+            format!(
+                "```perp-binding\n\
+                 path.requirements = .harness/perpetum.md\n\
+                 out.journal = .harness/journal.jsonl\n\
+                 out.state = .harness/state.md\n\
+                 gate.check = {wall}\n\
+                 ```\n"
+            ),
+        )
+        .expect("binding");
+
+        let binding = crate::Binding::load(&root).expect("binding");
+        let mut gates = Gates::from_binding(&binding, &root.join("target")).expect("gates");
+        let task = Work::next(&mut gates).expect("one gate");
+        let done = gates.perform(&task);
+
+        match done {
+            Done::Blocked { why } => {
+                assert!(why.contains("credential-gated"), "{why}");
+                assert!(why.contains("parked for a person"), "{why}");
+                assert!(
+                    why.contains("Authentication failed"),
+                    "it carries the verbatim wall: {why}"
+                );
+            }
+            other => panic!("a wall must not be an ordinary red gate: {other:?}"),
+        }
+    }
+
+    /// And an ordinary red gate is still an ordinary red gate — the check must
+    /// not turn every failure into a block.
+    #[test]
+    fn an_ordinary_red_gate_is_still_failed_and_not_blocked() {
+        let root = tmpdir("engine-ordinary-red");
+        std::fs::create_dir_all(root.join(".harness")).expect("dirs");
+        std::fs::write(root.join(".harness/perpetum.md"), "# requirements\n").expect("reqs");
+        let red = if cfg!(windows) {
+            "cmd /C \"echo error[E0308]: mismatched types & exit 1\""
+        } else {
+            "sh -c \"echo 'error[E0308]: mismatched types'; exit 1\""
+        };
+        std::fs::write(
+            root.join(".harness/binding.md"),
+            format!(
+                "```perp-binding\n\
+                 path.requirements = .harness/perpetum.md\n\
+                 out.journal = .harness/journal.jsonl\n\
+                 out.state = .harness/state.md\n\
+                 gate.check = {red}\n\
+                 ```\n"
+            ),
+        )
+        .expect("binding");
+
+        let binding = crate::Binding::load(&root).expect("binding");
+        let mut gates = Gates::from_binding(&binding, &root.join("target")).expect("gates");
+        let task = Work::next(&mut gates).expect("one gate");
+        assert!(
+            matches!(gates.perform(&task), Done::Failed { .. }),
+            "a compile error is information, and the loop gets another go at it"
         );
     }
 
