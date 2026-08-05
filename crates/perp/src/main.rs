@@ -362,6 +362,23 @@ fn requirement_counts(binding: &Binding) -> Option<perp_core::verify::Counts> {
     Some(perp_core::verify::Counts::of(&perp_core::cycle::markers(&source)))
 }
 
+/// Where a model call may go (`S-4`): the links the operator declared, and
+/// nothing else.
+///
+/// `Client::egress` was `None` and `check_egress` returns `Ok` on `None`, so
+/// every check on the model-call path was a no-op — the allowlist was
+/// fail-open, and `Egress::allowing_links`, which exists to build exactly this,
+/// had no caller either. Both ends written, nothing between them.
+///
+/// Deliberately *not* the binding's `egress.allow`: that list is `fetch`'s, and
+/// a host allowed for fetching is not thereby a place to send a prompt. The
+/// client only ever calls a link's own `base_url`, so this is the honest set.
+/// A link addressed by device rather than URL (`lmlink`) contributes no host,
+/// which is correct — there is nothing to allow.
+fn egress_for(links: &Links) -> perp_core::security::Egress {
+    perp_core::security::Egress::new(Vec::new()).allowing_links(links.all())
+}
+
 fn redaction(binding: &Binding) -> Vec<perp_core::security::Pattern> {
     let entries: Vec<(String, String)> =
         binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect();
@@ -742,7 +759,9 @@ fn cmd_ask(args: &[&str]) -> std::result::Result<(), String> {
     messages.push(Message::user(prompt));
 
     let transport = Curl::new();
-    let mut client = Client::new(&transport).with_redaction(redaction(&binding));
+    let mut client = Client::new(&transport)
+        .with_redaction(redaction(&binding))
+        .with_egress(egress_for(&links));
     let served = client
         .call(&links, role, &ChatRequest::new(messages), &AssumeHealthy, mode, time::now())
         .map_err(|e| e.to_string())?;
@@ -1120,7 +1139,9 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
         let transport = Curl::new();
         let mode = if args.contains(&"--local-only") { Mode::LocalOnly } else { Mode::Any };
         let mut agent = perp_core::agent::Agent::new(
-            Client::new(&transport).with_redaction(redaction(&binding)),
+            Client::new(&transport)
+                .with_redaction(redaction(&binding))
+                .with_egress(egress_for(&links)),
             &links,
             &AssumeHealthy,
             perp_core::agent::host_for(binding.root()),
@@ -1324,7 +1345,9 @@ fn cmd_chat(args: &[&str]) -> std::result::Result<(), String> {
     }
 
     let transport = Curl::new();
-    let mut client = Client::new(&transport).with_redaction(redaction(&binding));
+    let mut client = Client::new(&transport)
+        .with_redaction(redaction(&binding))
+        .with_egress(egress_for(&links));
     let stdin = std::io::stdin();
 
     let lines: Box<dyn Iterator<Item = std::io::Result<String>>> = match once {

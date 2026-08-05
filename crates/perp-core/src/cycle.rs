@@ -632,7 +632,15 @@ impl Driver<'_> {
             crate::security::patterns_from_entries(&entries)
         };
         let mut agent = Agent::new(
-            crate::client::Client::new(self.transport).with_redaction(redact),
+            crate::client::Client::new(self.transport)
+                .with_redaction(redact)
+                // `S-4`: a batch's prompts may go to the links the operator
+                // declared and nowhere else. This was fail-open — `egress` was
+                // `None` and `check_egress` returns `Ok` on `None`, so every
+                // check on this path was a no-op.
+                .with_egress(
+                    crate::security::Egress::new(Vec::new()).allowing_links(self.links.all()),
+                ),
             self.links,
             self.health,
             crate::agent::host_for(&self.root),

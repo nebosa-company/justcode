@@ -1438,6 +1438,42 @@ mod tests {
         );
     }
 
+    /// `S-4`, the wiring rather than the mechanism.
+    ///
+    /// The refusal below was always right and never reached: `Client::egress`
+    /// was `None`, `check_egress` returns `Ok` on `None`, and `with_egress` had
+    /// no caller — so every check on the model-call path was a no-op and the
+    /// allowlist was fail-open. This builds the egress exactly as the CLI and
+    /// the batch now do, and asserts both directions.
+    #[test]
+    fn an_egress_built_from_the_configured_links_admits_them_and_nothing_else() {
+        let links = links();
+        let egress = crate::security::Egress::new(Vec::new()).allowing_links(links.all());
+
+        // A declared link is reachable — otherwise this change would fail
+        // closed and stop the harness making any call at all.
+        let transport = Canned::new(vec![Canned::ok(CHAT)]);
+        let client = Client::new(&transport).with_egress(egress.clone());
+        let here = links.get("here").expect("the local link");
+        client
+            .chat(here, &ChatRequest::new(vec![Message::user("hello")]))
+            .expect("a declared link must still be reachable");
+
+        // A host nobody declared is not, even though it is a perfectly good
+        // URL — the allowlist is the declared set, not a syntax check.
+        let stranger = crate::link::Link {
+            base_url: Some("https://evil.example/v1".into()),
+            ..here.clone()
+        };
+        let blocked = Canned::new(vec![Canned::ok(CHAT)]);
+        let strict = Client::new(&blocked).with_egress(egress);
+        let err = strict
+            .chat(&stranger, &ChatRequest::new(vec![Message::user("hello")]))
+            .expect_err("evil.example was never declared");
+        assert!(format!("{err}").contains("S-4"), "{err}");
+        assert!(blocked.seen.borrow().is_empty(), "and nothing was sent at all");
+    }
+
     #[test]
     fn a_host_outside_the_allowlist_is_refused_before_the_socket_opens() {
         // `S-4`. Checked before the transport is touched: an allowlist enforced

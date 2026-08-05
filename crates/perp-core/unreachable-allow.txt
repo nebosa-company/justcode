@@ -49,7 +49,6 @@ client.rs::as_message
 client.rs::chat
 client.rs::models_method
 client.rs::protocol_from
-client.rs::with_egress
 control.rs::inbound_reply
 control.rs::leaves_the_machine
 control.rs::rewind_policy
@@ -117,7 +116,6 @@ repo.rs::stale
 runtime.rs::is_host
 runtime.rs::trim_eol
 security.rs::allowed
-security.rs::allowing_links
 security.rs::instruction
 security.rs::was_redacted
 session.rs::nursery
@@ -128,7 +126,6 @@ stream.rs::is_complete
 stream.rs::parse_cli_line
 stream.rs::parse_line
 tool.rs::with_budget
-tool.rs::with_egress
 tool.rs::with_timeout
 verify.rs::allows_gate_fix
 verify.rs::counts_as_done
