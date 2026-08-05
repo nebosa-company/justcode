@@ -568,6 +568,74 @@ impl Driver<'_> {
     ///
     /// Integrates L-17 container orchestration if enabled: creates a persistent
     /// container for this batch and routes gates through it.
+    /// `V-18`: the red run for a batch that added a test (`V-3`).
+    ///
+    /// The trigger reads the batch's own change. **Untracked files are read
+    /// too**, and that is not an optimisation: a new test usually arrives as a
+    /// whole new file, which `git diff HEAD` does not mention at all, so a
+    /// tracked-only trigger would miss the commonest case it exists for.
+    ///
+    /// The test gate only. `V-3` is about a test proving it can fail, and a
+    /// lint that passes with and without the change is the expected result
+    /// rather than a finding — paying for it would double a gate to learn
+    /// nothing.
+    ///
+    /// Every early return is a skip, never a failure: no test gate declared, no
+    /// test added, no repository. A batch is not blocked because the harness
+    /// could not decide whether to check it.
+    fn red_run(
+        &self,
+        engine: &mut Engine,
+        cycle: u32,
+        stage: &str,
+        report: &Report,
+    ) -> Result<()> {
+        let Ok(gate) = crate::gate::Gate::named(engine.session().binding(), "test") else {
+            return Ok(());
+        };
+        let repo = crate::git::Repo::at(&self.root);
+
+        let mut change = repo.plumbing_all(&["diff", "HEAD"]).unwrap_or_default();
+        // The untracked half. `status --porcelain` marks these `??`; their whole
+        // content is new, so every line of it counts as added.
+        for line in repo.plumbing_all(&["status", "--porcelain"]).unwrap_or_default().lines() {
+            let Some(path) = line.trim().strip_prefix("?? ") else { continue };
+            if let Ok(text) = std::fs::read_to_string(self.root.join(path.trim())) {
+                for added in text.lines() {
+                    change.push('+');
+                    change.push_str(added);
+                    change.push('\n');
+                }
+            }
+        }
+
+        if !crate::verify::adds_a_test(&change) {
+            return Ok(());
+        }
+
+        let red = crate::verify::RedRun::perform(&repo, &gate, "HEAD")?;
+        let verdict = red.verdict();
+        crate::verbose::say("v-18", &format!("red run: {}", verdict.describe()));
+
+        let step = report
+            .last_step
+            .clone()
+            .unwrap_or(crate::step::StepId::new(cycle, stage, 0)?);
+        engine.session().journal().append(
+            // `ok` is whether the *red run* earned its green, not whether the
+            // gate passed — a test that cannot fail is a finding even though
+            // every gate around it is green.
+            &crate::journal::Record::outcome(
+                step,
+                crate::time::now(),
+                verdict.is_earned(),
+                format!("red run: {}", verdict.describe()),
+            )
+            .with_detail(red.evidence()),
+        )?;
+        Ok(())
+    }
+
     fn batch(&self, cycle: u32, batch: u32) -> Result<Report> {
         let stage = format!("b{batch}");
         let mut engine = Engine::open(&self.root)?;
@@ -668,6 +736,21 @@ impl Driver<'_> {
         // Asked of the gates themselves rather than inferred from the step
         // count, which is a different fact about a different thing.
         report.gates_green = leg.second().verdict();
+
+        // `V-18`: if this batch added a test, prove it could fail (`V-3`).
+        //
+        // Recorded, never blocking. The trigger is a heuristic over a diff, and
+        // a heuristic that can halt an unattended run is a heuristic that will
+        // halt one for the wrong reason at three in the morning. The verdict and
+        // both transcripts go on the journal, where a person and `perp check
+        // markers` can read them.
+        //
+        // Before the commit below, deliberately: the batch's edits are still
+        // uncommitted here, so `HEAD` is the tree without them.
+        if let Err(e) = self.red_run(&mut engine, cycle, &stage, &report) {
+            crate::verbose::say("v-18", &format!("red run skipped: {e}"));
+        }
+
         let report = report;
 
         // L-17: Clean up the batch's container when done (`L-17`).

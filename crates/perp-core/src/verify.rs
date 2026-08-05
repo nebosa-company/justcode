@@ -262,6 +262,40 @@ impl RedRun {
     }
 }
 
+/// Did this change **add a test**? (`V-3`, `V-18`)
+///
+/// The trigger for a red run. `V-3` is about a new test, not about every edit,
+/// so a refactor, a doc change and a config tweak are not worth a second gate
+/// run — and a step that did add one is worth proving.
+///
+/// Added lines only. A diff that *removes* `#[test]` is `V-4`'s business, and
+/// counting it here would run a red run to celebrate a deleted test.
+///
+/// Per language, and deliberately a list rather than a clever rule: there is no
+/// syntax-independent way to recognise a test, and a rule that tried would be
+/// wrong in both directions. An unusual framework is missed, which costs a red
+/// run nobody ran; the alternative is firing on changes that added nothing.
+pub fn adds_a_test(diff: &str) -> bool {
+    const MARKERS: &[&str] = &[
+        "#[test]",          // Rust
+        "#[tokio::test]",   // Rust, async
+        "def test_",        // Python
+        "func Test",        // Go
+        "@Test",            // Java, Kotlin
+        "[Test]",           // C#, NUnit
+        "[Fact]",           // C#, xUnit
+        "it(",              // JS/TS, Jest and Mocha
+        "test(",            // JS/TS
+        "describe(",        // JS/TS
+    ];
+    diff.lines()
+        .filter(|line| line.starts_with('+') && !line.starts_with("+++"))
+        .any(|line| {
+            let text = line.trim_start_matches('+').trim();
+            MARKERS.iter().any(|marker| text.contains(marker))
+        })
+}
+
 // ── V-4 ────────────────────────────────────────────────────────────────────
 
 pub mod tamper {
@@ -983,6 +1017,67 @@ mod tests {
             runtime: crate::runtime::Runtime::Host,
             lends: Vec::new(),
             offline: false,
+        }
+    }
+
+    /// `V-18`: the trigger. A red run costs a second gate run, so it fires
+    /// when a test was added and not on every edit.
+    #[test]
+    fn a_diff_that_adds_a_test_is_what_triggers_a_red_run() {
+        let added = "\
+--- a/src/lib.rs
++++ b/src/lib.rs
++    #[test]
++    fn a_thing_works() {
++        assert!(true);
++    }
+";
+        assert!(adds_a_test(added));
+
+        // A refactor is not worth a second gate run.
+        let refactor = "\
+--- a/src/lib.rs
++++ b/src/lib.rs
+-    let x = compute();
++    let x = compute_faster();
+";
+        assert!(!adds_a_test(refactor));
+
+        // `V-4`'s business, not this one. Firing here would run a red run to
+        // celebrate a deleted test.
+        let removed = "\
+--- a/src/lib.rs
++++ b/src/lib.rs
+-    #[test]
+-    fn a_thing_works() {}
+";
+        assert!(!adds_a_test(removed), "a removed test is not an added one");
+    }
+
+    /// The `+++` header names a file and is not an added line. Without the
+    /// guard, editing any path containing `test` would trigger on every diff.
+    #[test]
+    fn the_diff_header_is_not_mistaken_for_an_added_test() {
+        let header_only = "\
+--- a/tests/it(works).rs
++++ b/tests/it(works).rs
+-    let x = 1;
++    let x = 2;
+";
+        assert!(!adds_a_test(header_only), "the `+++` line is a header, not a change");
+    }
+
+    #[test]
+    fn the_common_frameworks_are_recognised() {
+        for line in [
+            "+#[test]",
+            "+    #[tokio::test]",
+            "+def test_it_works():",
+            "+func TestThing(t *testing.T) {",
+            "+    @Test",
+            "+    it('works', () => {",
+        ] {
+            assert!(adds_a_test(line), "{line}");
         }
     }
 
