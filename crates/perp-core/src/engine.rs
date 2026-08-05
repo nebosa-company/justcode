@@ -319,6 +319,30 @@ impl Engine {
         self.concurrency
     }
 
+    /// What `cycle` has already spent, from the journal (`L-10`, `M-11`).
+    ///
+    /// Scoped to the cycle, because the budget is: `budget.cycle.*` is a
+    /// ceiling for one cycle, and replaying every record ever written would
+    /// charge cycle 12 for cycle 1.
+    ///
+    /// Counted from what the links actually reported and never estimated
+    /// (`L-10`) — the ledger's entries are the `M-11` call records, so a
+    /// `local-only` run carries zero money forward and a real one carries what
+    /// it was charged. A journal that cannot be read is treated as nothing
+    /// carried rather than as a reason to refuse to start: the budget then
+    /// behaves as it did before this existed, which is the safe direction for
+    /// a read that is itself best-effort.
+    fn carried_spend(&self, cycle: u32) -> Spend {
+        let Ok(records) = self.session.journal().read_all() else {
+            return Spend::default();
+        };
+        let mine: Vec<crate::journal::Record> =
+            records.into_iter().filter(|r| r.step.cycle == cycle).collect();
+        let ledger = crate::cost::Ledger::replay(&mine);
+        // Seconds are this run's; see the note at the call site.
+        Spend::from_ledger(&ledger, 0)
+    }
+
     /// Run until something in `L-14` stops it or a budget parks it.
     ///
     /// `cycle` and `stage` place every step id this run mints. `in_flight` is
@@ -381,12 +405,36 @@ impl Engine {
             approvals_raised: 0,
         };
 
+        // `L-10`: what this cycle spent before this process existed.
+        //
+        // `M-11` writes a record per call so "the ledger and the budget survive
+        // a restart" — and nothing read it back, so they did not. Spend was the
+        // in-memory accumulator of one run, and `L-7` treats a restart as
+        // ordinary: a loop that crashed and resumed began its cycle budget
+        // again at zero, and could spend the ceiling once per crash while every
+        // individual run reported itself inside it.
+        //
+        // Read **once**, before the loop. The agent's own records land in this
+        // same journal as the run proceeds, so re-reading would count this
+        // run's calls twice — once here and once in `work.spend()`.
+        let carried = self.carried_spend(cycle);
+
         loop {
             // The boundary. Checked before the next task begins and never
             // during one.
             let elapsed = (self.now)() - started;
             let spend = work.spend();
-            report.spend = Spend { seconds: elapsed, ..spend };
+            // Wall-clock is deliberately *not* carried. The journal records
+            // what each call cost, not how long the loop was awake, and the
+            // only figure derivable from it is calendar time between the
+            // cycle's first record and now — which would charge a cycle parked
+            // overnight for the hours nobody was running it. Tokens and money
+            // accumulate; seconds are this run's.
+            report.spend = Spend {
+                seconds: elapsed,
+                tokens: carried.tokens + spend.tokens,
+                money: carried.money + spend.money,
+            };
             if let Verdict::Exhausted { .. } = self.budgets.check(report.spend, report.spend) {
                 let park = self
                     .budgets
@@ -1114,6 +1162,65 @@ mod tests {
 
         let last = records(&root).pop().expect("a record");
         assert_eq!(last.detail.as_deref(), Some("stop=park"));
+    }
+
+    /// `L-10`: a restart does not hand the cycle its budget back.
+    ///
+    /// `M-11` writes a record per call so "the ledger and the budget survive a
+    /// restart", and nothing read it back, so they did not. `L-7` treats a
+    /// restart as ordinary — a loop that crashed and resumed began the cycle
+    /// budget again at zero and could spend the ceiling once per crash while
+    /// every run reported itself inside it.
+    ///
+    /// The second engine here is a genuinely separate one over the same
+    /// workspace, which is what a resume is.
+    #[test]
+    fn a_cycle_budget_is_not_refunded_by_restarting() {
+        let root = workspace("engine-budget-restart");
+
+        // What a previous run spent, on the journal exactly as `M-11` leaves
+        // it: 250 tokens against cycle 3.
+        let spent = crate::Record::outcome(
+            StepId::new(3, "b1", 1).expect("step"),
+            1_700_000_000,
+            true,
+            "a model call",
+        )
+        ;
+        let spent = crate::Record {
+            extra: vec![
+                ("link".to_string(), crate::json::Value::str("here")),
+                ("role".to_string(), crate::json::Value::str("coder")),
+                ("cache_miss".to_string(), crate::json::Value::int(200)),
+                ("output_tokens".to_string(), crate::json::Value::int(50)),
+            ],
+            ..spent
+        };
+        Journal::at(root.join(".harness/journal.jsonl")).append(&spent).expect("append");
+
+        // A new process, over the same workspace, spending nothing itself.
+        let budgets = Budgets { cycle: Budget::none().tokens(100), batch: Budget::none() };
+        let mut engine = Engine::open(&root).expect("open").with_budgets(budgets);
+        let mut work = Fixed::new(tasks(5));
+        work.spend = Spend::default();
+
+        let report = engine.run(3, "b2", &mut work, 0).expect("run");
+
+        assert_eq!(report.steps, 0, "the cycle was already over its ceiling before this run");
+        let park = report.park.expect("a restart must not refund the budget");
+        assert!(park.reason.contains("cycle tokens"), "{}", park.reason);
+        assert_eq!(report.spend.tokens, 250, "carried from the journal, not from memory");
+
+        // And a *different* cycle is not charged for it — the ceiling is per
+        // cycle, so replaying every record ever written would bill cycle 4 for
+        // cycle 3.
+        let mut fresh = Engine::open(&root)
+            .expect("open")
+            .with_budgets(Budgets { cycle: Budget::none().tokens(100), batch: Budget::none() });
+        let mut more = Fixed::new(tasks(1));
+        more.spend = Spend::default();
+        let next = fresh.run(4, "b1", &mut more, 0).expect("run");
+        assert!(next.park.is_none(), "cycle 4 does not inherit cycle 3's spend");
     }
 
     #[test]

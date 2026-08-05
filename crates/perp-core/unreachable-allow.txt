@@ -29,7 +29,6 @@ artifact.rs::publish_policy
 btw.rs::constraints
 btw.rs::render_for_state
 btw.rs::take_steers
-budget.rs::from_ledger
 budget.rs::has_room
 budget.rs::link_seconds
 budget.rs::money
