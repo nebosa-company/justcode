@@ -43,6 +43,12 @@ pub struct Gate {
     /// lending to one would let the model choose where a secret goes — which is
     /// the thing `S-1` exists to prevent, arriving by the back door.
     pub lends: Vec<crate::security::Lend>,
+    /// Run without reaching the network (`N-6`), from `gate.offline`.
+    ///
+    /// Not a firewall — the switches the common toolchains already honour. A
+    /// gate that can fail because of a flaky connection manufactures reds, and
+    /// a red that is not the code's fault teaches everyone to ignore reds.
+    pub offline: bool,
 }
 
 impl Gate {
@@ -53,6 +59,12 @@ impl Gate {
             binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         let runtime = crate::runtime::Runtime::from_entries(&entries)?;
         let lends = crate::security::lends_from_entries(&entries);
+        // `N-6`: opt-in, because a project whose gates genuinely need the
+        // network must not have it taken away by a default.
+        let offline = binding
+            .get("gate.offline")
+            .map(|v| v.trim().eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
         let cwd = match binding.get("gate.cwd") {
             Ok(rel) => binding.root().join(rel),
             Err(_) => binding.root().to_path_buf(),
@@ -68,7 +80,11 @@ impl Gate {
             .entries()
             .filter_map(|(key, value)| {
                 let name = key.strip_prefix("gate.")?;
-                if matches!(name, "cwd" | "timeout") {
+                // Settings, not gates. Without `offline` here it becomes a
+                // gate named `offline` whose command is `true`, which passes
+                // and means nothing — a green with no code behind it, which is
+                // the one thing this file exists to prevent.
+                if matches!(name, "cwd" | "timeout" | "offline") {
                     return None;
                 }
                 Some(Gate {
@@ -78,6 +94,7 @@ impl Gate {
                     timeout,
                     runtime: runtime.clone(),
                     lends: lends.clone(),
+                    offline,
                 })
             })
             .collect();
@@ -122,6 +139,14 @@ impl Gate {
         // argv is world-readable in a process listing (`S-2`).
         let lent = crate::security::Lent::resolve(&self.lends);
         let mut env = Env::declared();
+        // `N-6` before the lending, so a lent credential wins if a project
+        // declares both. The combination is odd rather than wrong — a token
+        // for a registry the gate has been told not to reach — but the
+        // operator declared each of them on purpose, and silently dropping one
+        // would be the harness deciding which it meant.
+        for (key, value) in crate::security::gate_environment(self.offline) {
+            env = env.with(key, value);
+        }
         for lend in &lent {
             let (var, value) = lend.as_env();
             env = env.with(var, value);
@@ -547,6 +572,7 @@ mod tests {
                 engine: "perp-not-a-real-container-engine".into(),
             },
             lends: Vec::new(),
+            offline: false,
         };
 
         match gate.run() {
@@ -598,6 +624,7 @@ mod tests {
                 name: "registry".into(),
                 var: "PERP_TEST_GATE_LEND".into(),
             }],
+            offline: false,
         };
 
         let result = gate.run().expect("the gate ran");
@@ -613,6 +640,68 @@ mod tests {
         assert!(evidence.contains(crate::security::MASK), "and was masked: {evidence}");
     }
 
+    /// `N-6`: the switches reach the child, and only when asked for.
+    ///
+    /// Asserted on what the command actually sees rather than on the `Gate`
+    /// field, because the field being set and the variable arriving are two
+    /// different claims and only the second one is the requirement.
+    #[test]
+    fn an_offline_gate_hands_the_toolchains_their_switches() {
+        let dir = tmpdir("gate-offline");
+        let show = if cfg!(windows) {
+            "cmd /C \"echo cargo=%CARGO_NET_OFFLINE% pip=%PIP_NO_INDEX%\""
+        } else {
+            "sh -c \"echo cargo=$CARGO_NET_OFFLINE pip=$PIP_NO_INDEX\""
+        };
+        let base = Gate {
+            runtime: crate::runtime::Runtime::Host,
+            name: "check".into(),
+            command: show.into(),
+            cwd: dir,
+            timeout: Duration::from_secs(30),
+            lends: Vec::new(),
+            offline: false,
+        };
+
+        let on = Gate { offline: true, ..base.clone() }.run().expect("ran").evidence();
+        assert!(on.contains("cargo=true"), "CARGO_NET_OFFLINE never arrived: {on}");
+        assert!(on.contains("pip=1"), "PIP_NO_INDEX never arrived: {on}");
+
+        // Opt-in: a project whose gates need the network keeps it.
+        let off = base.run().expect("ran").evidence();
+        assert!(!off.contains("cargo=true"), "offline was imposed rather than asked for: {off}");
+    }
+
+    /// `gate.offline` is a setting, not a gate.
+    ///
+    /// `from_binding` turns every `gate.*` key into a gate, so without an
+    /// exclusion this one becomes a gate named `offline` whose command is
+    /// `true` — which passes, and means nothing. A green with no code behind
+    /// it is the single thing this file exists to prevent.
+    #[test]
+    fn the_offline_setting_does_not_become_a_gate_that_runs_true() {
+        let root = tmpdir("gate-offline-not-a-gate");
+        std::fs::create_dir_all(root.join(".harness")).expect("dirs");
+        std::fs::write(root.join(".harness/perpetum.md"), "# requirements\n").expect("reqs");
+        std::fs::write(
+            root.join(".harness/binding.md"),
+            "```perp-binding\n\
+             path.requirements = .harness/perpetum.md\n\
+             out.journal = .harness/journal.jsonl\n\
+             out.state = .harness/state.md\n\
+             gate.offline = true\n\
+             gate.check = cargo --version\n\
+             ```\n",
+        )
+        .expect("binding");
+
+        let binding = crate::Binding::load(&root).expect("binding");
+        let gates = Gate::from_binding(&binding).expect("gates");
+        let names: Vec<&str> = gates.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names, vec!["check"], "offline is a setting: {names:?}");
+        assert!(gates[0].offline, "and it was read");
+    }
+
     /// A gate that borrows nothing is untouched — no mask, no scrubbing pass.
     #[test]
     fn a_gate_that_borrows_nothing_has_its_output_left_alone() {
@@ -626,6 +715,7 @@ mod tests {
             cwd: dir,
             timeout: Duration::from_secs(30),
             lends: Vec::new(),
+            offline: false,
         };
         let evidence = gate.run().expect("ran").evidence();
         assert!(evidence.contains("plain"), "{evidence}");
@@ -642,6 +732,7 @@ mod tests {
             cwd: root.join("does-not-exist"),
             timeout: Duration::from_secs(5),
             lends: Vec::new(),
+            offline: false,
         };
         let err = gate.run().expect_err("must refuse");
         assert!(format!("{err}").contains("does not exist"), "{err}");
@@ -653,8 +744,8 @@ mod tests {
         let fail = if cfg!(windows) { "cmd /C \"exit 1\"" } else { "sh -c \"exit 1\"" };
         let pass = if cfg!(windows) { "cmd /C \"exit 0\"" } else { "sh -c \"exit 0\"" };
         let gates = vec![
-            Gate { runtime: crate::runtime::Runtime::Host, name: "lint".into(), command: fail.into(), cwd: dir.clone(), timeout: Duration::from_secs(30), lends: Vec::new() },
-            Gate { runtime: crate::runtime::Runtime::Host, name: "build".into(), command: pass.into(), cwd: dir.clone(), timeout: Duration::from_secs(30), lends: Vec::new() },
+            Gate { runtime: crate::runtime::Runtime::Host, name: "lint".into(), command: fail.into(), cwd: dir.clone(), timeout: Duration::from_secs(30), lends: Vec::new(), offline: false },
+            Gate { runtime: crate::runtime::Runtime::Host, name: "build".into(), command: pass.into(), cwd: dir.clone(), timeout: Duration::from_secs(30), lends: Vec::new(), offline: false },
         ];
         let results = run_all(&gates).expect("run");
         assert_eq!(results.len(), 1, "the build must not run after lint went red");
@@ -680,6 +771,7 @@ mod tests {
             cwd: workspace,
             timeout: Duration::from_secs(5),
             lends: Vec::new(),
+            offline: false,
         };
         let err = gate.run().expect_err("must refuse before spawning cargo");
         assert!(format!("{err}").contains("cannot replace a running executable"), "{err}");

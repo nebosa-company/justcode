@@ -119,7 +119,6 @@ runtime.rs::is_host
 runtime.rs::trim_eol
 security.rs::allowed
 security.rs::allowing_links
-security.rs::gate_environment
 security.rs::instruction
 security.rs::was_redacted
 session.rs::nursery

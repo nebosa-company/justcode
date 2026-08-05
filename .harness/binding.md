@@ -61,6 +61,7 @@ out.state   = .harness/state.md
 
 gate.cwd     = crates
 gate.timeout = 900
+gate.offline = true
 gate.lint    = cargo clippy --workspace --all-targets -- -D warnings
 gate.build   = cargo build --workspace
 gate.test    = cargo test --workspace
@@ -159,9 +160,11 @@ Editor gates — working directory repo root, run only when `src/`, `src-tauri/`
 | build | `npm run build` |
 | check | `npm run check:associations` |
 
-Environment: no network required for any gate. Cargo must resolve from a warm
-registry cache; a cold-cache failure blocks the batch (NFR 10) rather than
-quietly changing the dependency plan.
+Environment: no network required for any gate — and `gate.offline = true`
+above now *enforces* that rather than asserting it (`N-6`). Cargo must resolve
+from a warm registry cache; a cold-cache failure blocks the batch (NFR 10)
+rather than quietly changing the dependency plan, which is exactly what
+`CARGO_NET_OFFLINE` turns from a hope into a guarantee.
 
 **No gate here borrows a credential** (`S-9`), and none should: every gate above
 is offline. A project whose gate needs one — a private registry, an
