@@ -982,6 +982,150 @@ path.requirements = .harness/perpetum.md
         (dir, binding)
     }
 
+    /// A transport with nothing behind it.
+    ///
+    /// `batch` builds an agent whether or not there is anything for it to do,
+    /// and an agent needs a transport. With an empty backlog nothing is ever
+    /// sent, so a stub that refuses is honest rather than a stand-in for a
+    /// model — and a call that *did* happen would fail loudly instead of
+    /// quietly passing.
+    #[derive(Debug)]
+    struct NoTransport;
+
+    impl crate::net::Transport for NoTransport {
+        fn send(&self, _request: &crate::net::Request) -> Result<crate::net::Response> {
+            Err(crate::Error::unbound("transport", "this test sends nothing"))
+        }
+    }
+
+    /// A repository with a seed commit, for driving a batch.
+    #[allow(clippy::expect_used)]
+    fn seeded(dir: &std::path::Path) -> crate::git::Repo {
+        let repo = crate::git::Repo::at(dir);
+        for args in [
+            vec!["init", "-q", "-b", "main"],
+            vec!["config", "user.email", "loop@perpetum.test"],
+            vec!["config", "user.name", "Perpetum test"],
+            vec!["config", "commit.gpgsign", "false"],
+        ] {
+            repo.run_unchecked(&args).expect("git");
+        }
+        repo.stage(&[".harness"]).expect("stage");
+        repo.run_unchecked(&["commit", "-q", "-m", "The starting point"]).expect("seed");
+        repo
+    }
+
+    /// `V-18`: a batch that added a test records a red run.
+    ///
+    /// **The first test to drive `Driver::batch` at all.** Everything inside it
+    /// was covered — `remaining`, `markers`, `Gates`, `Agent`, `RedRun` — and
+    /// the function that wires them together was not, which is why the red-run
+    /// hook could be added, compile, pass every gate, and never once execute.
+    /// The reachability check cannot see a gap like that: `batch` *is* called,
+    /// from `run_phase`. It only ever answers "does anything call this", never
+    /// "does anything try it".
+    ///
+    /// The backlog is left empty on purpose. The hook reads the working tree
+    /// rather than the agent's result, so no model is needed to prove it fires —
+    /// and an empty backlog means no branch and no commit, keeping this about
+    /// the batch path rather than about landing.
+    #[test]
+    fn a_batch_that_added_a_test_records_a_red_run() {
+        let green = if cfg!(windows) { "cmd /C \"exit 0\"" } else { "sh -c \"exit 0\"" };
+        let (dir, _binding) = bound(&format!(
+            "out.journal = .harness/journal.jsonl\n\
+             out.state   = .harness/state.md\n\
+             gate.test   = {green}\n"
+        ));
+        seeded(&dir);
+
+        // The change: a new, untracked file carrying a test. Untracked is the
+        // realistic case and the one `git diff HEAD` says nothing about.
+        std::fs::write(dir.join("added_test.rs"), "#[test]\nfn it_works() {}\n")
+            .expect("write");
+
+        let links = crate::link::Links::parse(
+            "```perp-links\n\
+             link.here.kind = lmstudio\n\
+             link.here.base_url = http://localhost:1234\n\
+             link.here.model = small\n\
+             role.coder = here\n```\n",
+        )
+        .expect("links");
+
+        let driver = Driver {
+            root: dir.clone(),
+            links: &links,
+            health: &crate::link::AssumeHealthy,
+            mode: crate::link::Mode::LocalOnly,
+            batches: 1,
+            items_per_batch: 1,
+            transport: &NoTransport,
+        };
+
+        driver.batch(1, 1).expect("the batch ran");
+
+        let records = crate::journal::Journal::at(dir.join(".harness/journal.jsonl"))
+            .read_all()
+            .expect("journal");
+        let red = records
+            .iter()
+            .find(|r| r.summary.starts_with("red run:"))
+            .expect("a batch that added a test records a red run (`V-18`)");
+
+        // Both transcripts, not just the verdict (`V-2`).
+        let detail = red.detail.as_deref().unwrap_or_default();
+        assert!(detail.contains("without the change"), "{detail}");
+        assert!(detail.contains("with the change"), "{detail}");
+
+        // The gate passes either way here — the file is not compiled by
+        // `exit 0` — so the honest verdict is that it proves nothing, and
+        // `ok` reports the *red run*, not the gate.
+        assert_eq!(red.ok, Some(false), "a test that cannot fail is a finding: {}", red.summary);
+    }
+
+    /// And a batch that added no test does not pay for a second gate run.
+    #[test]
+    fn a_batch_with_no_new_test_records_no_red_run() {
+        let green = if cfg!(windows) { "cmd /C \"exit 0\"" } else { "sh -c \"exit 0\"" };
+        let (dir, _binding) = bound(&format!(
+            "out.journal = .harness/journal.jsonl\n\
+             out.state   = .harness/state.md\n\
+             gate.test   = {green}\n"
+        ));
+        seeded(&dir);
+        std::fs::write(dir.join("notes.md"), "a change with no test in it\n").expect("write");
+
+        let links = crate::link::Links::parse(
+            "```perp-links\n\
+             link.here.kind = lmstudio\n\
+             link.here.base_url = http://localhost:1234\n\
+             link.here.model = small\n\
+             role.coder = here\n```\n",
+        )
+        .expect("links");
+
+        Driver {
+            root: dir.clone(),
+            links: &links,
+            health: &crate::link::AssumeHealthy,
+            mode: crate::link::Mode::LocalOnly,
+            batches: 1,
+            items_per_batch: 1,
+            transport: &NoTransport,
+        }
+        .batch(1, 1)
+        .expect("the batch ran");
+
+        let records = crate::journal::Journal::at(dir.join(".harness/journal.jsonl"))
+            .read_all()
+            .expect("journal");
+        assert!(
+            !records.iter().any(|r| r.summary.starts_with("red run:")),
+            "no test added, no second gate run"
+        );
+    }
+
     /// `V-14`: the gate is told what the work delivered, not what it was given.
     ///
     /// Cycle 10 filed three green gates against `L-23`, `M-29` and `M-27` on a
