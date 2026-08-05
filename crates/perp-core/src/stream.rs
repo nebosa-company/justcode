@@ -365,6 +365,11 @@ pub fn read_from(
     });
 
     let started = Instant::now();
+    // When something last arrived, which is what the deadline is actually
+    // about. Starts with the clock, so before anything has come back it is the
+    // same instant as `started` and the first-token case needs no branch of its
+    // own.
+    let mut last = started;
     let mut out = Streamed {
         content: String::new(),
         reasoning: String::new(),
@@ -384,17 +389,30 @@ pub fn read_from(
         // Before the first token the deadline is `first_token`; after it, the
         // gap between tokens is allowed to be as long again. A model that
         // started answering has demonstrated it is alive.
-        let budget = match out.first_token {
-            None => first_token.saturating_sub(started.elapsed()),
-            Some(_) => first_token,
-        };
+        //
+        // That was the stated intent and not the behaviour: the gap was never
+        // measured. `budget` became a constant `first_token` once anything had
+        // arrived, so it never reached zero, and the timeout arm below only
+        // breaks while `first_token` is `None` — so a stream that fell silent
+        // *after* its first token had nothing left that could end it. Only the
+        // pipe closing or an interrupt could, and the loop passes `|| false`
+        // for the interrupt.
+        //
+        // One rule instead of two, keyed on when something last arrived rather
+        // than on whether anything ever did. `last` starts equal to `started`,
+        // so the first-token case falls out of the same arithmetic.
+        let budget = first_token.saturating_sub(last.elapsed());
         if budget.is_zero() {
-            out.stop = Stop::Silent { after: started.elapsed() };
+            out.stop = Stop::Silent { after: last.elapsed() };
             break;
         }
 
         match rx.recv_timeout(budget.min(Duration::from_millis(250))) {
             Ok(line) => {
+                // Before parsing: a keep-alive or a framing line carries no
+                // event and is still the link saying it is there. Liveness is
+                // about the socket, not about the content.
+                last = Instant::now();
                 let Some(event) = parse(&line) else { continue };
                 if out.first_token.is_none() {
                     out.first_token = Some(started.elapsed());
@@ -433,14 +451,12 @@ pub fn read_from(
                     }
                 }
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                // Not necessarily a failure — the 250ms cap above exists so the
-                // interrupt is checked often. Only the budget expiring is.
-                if out.first_token.is_none() && started.elapsed() >= first_token {
-                    out.stop = Stop::Silent { after: started.elapsed() };
-                    break;
-                }
-            }
+            // Not a failure on its own — the 250ms cap above exists so the
+            // interrupt is polled often, so most timeouts are just that poll.
+            // Whether the silence has gone on too long is the budget check at
+            // the top of the loop, which sees the same `last` and answers it
+            // once rather than in two places that could disagree.
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
             // The pipe closed: curl exited.
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
@@ -534,6 +550,62 @@ pub fn streaming_args(base: Vec<String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `M-23`: a stream that falls silent **after** its first token is failed
+    /// over, not waited on.
+    ///
+    /// The first test to drive [`read_from`] against a real process rather than
+    /// a parser, which is why this went unnoticed. The deadline was documented
+    /// as "before the first token … after it, the gap between tokens is allowed
+    /// to be as long again" and only the first half was implemented: once
+    /// anything had arrived, `budget` became a constant and the timeout arm
+    /// stopped checking, so nothing could end the read but the pipe closing.
+    ///
+    /// The child here emits one chunk and then sleeps far longer than the
+    /// deadline without exiting, so the pipe stays open and only a gap
+    /// deadline can stop it.
+    #[test]
+    fn a_stream_that_goes_quiet_after_its_first_token_is_failed_over() {
+        let chunk = r#"data: {"choices":[{"delta":{"content":"hi"}}]}"#;
+        let (program, args) = if cfg!(windows) {
+            (
+                "powershell",
+                vec![
+                    "-NoProfile".to_string(),
+                    "-Command".to_string(),
+                    format!("Write-Output '{chunk}'; Start-Sleep -Seconds 30"),
+                ],
+            )
+        } else {
+            ("sh", vec!["-c".to_string(), format!("echo '{chunk}'; sleep 30")])
+        };
+
+        let started = Instant::now();
+        let streamed = read_from(
+            program,
+            &args,
+            None,
+            parse_line,
+            Duration::from_secs(2),
+            || false,
+            |_| {},
+        )
+        .expect("the reader ran");
+
+        assert_eq!(streamed.content, "hi", "the first token did arrive");
+        assert!(streamed.first_token.is_some(), "so this is the gap deadline, not the first-token one");
+        assert!(
+            matches!(streamed.stop, Stop::Silent { .. }),
+            "a stream that stopped speaking is failed over: {:?}",
+            streamed.stop
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "and it gave up near the deadline rather than waiting out the child: {:?}",
+            started.elapsed()
+        );
+        assert!(streamed.stop.should_fail_over(), "`M-9` gets to try the next link");
+    }
 
     /// A tool call arrives split across chunks: identity once, then argument
     /// text a few characters at a time.
