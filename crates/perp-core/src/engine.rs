@@ -741,8 +741,13 @@ impl Engine {
             // Matches in the requirements source are discounted for the same
             // reason: that is where ids are *defined* (`V-9`), so finding one
             // there says only that the requirement exists.
+            //
+            // `V-22`: `id_in_tree`, not `in_tree`. The wider set includes files
+            // matched by words lifted from the requirement's prose, and prose
+            // words are not identifiers — correcting `already_built` was not
+            // enough, because this branch never asked it.
             let implemented: Vec<&String> = check
-                .in_tree
+                .id_in_tree
                 .iter()
                 .filter(|path| !path.contains("requirements"))
                 .filter(|path| !path.ends_with(".md"))

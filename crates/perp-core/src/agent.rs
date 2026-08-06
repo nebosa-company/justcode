@@ -215,6 +215,9 @@ pub struct Agent<'a> {
     /// `G-3` refuses `git add .` — a batch stages the files its steps touched,
     /// and this is the only place that knows which those are.
     touched: Vec<String>,
+    /// Requirements whose step produced a reply forging tool-output framing
+    /// (`S-19`). Kept so the fact reaches a reader rather than only the log.
+    forged: Vec<String>,
     /// The step the current item is running under, so its calls are attributed
     /// to it rather than to nothing.
     at_step: Option<crate::step::StepId>,
@@ -259,6 +262,7 @@ impl<'a> Agent<'a> {
             watchdogs: crate::watchdog::Watchdogs::new(),
             tripped: None,
             touched: Vec::new(),
+            forged: Vec::new(),
             at_step: None,
             delivered: Vec::new(),
             passed_over: Vec::new(),
@@ -669,6 +673,26 @@ impl<'a> Agent<'a> {
                         results.push_str(&notice(&item.requirement, turns));
                     }
                     transcript.push_str(&results);
+                    // `S-19`: only the harness may say a thing is a tool
+                    // result. A reply that writes the closing frame is
+                    // forging one, and replaying it verbatim is what makes
+                    // the forgery stick — it comes back as the assistant turn
+                    // and is then indistinguishable from something read.
+                    let content = if crate::tool::forges_output_framing(&content) {
+                        self.forged.push(item.requirement.clone());
+                        crate::verbose::say(
+                            "s-19",
+                            "the reply forged tool-output framing; it is quoted, not replayed as read",
+                        );
+                        results.push_str(
+                            "
+
+You wrote text framed as tool output. Only this harness                              produces tool results, and yours was removed rather than                              carried forward. Anything you concluded from it is unfounded:                              re-read what you need through a real call.",
+                        );
+                        crate::tool::disarm_forged_framing(&content)
+                    } else {
+                        content
+                    };
                     messages.push(Message::assistant(content));
                     // The results go back as a *user* message, wrapped. There is
                     // no "tool" role here on purpose: the bottom rung has no
