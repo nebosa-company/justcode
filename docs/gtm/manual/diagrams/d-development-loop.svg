@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="508" viewBox="0 0 680 508" role="img"><title>Perpetum phase D: the development loop, its gates, and the decisions that move it between states</title><desc>A vertical loop from backlog to committed batch. Each step can exit sideways: an empty backlog stops the cycle, a budget ceiling parks it, a watchdog or absent evidence fails the step, and two red gates or a credential wall block it. Forks that write a decision record are marked.</desc>
+
+<text x="40" y="26" font-size="11" fill="#5F5E5A">phase D — one batch. purple continues the loop, coral is where it leaves.</text>
+
+<rect x="60" y="56" width="210" height="46" rx="4" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="165" y="76" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">backlog</text>
+<text x="165" y="92" font-size="11" fill="#3C3489" text-anchor="middle">open rows, minus what was tried</text>
+
+<line x1="270" y1="79" x2="414" y2="79" stroke="#888780"/>
+<polyline points="408,75 414,79 408,83" fill="none" stroke="#888780"/>
+<text x="342" y="73" font-size="11" fill="#5F5E5A" text-anchor="middle">nothing left</text>
+
+<rect x="420" y="56" width="220" height="46" rx="4" fill="#FAECE7" stroke="#993C1D"/>
+<text x="530" y="76" font-size="12" font-weight="500" fill="#4A1B0C" text-anchor="middle">stopped</text>
+<text x="530" y="92" font-size="11" fill="#712B13" text-anchor="middle">backlog exhausted (L-14)</text>
+
+<line x1="165" y1="102" x2="165" y2="130" stroke="#888780"/>
+<polyline points="161,124 165,130 169,124" fill="none" stroke="#888780"/>
+
+<rect x="60" y="136" width="210" height="46" rx="4" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="165" y="156" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">take the next item</text>
+<text x="165" y="172" font-size="11" fill="#3C3489" text-anchor="middle">and record what was passed over</text>
+
+<line x1="270" y1="159" x2="414" y2="159" stroke="#888780"/>
+<polyline points="408,155 414,159 408,163" fill="none" stroke="#888780"/>
+<text x="342" y="153" font-size="11" fill="#5F5E5A" text-anchor="middle">over ceiling</text>
+
+<rect x="420" y="136" width="220" height="46" rx="4" fill="#FAECE7" stroke="#993C1D"/>
+<text x="530" y="156" font-size="12" font-weight="500" fill="#4A1B0C" text-anchor="middle">parked</text>
+<text x="530" y="172" font-size="11" fill="#712B13" text-anchor="middle">a budget ceiling (L-9), resumable</text>
+
+<line x1="165" y1="182" x2="165" y2="210" stroke="#888780"/>
+<polyline points="161,204 165,210 169,204" fill="none" stroke="#888780"/>
+
+<rect x="60" y="216" width="210" height="60" rx="4" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="165" y="236" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">agent turn</text>
+<text x="165" y="252" font-size="11" fill="#3C3489" text-anchor="middle">model call, tools, ladder rung</text>
+<text x="165" y="268" font-size="11" fill="#3C3489" text-anchor="middle">repairs or drops a rung (M-8)</text>
+
+<line x1="270" y1="246" x2="414" y2="246" stroke="#888780"/>
+<polyline points="408,242 414,246 408,250" fill="none" stroke="#888780"/>
+<text x="342" y="240" font-size="11" fill="#5F5E5A" text-anchor="middle">no evidence</text>
+
+<rect x="420" y="216" width="220" height="60" rx="4" fill="#FAECE7" stroke="#993C1D"/>
+<text x="530" y="236" font-size="12" font-weight="500" fill="#4A1B0C" text-anchor="middle">step failed</text>
+<text x="530" y="252" font-size="11" fill="#712B13" text-anchor="middle">a watchdog stopped it, nothing was</text>
+<text x="530" y="268" font-size="11" fill="#712B13" text-anchor="middle">written, or the turn ceiling hit</text>
+
+<line x1="165" y1="276" x2="165" y2="304" stroke="#888780"/>
+<polyline points="161,298 165,304 169,298" fill="none" stroke="#888780"/>
+<text x="175" y="294" font-size="11" fill="#5F5E5A">it wrote something</text>
+
+<rect x="60" y="310" width="210" height="46" rx="4" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="165" y="330" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">gates</text>
+<text x="165" y="346" font-size="11" fill="#3C3489" text-anchor="middle">lint, build, test — stop at first red</text>
+
+<line x1="270" y1="333" x2="414" y2="333" stroke="#888780"/>
+<polyline points="408,329 414,333 408,337" fill="none" stroke="#888780"/>
+<text x="342" y="327" font-size="11" fill="#5F5E5A" text-anchor="middle">still red</text>
+
+<rect x="420" y="310" width="220" height="46" rx="4" fill="#FAECE7" stroke="#993C1D"/>
+<text x="530" y="330" font-size="12" font-weight="500" fill="#4A1B0C" text-anchor="middle">blocked</text>
+<text x="530" y="346" font-size="11" fill="#712B13" text-anchor="middle">two reds (L-16), or a wall (S-5)</text>
+
+<line x1="165" y1="356" x2="165" y2="384" stroke="#888780"/>
+<polyline points="161,378 165,384 169,378" fill="none" stroke="#888780"/>
+<text x="175" y="374" font-size="11" fill="#5F5E5A">all green</text>
+
+<rect x="60" y="390" width="210" height="46" rx="4" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="165" y="410" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">commit the batch</text>
+<text x="165" y="426" font-size="11" fill="#3C3489" text-anchor="middle">only the files the step touched</text>
+
+<polyline points="165,436 165,458 40,458 40,79 54,79" fill="none" stroke="#888780"/>
+<polyline points="48,75 54,79 48,83" fill="none" stroke="#888780"/>
+<text x="180" y="454" font-size="11" fill="#5F5E5A">the next item, then the next batch</text>
+
+<line x1="40" y1="478" x2="640" y2="478" stroke="#D3D1C7"/>
+<text x="40" y="497" font-size="11" fill="#0F6E56">every fork above writes a decision record — what was chosen, what else was there, and why (O-8 to O-10)</text>
+</svg>

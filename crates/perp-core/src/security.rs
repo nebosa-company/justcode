@@ -497,6 +497,7 @@ mod tests {
     fn link(name: &str, url: &str, privacy: Privacy) -> Link {
         Link {
             name: name.to_string(),
+            effort: None,
             kind: Kind::OpenAiCompat,
             base_url: Some(url.to_string()),
             device: None,

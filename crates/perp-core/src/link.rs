@@ -308,6 +308,13 @@ pub struct Link {
     pub auth_env: Option<String>,
     /// One GPU serving one model does not want four parallel requests (`M-15`).
     pub concurrency: u32,
+    /// How hard the model should think, for links whose kind can be told
+    /// (`M-34`). `None` leaves whatever the provider defaults to.
+    ///
+    /// Declared rather than inherited: a run that reasons at one level today
+    /// and another tomorrow, because a CLI changed its default, is a run whose
+    /// results cannot be compared with its own past.
+    pub effort: Option<String>,
 }
 
 impl Link {
@@ -322,12 +329,21 @@ impl Link {
             (None, Some(device)) => format!("device {device}"),
             (None, None) => "unaddressed".to_string(),
         };
+        // `M-34`: shown when declared, absent when not. A binding key that
+        // changes how every call reasons and appears nowhere a person looks is
+        // the same kind of gap it exists to close — an effort you cannot see is
+        // an effort you cannot compare a run against.
+        let effort = match &self.effort {
+            Some(level) => format!(" · {level} effort"),
+            None => String::new(),
+        };
         format!(
-            "{} [{} · {} · {}] {}",
+            "{} [{} · {} · {}{}] {}",
             self.name,
             self.kind.as_str(),
             self.privacy.as_str(),
             self.model,
+            effort,
             where_
         )
     }
@@ -762,6 +778,24 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
         None => 1,
     };
 
+    // Refused rather than passed on: an effort the provider does not know is a
+    // flag that fails at the far end, after the call has been set up, and the
+    // error blames the invocation rather than the binding line that caused it.
+    const EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
+    let effort = match field("effort") {
+        Some(text) => {
+            let text = text.trim().to_ascii_lowercase();
+            if !EFFORTS.contains(&text.as_str()) {
+                return Err(Error::unbound(
+                    format!("link.{name}.effort"),
+                    format!("`{text}` is not one of {}", EFFORTS.join(", ")),
+                ));
+            }
+            Some(text)
+        }
+        None => None,
+    };
+
     Ok(Link {
         name: name.to_string(),
         kind,
@@ -771,6 +805,7 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
         privacy,
         auth_env: field("auth_env"),
         concurrency,
+        effort,
     })
 }
 

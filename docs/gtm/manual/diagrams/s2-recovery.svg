@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="272" viewBox="0 0 680 272" role="img"><title>Perpetum recovery: what happens to a step that was in flight when the process died</title><desc>On start the engine finds the last intent with no outcome and probes the workspace for what actually happened. Four outcomes follow: skip if the effect is already there, redo if it is absent, redo if unclear but the step declared itself idempotent, and park if unclear and unsafe to repeat.</desc>
+
+<text x="40" y="26" font-size="11" fill="#5F5E5A">on start, before anything else — the engine verifies what happened, and never assumes</text>
+
+<rect x="40" y="106" width="170" height="60" rx="4" fill="#FAECE7" stroke="#993C1D"/>
+<text x="125" y="127" font-size="12" font-weight="500" fill="#4A1B0C" text-anchor="middle">a step in flight</text>
+<text x="125" y="145" font-size="11" fill="#712B13" text-anchor="middle">the last intent with</text>
+<text x="125" y="161" font-size="11" fill="#712B13" text-anchor="middle">no outcome after it</text>
+
+<line x1="210" y1="136" x2="246" y2="136" stroke="#888780"/>
+<polyline points="240,132 246,136 240,140" fill="none" stroke="#888780"/>
+
+<rect x="250" y="106" width="170" height="60" rx="4" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="335" y="127" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">probe the workspace</text>
+<text x="335" y="145" font-size="11" fill="#3C3489" text-anchor="middle">did the effect land?</text>
+<text x="335" y="161" font-size="11" fill="#3C3489" text-anchor="middle">look, do not guess</text>
+
+<line x1="422" y1="130" x2="454" y2="66" stroke="#888780"/>
+<polyline points="447,68 454,66 452,73" fill="none" stroke="#888780"/>
+<line x1="422" y1="134" x2="454" y2="114" stroke="#888780"/>
+<polyline points="447,113 454,114 450,120" fill="none" stroke="#888780"/>
+<line x1="422" y1="140" x2="454" y2="162" stroke="#888780"/>
+<polyline points="450,156 454,162 447,163" fill="none" stroke="#888780"/>
+<line x1="422" y1="144" x2="454" y2="210" stroke="#888780"/>
+<polyline points="452,203 454,210 447,208" fill="none" stroke="#888780"/>
+
+<rect x="458" y="44" width="182" height="44" rx="4" fill="#E1F5EE" stroke="#0F6E56"/>
+<text x="470" y="63" font-size="12" font-weight="500" fill="#04342C">skip</text>
+<text x="470" y="79" font-size="11" fill="#085041">the effect is already there</text>
+
+<rect x="458" y="92" width="182" height="44" rx="4" fill="#E1F5EE" stroke="#0F6E56"/>
+<text x="470" y="111" font-size="12" font-weight="500" fill="#04342C">redo</text>
+<text x="470" y="127" font-size="11" fill="#085041">absent — it never landed</text>
+
+<rect x="458" y="140" width="182" height="44" rx="4" fill="#E1F5EE" stroke="#0F6E56"/>
+<text x="470" y="159" font-size="12" font-weight="500" fill="#04342C">redo</text>
+<text x="470" y="175" font-size="11" fill="#085041">unclear, but it is idempotent</text>
+
+<rect x="458" y="188" width="182" height="44" rx="4" fill="#FAECE7" stroke="#993C1D"/>
+<text x="470" y="207" font-size="12" font-weight="500" fill="#4A1B0C">park</text>
+<text x="470" y="223" font-size="11" fill="#712B13">unclear, and unsafe to repeat</text>
+
+<line x1="40" y1="248" x2="640" y2="248" stroke="#D3D1C7"/>
+<text x="40" y="266" font-size="11" fill="#5F5E5A">A step that cannot be told apart is never retried blindly — that is the whole of the fourth branch.</text>
+</svg>

@@ -742,7 +742,7 @@ mod tests {
     #[test]
     fn the_streaming_invocation_asks_for_partial_messages() {
         let (args, _) =
-            crate::anthropic::cli_streaming_invocation("claude", "sonnet", None, "hello");
+            crate::anthropic::cli_streaming_invocation("claude", "sonnet", None, "hello", None);
         assert!(args.iter().any(|a| a == "--include-partial-messages"), "{args:?}");
         assert!(args.iter().any(|a| a == "stream-json"), "{args:?}");
         assert!(!args.iter().any(|a| a == "json"), "and not the buffered form: {args:?}");

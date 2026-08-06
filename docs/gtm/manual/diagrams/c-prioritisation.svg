@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="208" viewBox="0 0 680 208" role="img"><title>phase C — prioritisation</title><desc>What phase C reads, who does the work, the condition that ends it, and where it goes when that condition is met or is not.</desc>
+
+<text x="40" y="26" font-size="11" fill="#5F5E5A">reads · who does the work · the condition that ends the phase</text>
+
+<rect x="40" y="44" width="170" height="76" rx="4" fill="#F1EFE8" stroke="#5F5E5A"/>
+<text x="125" y="66" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">reads</text>
+<text x="125" y="84" font-size="11" fill="#444441" text-anchor="middle">docs/prioritization/</text>
+<text x="125" y="100" font-size="11" fill="#444441" text-anchor="middle">batches.md, conflicts.md</text>
+<line x1="210" y1="82" x2="251" y2="82" stroke="#888780"/>
+<polyline points="245,78 251,82 245,86" fill="none" stroke="#888780"/>
+<rect x="255" y="44" width="170" height="76" rx="4" fill="#F1EFE8" stroke="#5F5E5A"/>
+<text x="340" y="66" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">prioritisation</text>
+<text x="340" y="84" font-size="11" fill="#444441" text-anchor="middle">a person's work</text>
+<text x="340" y="100" font-size="11" fill="#444441" text-anchor="middle">the loop only measures</text>
+<line x1="425" y1="82" x2="466" y2="82" stroke="#888780"/>
+<polyline points="460,78 466,82 460,86" fill="none" stroke="#888780"/>
+<rect x="470" y="44" width="170" height="76" rx="4" fill="#E1F5EE" stroke="#0F6E56"/>
+<text x="555" y="66" font-size="12" font-weight="500" fill="#04342C" text-anchor="middle">exit condition</text>
+<text x="555" y="84" font-size="11" fill="#085041" text-anchor="middle">at least one batch planned,</text>
+<text x="555" y="100" font-size="11" fill="#085041" text-anchor="middle">and no conflict left</text>
+<text x="555" y="116" font-size="11" fill="#085041" text-anchor="middle">waiting on a person</text>
+
+<line x1="555" y1="120" x2="555" y2="142" stroke="#888780"/>
+<polyline points="551,136 555,142 559,136" fill="none" stroke="#888780"/>
+<text x="40" y="162" font-size="11" font-weight="500" fill="#0F6E56">met</text>
+<text x="86" y="162" font-size="11" fill="#085041">D — development</text>
+<text x="40" y="184" font-size="11" font-weight="500" fill="#993C1D">not met</text>
+<text x="86" y="184" font-size="11" fill="#712B13">stays: nothing planned, or a conflict is open</text>
+</svg>

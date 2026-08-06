@@ -193,6 +193,7 @@ pub fn cli_invocation(
     model: &str,
     system: Option<&std::path::Path>,
     prompt: &str,
+    effort: Option<&str>,
 ) -> (Vec<String>, String) {
     let mut args = vec![
         program.to_string(),
@@ -206,6 +207,14 @@ pub fn cli_invocation(
         "--tools".to_string(),
         String::new(),
     ];
+    // `M-34`: how hard to think, when the binding says. Passed only when
+    // declared, so a link that says nothing keeps whatever the CLI defaults to
+    // — which is what every call did before this existed, and what made two
+    // runs a month apart incomparable without anyone being able to see why.
+    if let Some(effort) = effort {
+        args.push("--effort".to_string());
+        args.push(effort.to_string());
+    }
     if let Some(path) = system {
         args.push("--system-prompt-file".to_string());
         args.push(path.display().to_string());
@@ -224,8 +233,9 @@ pub fn cli_streaming_invocation(
     model: &str,
     system: Option<&std::path::Path>,
     prompt: &str,
+    effort: Option<&str>,
 ) -> (Vec<String>, String) {
-    let (mut args, stdin) = cli_invocation(program, model, system, prompt);
+    let (mut args, stdin) = cli_invocation(program, model, system, prompt, effort);
     for arg in &mut args {
         if arg == "json" {
             "stream-json".clone_into(arg);
@@ -430,11 +440,29 @@ mod tests {
         assert!(parse(r#"{"model":"m"}"#).is_err(), "no content is not an empty answer");
     }
 
+    /// `M-34`: how hard to think is declared, not inherited.
+    ///
+    /// Nothing passed `--effort`, so every call ran at whatever the CLI
+    /// defaulted to that week — and two runs a month apart were not comparable
+    /// without anyone being able to see why. Passed only when the binding says
+    /// so, because a link that declares nothing should behave exactly as it did
+    /// before this existed.
+    #[test]
+    fn effort_reaches_the_cli_only_when_a_link_declares_it() {
+        let (bare, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.", None);
+        assert!(!bare.iter().any(|a| a == "--effort"), "undeclared stays undeclared: {bare:?}");
+
+        let (asked, _) =
+            cli_invocation("claude", "claude-opus-5", None, "Add dedupe.", Some("high"));
+        let at = asked.iter().position(|a| a == "--effort").expect("the flag is passed");
+        assert_eq!(asked.get(at + 1).map(String::as_str), Some("high"), "{asked:?}");
+    }
+
     #[test]
     fn the_cli_takes_its_prompt_on_stdin_and_never_in_argv() {
         // A prompt is longer than any command line allows, and argv is visible to
         // every other process on the machine (`S-2`).
-        let (args, stdin) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.");
+        let (args, stdin) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.", None);
         assert_eq!(stdin, "Add dedupe.");
         assert!(!args.iter().any(|arg| arg.contains("Add dedupe.")), "not in argv: {args:?}");
         assert_eq!(args.first().map(String::as_str), Some("claude"));
@@ -454,6 +482,7 @@ mod tests {
             "claude-opus-5",
             Some(std::path::Path::new("/tmp/sys.txt")),
             "Add dedupe.",
+            None,
         );
         let at = args.iter().position(|arg| arg == "--system-prompt-file").expect("{args:?}");
         assert!(args[at + 1].contains("sys.txt"), "the path follows the flag: {args:?}");
@@ -466,7 +495,7 @@ mod tests {
     /// shapes every reply we then try to parse as a tool call.
     #[test]
     fn the_operators_own_customisations_are_left_out() {
-        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.");
+        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.", None);
         assert!(args.iter().any(|arg| arg == "--safe-mode"), "{args:?}");
         // `--bare` looks like it would do too, and also forces authentication
         // through `ANTHROPIC_API_KEY`, which is the one thing this must not do.
@@ -492,7 +521,7 @@ mod tests {
     /// pair and not just the flag.
     #[test]
     fn the_commands_own_tools_are_taken_away_so_that_it_is_a_model_and_not_an_agent() {
-        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.");
+        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.", None);
         let at = args.iter().position(|arg| arg == "--tools").expect("{args:?}");
         assert_eq!(args.get(at + 1).map(String::as_str), Some(""), "empty, not absent: {args:?}");
     }
@@ -503,7 +532,7 @@ mod tests {
     /// them — the failure this whole shape exists to prevent, and a silent one.
     #[test]
     fn flattening_the_arguments_to_a_line_would_invert_the_tools_flag() {
-        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.");
+        let (args, _) = cli_invocation("claude", "claude-opus-5", None, "Add dedupe.", None);
         let round_tripped = crate::process::split_command(&args.join(" ")).expect("split");
         let at = round_tripped.iter().position(|arg| arg == "--tools").expect("{round_tripped:?}");
         assert_ne!(

@@ -656,6 +656,7 @@ impl<'a> Client<'a> {
             &link.model,
             handed.as_ref().map(SystemFile::path),
             &stdin,
+            link.effort.as_deref(),
         );
 
         crate::stream::read_from(
@@ -733,6 +734,7 @@ impl<'a> Client<'a> {
             &link.model,
             handed.as_ref().map(SystemFile::path),
             &stdin,
+            link.effort.as_deref(),
         );
 
         // The arguments go as a list. Joined into a line and split back apart,
