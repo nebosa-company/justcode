@@ -167,6 +167,12 @@ impl Thrash {
         }
 
         if !returned {
+            // `L-32`: reaching a state the file has never been in is progress,
+            // and progress is what tells exploration apart from oscillation.
+            // The rule's own subject is "one agent undoing itself" — an agent
+            // that undoes a hunk and then writes something genuinely new is
+            // editing, not looping.
+            self.reverts.remove(path);
             return Watch::Continue;
         }
 
@@ -214,6 +220,50 @@ impl Watchdogs {
 
 #[cfg(test)]
 mod tests {
+
+    /// `L-32`: undoing a hunk and then writing something new is editing.
+    ///
+    /// `L-13` counts any return to an older content hash and stops the batch on
+    /// the second, however many edits lie between. On a 71KB module a coder
+    /// applies a hunk, sees a test fail, backs it out and tries differently —
+    /// which is the same shape as oscillation and none of the substance.
+    ///
+    /// Measured on Janitor's cycle 29: 151 `patch` calls on `scan.rs` producing
+    /// **+51 lines of correct code** — `symlink_metadata` so `read_dir` cannot
+    /// follow a symlinked directory, recording `NotFollowed` — green at 128
+    /// tests, all three gates passing. The step was failed for thrashing and
+    /// the work was left uncommitted.
+    ///
+    /// Progress is what separates the two, so reaching a state the file has
+    /// never held clears the count. Genuine oscillation never reaches one.
+    #[test]
+    fn a_revert_followed_by_new_content_is_editing_not_thrashing() {
+        let path = Path::new("scan.rs");
+
+        // Oscillation: A, B, A, B — never anything new. Still caught.
+        let mut looping = Thrash::new();
+        assert_eq!(looping.observe(path, b"A"), Watch::Continue);
+        assert_eq!(looping.observe(path, b"B"), Watch::Continue);
+        assert_eq!(looping.observe(path, b"A"), Watch::Continue);
+        assert!(
+            matches!(looping.observe(path, b"B"), Watch::Stop { .. }),
+            "two reverts with nothing new between them is the loop this rule is for"
+        );
+
+        // Editing: back out a hunk, then write something the file has never
+        // been — twice. Not thrashing.
+        let mut editing = Thrash::new();
+        assert_eq!(editing.observe(path, b"A"), Watch::Continue);
+        assert_eq!(editing.observe(path, b"B"), Watch::Continue);
+        assert_eq!(editing.observe(path, b"A"), Watch::Continue);
+        assert_eq!(editing.observe(path, b"C"), Watch::Continue);
+        assert_eq!(editing.observe(path, b"A"), Watch::Continue);
+        assert_eq!(
+            editing.observe(path, b"D"),
+            Watch::Continue,
+            "each revert was followed by a state the file had never held"
+        );
+    }
 
     /// `L-31`: re-running a check after an edit is not a stuck loop.
     ///
