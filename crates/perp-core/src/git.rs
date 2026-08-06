@@ -448,12 +448,52 @@ impl Repo {
     }
 
     /// Stage exactly these paths (`G-3`).
+    /// Is this path in the index — so an absence is a deletion to record
+    /// rather than a name git has never heard of (`G-17`)?
+    fn is_tracked(&self, path: &str) -> bool {
+        self.run_unchecked(&["ls-files", "--error-unmatch", "--", path])
+            .map(|run| run.is_success())
+            .unwrap_or(false)
+    }
+
     pub fn stage(&self, paths: &[&str]) -> Result<()> {
         if paths.is_empty() {
             return Err(Error::unbound("git add", "no paths — staging is always explicit"));
         }
+        // `G-17`: a path that git has never heard of and that is no longer on
+        // disk came and went inside the step, and there is nothing to record
+        // about it. `git add` fails the *whole* pathspec list on one such name
+        // — exit 128, nothing staged — so one scratch file the step cleaned up
+        // after itself took the entire commit with it.
+        //
+        // A path that is absent but *tracked* is kept: that is a deletion, and
+        // staging it is how the commit carries one.
+        let mut kept: Vec<&str> = Vec::new();
+        let mut vanished: Vec<&str> = Vec::new();
+        for path in paths {
+            if self.root.join(path).exists() || self.is_tracked(path) {
+                kept.push(path);
+            } else {
+                vanished.push(path);
+            }
+        }
+        if !vanished.is_empty() {
+            crate::verbose::say(
+                "g-17",
+                &format!("not staged, never tracked and no longer present: {}", vanished.join(", ")),
+            );
+        }
+        if kept.is_empty() {
+            return Err(Error::unbound(
+                "git add",
+                format!(
+                    "every path came and went inside the step: {}",
+                    vanished.join(", ")
+                ),
+            ));
+        }
         let mut args = vec!["add", "--"];
-        args.extend_from_slice(paths);
+        args.extend_from_slice(&kept);
         let run = self.run(&args, &Approval::NotGranted)?;
         if !run.is_success() {
             return Err(Error::unbound(
@@ -707,6 +747,44 @@ impl CommitMessage {
 
 #[cfg(test)]
 mod tests {
+
+    /// `G-17`: a scratch file the step cleaned up does not take the commit with it.
+    ///
+    /// `git add` fails the whole pathspec list on a single name it has never
+    /// heard of — exit 128, nothing staged. Measured on Janitor's cycle 27:
+    /// the coder wrote `.j29_patch.py`, used it, deleted it, and `touched`
+    /// still held the path. Every gate was green, the verifier had passed the
+    /// step, and the batch committed nothing:
+    /// *"gate was green but nothing was committed: `git add`: exit 128:
+    /// fatal: pathspec '.j29_patch.py' did not match any files"*.
+    ///
+    /// An absent path that git *does* track is a different thing — that is a
+    /// deletion, and staging it is how a commit carries one.
+    #[test]
+    fn a_path_that_came_and_went_inside_the_step_does_not_fail_the_commit() {
+        let repo = repo("git-g17-vanished");
+        let root = repo.root.clone();
+        std::fs::write(root.join("kept.rs"), "fn main() {}
+").expect("write");
+
+        // The real shape: one real edit, one scratch file already gone.
+        repo.stage(&["kept.rs", ".scratch.py"]).expect("the vanished path is skipped, not fatal");
+
+        let staged = repo.run_unchecked(&["diff", "--cached", "--name-only"]).expect("git");
+        assert!(staged.stdout_tail.contains("kept.rs"), "the real work is staged: {}", staged.stdout_tail);
+        assert!(
+            !staged.stdout_tail.contains(".scratch.py"),
+            "and the ghost is not: {}",
+            staged.stdout_tail
+        );
+
+        // A tracked file that is now absent is a deletion and must still stage.
+        repo.commit(&CommitMessage::new("Add kept.rs")).expect("commit");
+        std::fs::remove_file(root.join("kept.rs")).expect("delete");
+        repo.stage(&["kept.rs"]).expect("a tracked absence is a deletion, not a ghost");
+        let staged = repo.run_unchecked(&["diff", "--cached", "--name-only"]).expect("git");
+        assert!(staged.stdout_tail.contains("kept.rs"), "the deletion is recorded: {}", staged.stdout_tail);
+    }
     use super::*;
     use crate::testutil::tmpdir;
 
