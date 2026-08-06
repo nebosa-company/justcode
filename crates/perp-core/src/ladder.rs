@@ -360,14 +360,44 @@ fn parse_lines(body: &str) -> Result<Call> {
     let mut args: Vec<(String, String)> = Vec::new();
     let mut requirement = None;
 
+    // Keys whose value is prose or code, and so may legitimately run past one
+    // line without the model reaching for a heredoc (`M-36`).
+    //
+    // `M-32` taught this parser that a value opening a JSON bracket runs until
+    // the brackets balance, for exactly this reason and at exactly this cost.
+    // It did not finish the thought: a `patch` whose `expect` is two lines of
+    // Rust has no bracket to count, and was refused on its second line.
+    //
+    // Measured on Janitor's cycle 24: the coder spent eight turns reading, then
+    // composed a `patch` against `guard.rs` whose `expect` was a doc comment
+    // spanning lines, and the step died on
+    // `` `//! originally written to ...` is not `key: value` ``. The edit was
+    // right; only the framing was refused, which is the same sentence `M-32`
+    // was written to stop having to say.
+    //
+    // Bounded on purpose: only these keys continue, so a genuinely malformed
+    // block is still refused rather than silently absorbing whatever follows.
+    const CONTINUES: &[&str] = &["content", "expect", "replace", "text", "command", "message"];
+
     let mut lines = body.lines();
+    let mut last_key: Option<String> = None;
     while let Some(raw) = lines.next() {
         let line = raw.trim();
         if line.is_empty() {
             continue;
         }
-        let Some((key, value)) = line.split_once(':') else {
-            return Err(bad(format!("`{line}` is not `key: value`")));
+        let split = line.split_once(':');
+        let Some((key, value)) = split else {
+            match last_key.as_deref().filter(|k| CONTINUES.contains(k)) {
+                Some(open) => {
+                    if let Some((_, held)) = args.iter_mut().find(|(k, _)| k == open) {
+                        held.push('\n');
+                        held.push_str(raw);
+                    }
+                    continue;
+                }
+                None => return Err(bad(format!("`{line}` is not `key: value`"))),
+            }
         };
         let (key, value) = (key.trim(), value.trim());
 
@@ -407,7 +437,10 @@ fn parse_lines(body: &str) -> Result<Call> {
             match key {
                 "tool" => tool = Some(Tool::parse(text.trim())?),
                 "requirement" => requirement = Some(text.trim().to_string()),
-                _ => args.push((key.to_string(), text)),
+                _ => {
+                    args.push((key.to_string(), text));
+                    last_key = Some(key.to_string());
+                }
             }
             continue;
         }
@@ -437,7 +470,10 @@ fn parse_lines(body: &str) -> Result<Call> {
             match key {
                 "tool" => tool = Some(Tool::parse(text.trim())?),
                 "requirement" => requirement = Some(text.trim().to_string()),
-                _ => args.push((key.to_string(), text)),
+                _ => {
+                    args.push((key.to_string(), text));
+                    last_key = Some(key.to_string());
+                }
             }
             continue;
         }
@@ -445,7 +481,10 @@ fn parse_lines(body: &str) -> Result<Call> {
         match key {
             "tool" => tool = Some(Tool::parse(value)?),
             "requirement" => requirement = Some(value.to_string()),
-            _ => args.push((key.to_string(), value.to_string())),
+            _ => {
+                args.push((key.to_string(), value.to_string()));
+                last_key = Some(key.to_string());
+            }
         }
     }
 
@@ -490,6 +529,40 @@ fn strip_fence(text: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+
+    /// `M-36`: a prose value that runs past one line is a value, not an error.
+    ///
+    /// `M-32` taught this parser that a value opening a JSON bracket runs until
+    /// the brackets balance, for exactly this reason and at exactly this cost.
+    /// It did not finish the thought: a `patch` whose `expect` is two lines of
+    /// Rust has no bracket to count.
+    ///
+    /// Measured on Janitor's cycle 24. The coder spent eight turns reading,
+    /// composed a patch against `guard.rs` whose `expect` was a doc comment
+    /// spanning lines, and the step died on
+    /// `` `//! originally written to ...` is not `key: value` ``. The edit was
+    /// right; only the framing was refused.
+    #[test]
+    fn a_prose_value_may_run_past_one_line() {
+        let block = "tool: patch
+path: guard.rs
+expect: //! one
+//! two
+replace: //! three";
+        let call = parse_lines(block).expect("the second line continues the value");
+        assert_eq!(call.tool, Tool::Patch);
+        assert_eq!(call.get("path").map(str::trim), Some("guard.rs"));
+        assert_eq!(call.get("expect"), Some("//! one
+//! two"), "both lines, in order");
+        assert_eq!(call.get("replace").map(str::trim), Some("//! three"), "and the next key still lands");
+
+        // Bounded: a stray line with no prose key open is still refused, so a
+        // malformed block does not silently absorb whatever follows it.
+        let junk = "tool: read
+nonsense line
+path: x.rs";
+        assert!(parse_lines(junk).is_err(), "no continuable key was open");
+    }
     use super::*;
     use crate::probe::{Capabilities, Source};
 
