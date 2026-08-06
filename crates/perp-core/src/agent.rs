@@ -43,6 +43,15 @@ use crate::tool::{Call, Host, Output};
 /// times the tokens per stuck step.
 pub const MAX_TURNS: u32 = 100;
 
+/// What follows every set of tool results (`L-30`).
+///
+/// The step is still running and only the harness knows it. Without this the
+/// model receives raw output with no indication of what to do with it, and a
+/// plausible reading — the one a four-file experiment produced on the first
+/// try — is that the work is over and a report is wanted. Describing a call is
+/// not making one, and the harness sees only the calls.
+const CARRY_ON: &str = "The step is still open. If work remains, issue the next      `perp-call` block now — describing a call is not making one, and only calls      you actually issue reach the repository. When the work is genuinely done and      you have the tool results to show for it, say so and stop.";
+
 /// How many bytes of repository map a step gets when the binding does not say
 /// (`T-30`).
 ///
@@ -708,7 +717,17 @@ You wrote text framed as tool output. Only this harness                         
                     // no "tool" role here on purpose: the bottom rung has no
                     // such concept, and one code path is easier to reason about
                     // than two.
-                    messages.push(Message::user(results));
+                    // `L-30`: the results are what happened, not a cue to
+                    // wrap up. A turn that carried tool output and nothing
+                    // else left the model to guess whether the step was still
+                    // open — and measured on a four-file workspace whose one
+                    // requirement was "write this file", it guessed wrong:
+                    // after a single `glob` it reported five calls it had
+                    // never made, complete with invented byte counts and a
+                    // commit sha. Saying what happens next costs one line.
+                    messages.push(Message::user(format!("{results}
+
+{CARRY_ON}")));
                 }
                 Next::Repair { complaint, attempt, .. } => {
                     quiet += 1;
