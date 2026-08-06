@@ -752,6 +752,27 @@ impl<'a> Client<'a> {
         if !matches!(run.exit, crate::process::Exit::Code(0)) {
             // Its own words where it has any: the payload says why, and the exit
             // code says only that it did not work.
+            //
+            // `M-35`: *where it has any*. An empty stdout parses to
+            // `unexpected end of input`, which is an error, so `.err()` was
+            // always `Some` and the `unwrap_or_else` below — the branch
+            // carrying stderr — could not run in the one case that needs it.
+            // A CLI that dies before writing anything writes on stderr, and
+            // that is exactly the failure this reported as a parse error.
+            if run.stdout_tail.trim().is_empty() {
+                return Err(Error::unbound(
+                    format!("link.{}", link.name),
+                    format!(
+                        "{program} exited {} without writing to stdout: {}",
+                        run.exit.describe(),
+                        if run.stderr_tail.trim().is_empty() {
+                            "and said nothing on stderr either"
+                        } else {
+                            run.stderr_tail.trim()
+                        }
+                    ),
+                ));
+            }
             return Err(crate::anthropic::parse_cli(&run.stdout_tail, &link.model)
                 .err()
                 .unwrap_or_else(|| {
@@ -764,6 +785,23 @@ impl<'a> Client<'a> {
                         ),
                     )
                 }));
+        }
+        // `M-35`: exit 0 and nothing written is the same silence, and it
+        // reached the caller as the same meaningless parse error. A model call
+        // that produced no output is a link that did not answer — say that,
+        // and say whatever it put on stderr on its way out.
+        if run.stdout_tail.trim().is_empty() {
+            return Err(Error::unbound(
+                format!("link.{}", link.name),
+                format!(
+                    "{program} exited cleanly but wrote nothing: {}",
+                    if run.stderr_tail.trim().is_empty() {
+                        "and said nothing on stderr either".to_string()
+                    } else {
+                        run.stderr_tail.trim().to_string()
+                    }
+                ),
+            ));
         }
         crate::anthropic::parse_cli(&run.stdout_tail, &link.model)
     }
@@ -1105,6 +1143,32 @@ pub fn models_method() -> Method {
 
 #[cfg(test)]
 mod tests {
+
+    /// `M-35`: a link that wrote nothing is a link that did not answer.
+    ///
+    /// Measured on Janitor's cycles 13 and 14, which both died on
+    /// `invalid JSON at byte 0: unexpected end of input` — a message about
+    /// parsing, for a failure that had nothing to do with parsing. The
+    /// non-zero-exit branch asked `parse_cli(stdout).err()` first and fell back
+    /// to stderr only if that returned `None`; an empty stdout always parses to
+    /// an error, so `.err()` was always `Some` and the stderr branch was
+    /// unreachable in exactly the case that needed it. The clean-exit path had
+    /// the same hole. Two cycles were spent unable to see the actual cause.
+    #[test]
+    fn an_empty_reply_is_reported_as_silence_not_as_bad_json() {
+        let quiet = Error::unbound(
+            "link.claude-deep".to_string(),
+            "claude exited cleanly but wrote nothing: and said nothing on stderr either"
+                .to_string(),
+        );
+        let text = format!("{quiet}");
+        assert!(text.contains("wrote nothing"), "the failure is named: {text}");
+        assert!(
+            !text.contains("invalid JSON"),
+            "and not dressed up as a parse problem: {text}"
+        );
+        assert!(text.contains("claude-deep"), "the link is named so a person knows where: {text}");
+    }
     use super::*;
     use crate::testutil::tmpdir;
 
