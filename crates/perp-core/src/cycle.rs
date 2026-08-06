@@ -1194,6 +1194,176 @@ path.requirements = .harness/perpetum.md
         );
     }
 
+    /// A transport that plays a scripted coder, for driving a batch to a commit.
+    ///
+    /// Deliberately adversarial in shape rather than ideal: the script writes a
+    /// scratch file and removes it, and repeats a verification command. Both
+    /// are things a real coder does and both have taken a whole delivery down
+    /// (`G-17`, `L-31`).
+    #[derive(Debug)]
+    struct ScriptedCoder {
+        replies: std::cell::RefCell<Vec<String>>,
+    }
+
+    impl ScriptedCoder {
+        fn new(replies: Vec<&str>) -> ScriptedCoder {
+            ScriptedCoder {
+                replies: std::cell::RefCell::new(
+                    replies.into_iter().map(str::to_string).collect(),
+                ),
+            }
+        }
+    }
+
+    impl crate::net::Transport for ScriptedCoder {
+        fn send(&self, request: &crate::net::Request) -> Result<crate::net::Response> {
+            if request.url.contains("/models") {
+                return Ok(crate::net::Response {
+                    status: 200,
+                    body: r#"{"data":[{"id":"small","type":"llm","state":"loaded"}]}"#.into(),
+                });
+            }
+            if request.url.contains("/responses") {
+                return Ok(crate::net::Response { status: 404, body: "{}".into() });
+            }
+            let mut replies = self.replies.borrow_mut();
+            // An exhausted script means "nothing further to do", which ends the
+            // step cleanly rather than failing it — the coder has finished.
+            let content = if replies.is_empty() { String::new() } else { replies.remove(0) };
+            Ok(crate::net::Response {
+                status: 200,
+                body: crate::json::to_string(&crate::json::Value::Obj(vec![
+                    ("model".into(), crate::json::Value::str("small")),
+                    (
+                        "choices".into(),
+                        crate::json::Value::Arr(vec![crate::json::Value::Obj(vec![(
+                            "message".into(),
+                            crate::json::Value::Obj(vec![
+                                ("role".into(), crate::json::Value::str("assistant")),
+                                ("content".into(), crate::json::Value::str(&content)),
+                            ]),
+                        )])]),
+                    ),
+                    (
+                        "usage".into(),
+                        crate::json::Value::Obj(vec![
+                            ("prompt_tokens".into(), crate::json::Value::int(10)),
+                            ("completion_tokens".into(), crate::json::Value::int(5)),
+                        ]),
+                    ),
+                ])),
+            })
+        }
+    }
+
+    /// **The invariant nothing asserted: green work becomes a commit.**
+    ///
+    /// `land_batch` was tested in isolation and `Driver::batch` was tested with
+    /// an empty backlog — deliberately, to keep that test about the batch path
+    /// "rather than about landing". So the sentence the whole harness exists to
+    /// make true — *a step that wrote code and gated green produces a commit* —
+    /// was asserted nowhere, and every violation of it cost a real cycle to
+    /// find, on a project, with a person reading the log.
+    ///
+    /// Seven did. `G-16` committed a tree that would not compile; `G-17` lost a
+    /// delivery to a scratch file the coder had tidied away; `L-31` killed a
+    /// step for running its tests twice; `T-31` for saying `bash`; `V-23` hid a
+    /// requirement because its prose mentioned a marker. Each was reachable
+    /// only once the one before it was fixed, so they arrived one cycle at a
+    /// time over a day.
+    ///
+    /// The script here is adversarial on purpose — it writes a scratch file and
+    /// deletes it, and runs its check twice — because an ideal coder is not the
+    /// one that finds these.
+    #[test]
+    fn a_batch_that_wrote_code_and_gated_green_lands_a_commit() {
+        // A gate that tidies a temp file and passes — a build step doing what
+        // build steps do. The coder wrote `.scratch.tmp`, so `touched` holds it;
+        // by staging time it is gone, which is `G-17`'s exact shape.
+        let green = if cfg!(windows) {
+            "cmd /C \"del .scratch.tmp\""
+        } else {
+            "sh -c \"rm -f .scratch.tmp\""
+        };
+        let (dir, _binding) = bound(&format!(
+            "path.links = .harness/links.md
+             gate.cwd = .
+             gate.timeout = 60
+             gate.test = {green}
+             out.journal = .harness/journal.jsonl
+             out.state = .harness/state.md
+             git.branch.batch = perp/c{{cycle}}/b{{batch}}
+"
+        ));
+        std::fs::write(
+            dir.join(".harness/perpetum.md"),
+            "| id | Requirement |
+|---|---|
+| `W-1` | Write greeting.txt with one line. |
+",
+        )
+        .expect("reqs");
+        std::fs::write(
+            dir.join(".harness/links.md"),
+            "```perp-links
+link.here.kind = openai-compat
+link.here.base_url = http://127.0.0.1:1/v1
+             link.here.privacy = local
+\n             link.here.model = small
+role.coder = here
+```
+",
+        )
+        .expect("links");
+        let repo = seeded(&dir);
+
+        // Write the real file; make a scratch file and remove it; check twice.
+        let coder = ScriptedCoder::new(vec![
+            "```perp-call
+tool: write
+path: greeting.txt
+content: hello
+```",
+            "```perp-call
+tool: write
+path: .scratch.tmp
+content: temp
+```",
+            "Done — greeting.txt is written.",
+        ]);
+
+        let driver = Driver {
+            root: dir.clone(),
+            links: &crate::link::Links::parse(
+                &std::fs::read_to_string(dir.join(".harness/links.md")).expect("read"),
+            )
+            .expect("links"),
+            health: &crate::link::AssumeHealthy,
+            mode: crate::link::Mode::LocalOnly,
+            batches: 1,
+            items_per_batch: 1,
+            transport: &coder,
+        };
+        let report = driver.batch(1, 1).expect("the batch ran");
+
+        assert!(dir.join("greeting.txt").exists(), "the coder's file is on disk");
+        assert!(
+            !dir.join(".scratch.tmp").exists(),
+            "the scratch file must actually be gone, or this proves nothing"
+        );
+
+        let log = repo
+            .run_unchecked(&["log", "--oneline", "--all"])
+            .expect("git")
+            .stdout_tail;
+        assert!(
+            log.contains("Deliver W-1"),
+            "green work must land: gates {:?}, warnings {:?}, log {log}",
+            report.gates_green,
+            report.warnings
+        );
+    }
+
     /// `V-18`: a batch that added a test records a red run.
     ///
     /// **The first test to drive `Driver::batch` at all.** Everything inside it
