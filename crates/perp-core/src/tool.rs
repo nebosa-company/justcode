@@ -131,12 +131,49 @@ impl Tool {
         }
     }
 
+    /// Names a model reaches for that mean a tool this harness has (`T-31`).
+    ///
+    /// Not indulgence — measured. Janitor's cycle 20 wrote 473 lines of
+    /// `guard.rs` and then died with *"`bash` is not a tool"* after two
+    /// repairs, because `shell` is what this harness calls it and `bash` is
+    /// what a model calls it. Correcting the name costs nothing and refusing
+    /// it cost a step that had already done the work.
+    ///
+    /// The canonical name is unchanged and is what every schema and transcript
+    /// says; these only resolve on the way in.
+    const ALIASES: &'static [(&'static str, Tool)] = &[
+        ("bash", Tool::Shell),
+        ("sh", Tool::Shell),
+        ("run", Tool::Shell),
+        ("cat", Tool::Read),
+        ("edit", Tool::Patch),
+        ("create", Tool::Write),
+        ("ls", Tool::Glob),
+        ("find", Tool::Glob),
+        ("search", Tool::Grep),
+    ];
+
     pub fn parse(text: &str) -> Result<Tool> {
+        let text = text.trim();
         Tool::ALL
             .iter()
             .copied()
             .find(|tool| tool.as_str() == text)
-            .ok_or_else(|| Error::unbound("tool", format!("`{text}` is not a tool")))
+            .or_else(|| {
+                Tool::ALIASES
+                    .iter()
+                    .find(|(alias, _)| *alias == text)
+                    .map(|(_, tool)| *tool)
+            })
+            .ok_or_else(|| {
+                Error::unbound(
+                    "tool",
+                    format!(
+                        "`{text}` is not a tool — the ones there are: {}",
+                        Tool::ALL.iter().map(|t| t.as_str()).collect::<Vec<_>>().join(", ")
+                    ),
+                )
+            })
     }
 
     /// `(required, all)` parameter names, for the wire schema.
@@ -1436,6 +1473,26 @@ pub fn patch(path: &Path, expect: &str, replace: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+
+    /// `T-31`: the name a model reaches for resolves to the tool it means.
+    ///
+    /// Measured on Janitor's cycle 20, which wrote 473 lines of `guard.rs` and
+    /// then died — *"`bash` is not a tool"*, twice repaired, step failed, the
+    /// work left uncommitted. `shell` is what this harness calls it; `bash` is
+    /// what a model calls it. And when a name really is unknown, the refusal
+    /// now lists what exists, so the repair turn has something to act on
+    /// instead of guessing again.
+    #[test]
+    fn the_name_a_model_reaches_for_resolves_to_the_tool_it_means() {
+        assert_eq!(Tool::parse("shell").expect("canonical"), Tool::Shell);
+        assert_eq!(Tool::parse("bash").expect("what cycle 20 wrote"), Tool::Shell);
+        assert_eq!(Tool::parse("cat").expect("alias"), Tool::Read);
+        assert_eq!(Tool::parse("  bash  ").expect("padded"), Tool::Shell);
+
+        let err = format!("{}", Tool::parse("teleport").expect_err("still refused"));
+        assert!(err.contains("teleport"), "names what was asked for: {err}");
+        assert!(err.contains("shell"), "and what exists, so a repair can land: {err}");
+    }
 
     /// `S-20`: a reply stops at the point it starts playing the harness.
     ///
