@@ -224,16 +224,27 @@ pub fn backlog(source: &str, limit: usize) -> Vec<Item> {
         // for a reason that had nothing to do with the rule it was keeping;
         // anyone teaching the parser to strip markers would have silently put
         // blocked work back in the backlog.
-        if line.contains('✅')
-            || line.contains('⛔')
-            || line.contains('🔶')
-            || line.contains('❌')
-            || line.contains('🚧')
+        let mut cells = line.trim_matches('|').split('|');
+        let (Some(first), Some(text)) = (cells.next(), cells.next()) else { continue };
+
+        // `V-23`: the marker is read from the status cell, not from anywhere on
+        // the line. This was `line.contains`, so a requirement whose *prose*
+        // mentioned a marker excluded itself — silently, and from the backlog
+        // rather than from the display, so the row simply stopped existing.
+        //
+        // Measured on Janitor: `J-29`'s text recorded that it had been briefly
+        // gated, and writing `⛔` inside that sentence dropped it out of the
+        // backlog entirely. It was not offered as an alternative, nothing said
+        // why, and two cycles ran past it before anyone noticed the row had
+        // gone quiet.
+        if first.contains('✅')
+            || first.contains('⛔')
+            || first.contains('🔶')
+            || first.contains('❌')
+            || first.contains('🚧')
         {
             continue;
         }
-        let mut cells = line.trim_matches('|').split('|');
-        let (Some(first), Some(text)) = (cells.next(), cells.next()) else { continue };
 
         let id = first.trim().trim_start_matches('🟡').trim().trim_matches('`').trim();
         if !is_requirement_id(id) {
@@ -1047,6 +1058,35 @@ fn land_batch(
 
 #[cfg(test)]
 mod tests {
+
+    /// `V-23`: a marker in the prose is not a marker.
+    ///
+    /// The filter was `line.contains`, so a requirement whose text mentioned a
+    /// status character excluded itself — silently, and from the backlog
+    /// rather than from a display, so the row stopped existing rather than
+    /// looking wrong.
+    ///
+    /// Measured on Janitor. `J-29`'s text recorded that it had been briefly
+    /// gated, and the `⛔` inside that sentence dropped the row out of the
+    /// backlog: it was not picked, not offered as an alternative, and nothing
+    /// said why. Two cycles ran past it before the silence was noticed.
+    #[test]
+    fn a_marker_in_the_prose_does_not_gate_the_row() {
+        let source = "| id | Requirement |
+|---|---|
+| `J-29` | A rule declares its root. Was briefly gated (⛔) while a person chose the design. |
+| ⛔ `J-30` | Genuinely gated, and the marker is in the status cell. |
+| ✅ ~~`J-31`~~ | Done. |
+";
+
+        let picked: Vec<String> = backlog(source, 10).iter().map(|i| i.requirement.clone()).collect();
+        assert!(
+            picked.contains(&"J-29".to_string()),
+            "a row that merely talks about gating is still work: {picked:?}"
+        );
+        assert!(!picked.contains(&"J-30".to_string()), "and a truly gated row stays out: {picked:?}");
+        assert!(!picked.contains(&"J-31".to_string()), "as does a done one: {picked:?}");
+    }
     use super::*;
 
     #[allow(clippy::expect_used)]
