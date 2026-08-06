@@ -696,6 +696,10 @@ impl Engine {
     /// enough to mean anything — the same thing a person would grep for.
     fn record_reality_check(&mut self, step: &StepId, task: &Task) -> Result<()> {
         let repo = crate::git::Repo::at(&self.root);
+        // `V-21`: the directory the requirements source lives in is the
+        // harness's own, and every requirement is written there by definition.
+        // Searching it makes `already_built` true for work that does not exist.
+        let excluded = harness_dirs(self.session.binding(), &self.root);
         for requirement in &task.requirements {
             let mut needles: Vec<String> = vec![requirement.clone()];
             needles.extend(
@@ -706,7 +710,9 @@ impl Engine {
                     .map(str::to_string),
             );
             let borrowed: Vec<&str> = needles.iter().map(String::as_str).collect();
-            let Ok(check) = crate::verify::RealityCheck::run(&repo, requirement, &borrowed) else {
+            let Ok(check) =
+                crate::verify::RealityCheck::run(&repo, requirement, &borrowed, &excluded)
+            else {
                 // A repository that cannot be searched is not a reason to skip
                 // the step silently — it is recorded as the check failing, so
                 // the gap is visible rather than invisible.
@@ -926,6 +932,22 @@ impl Gates {
     pub fn approved_for_commit(&self) -> bool {
         self.gates.is_empty() || self.all_green()
     }
+}
+
+/// The directories that hold the harness's own bookkeeping (`V-21`).
+///
+/// Derived from the binding rather than hard-coded to `.harness`: a project
+/// that names its requirements source somewhere else still gets the right
+/// answer, and a project whose source sits at the repo root gets nothing —
+/// excluding everything would make the check useless in the other direction.
+fn harness_dirs(binding: &crate::Binding, root: &std::path::Path) -> Vec<String> {
+    let Some(dir) = binding.source().parent() else {
+        return Vec::new();
+    };
+    let relative = dir.strip_prefix(root).unwrap_or(dir);
+    let text = relative.to_string_lossy().replace('\\', "/");
+    let text = text.trim_matches('/').to_string();
+    if text.is_empty() { Vec::new() } else { vec![text] }
 }
 
 impl Work for Gates {

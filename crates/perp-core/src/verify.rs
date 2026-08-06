@@ -41,12 +41,20 @@ impl RealityCheck {
     /// Look in the working tree *and* in the history. A grep answers "is it
     /// here"; `git log -S` answers "was it here and taken out", which is a
     /// different and equally useful answer.
-    pub fn run(repo: &Repo, requirement: &str, needles: &[&str]) -> Result<RealityCheck> {
+    /// `V-21`: `exclude` names directories whose contents are the harness's own
+    /// bookkeeping. They are where a requirement is *written down*, not where it
+    /// is implemented, so counting them is counting the question as its answer.
+    pub fn run(
+        repo: &Repo,
+        requirement: &str,
+        needles: &[&str],
+        exclude: &[String],
+    ) -> Result<RealityCheck> {
         let mut in_tree = BTreeSet::new();
         let mut in_history = BTreeSet::new();
         for needle in needles {
-            in_tree.extend(repo.tree_mentions(needle)?);
-            in_history.extend(repo.history_mentions(needle)?);
+            in_tree.extend(repo.tree_mentions(needle, exclude)?);
+            in_history.extend(repo.history_mentions(needle, exclude)?);
         }
         Ok(RealityCheck {
             requirement: requirement.to_string(),
@@ -1629,6 +1637,55 @@ mod tests {
         assert_eq!(stray.len(), 1);
         assert_eq!(stray[0].id, "L-99");
         assert_eq!(stray[0].file, "batches.md");
+    }
+
+    /// `V-21`: a requirement is not evidence of its own implementation.
+    ///
+    /// `already_built` was `git grep`'s answer over the whole repository, and
+    /// the requirements source and the journal live in that repository — so
+    /// every id matched the file it is defined in, and the check said "already
+    /// built" for work nobody had started. Measured on Janitor: `J-25`, `J-26`
+    /// and `J-27` were untouched and all three came back present, because
+    /// `.harness/perpetum.md` and `.harness/journal.jsonl` name them.
+    ///
+    /// What it cost: the loop chose "build on what is there over implement it
+    /// again", primed the coder with the claim, and the coder — after one glob
+    /// that matched nothing — reported a full implementation of a repository
+    /// that does not exist. Excluded now, so a match means code.
+    #[test]
+    fn the_requirements_file_is_not_evidence_that_a_requirement_is_built() {
+        let (repo, root) = red_repo("verify-reality-harness-dir", "marker");
+
+        // The id is defined where requirements are written, and implemented
+        // nowhere — the state every open requirement is in.
+        let harness = root.join(".harness");
+        std::fs::create_dir_all(&harness).expect("harness dir");
+        std::fs::write(harness.join("perpetum.md"), "| `Z-99` | never written |
+")
+            .expect("write the source");
+        repo.stage(&[".harness/perpetum.md"]).expect("stage");
+        repo.commit(&crate::git::CommitMessage::new("Write Z-99 down")).expect("commit");
+
+        let searched = RealityCheck::run(&repo, "Z-99", &["Z-99"], &[]).expect("unfiltered");
+        assert!(
+            searched.already_built(),
+            "the old behaviour, kept as the contrast: {:?}",
+            searched.in_tree
+        );
+
+        let filtered =
+            RealityCheck::run(&repo, "Z-99", &["Z-99"], &[".harness".to_string()])
+                .expect("filtered");
+        assert!(
+            !filtered.already_built(),
+            "written down is not built: {:?}",
+            filtered.in_tree
+        );
+        assert!(
+            !filtered.was_removed(),
+            "and the history of writing it down is not a history of removing it: {:?}",
+            filtered.in_history
+        );
     }
 
     #[test]

@@ -498,17 +498,39 @@ impl Repo {
     /// `git log -S` finds commits that added or removed the string, which
     /// answers "was this built and then removed" — a question grep on the
     /// working tree cannot answer, and the reason `V-1` looks here too.
-    pub fn history_mentions(&self, needle: &str) -> Result<Vec<String>> {
-        let run = self.run_unchecked(&["log", "-S", needle, "--oneline", "--all"])?;
+    pub fn history_mentions(&self, needle: &str, exclude: &[String]) -> Result<Vec<String>> {
+        let mut args = vec!["log", "-S", needle, "--oneline", "--all"];
+        let specs = Self::exclusion_pathspecs(exclude);
+        if !specs.is_empty() {
+            args.push("--");
+            args.extend(specs.iter().map(String::as_str));
+        }
+        let run = self.run_unchecked(&args)?;
         if !run.is_success() {
             return Ok(Vec::new());
         }
         Ok(run.stdout_tail.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
     }
 
+    /// Turn directories into git exclusion pathspecs (`V-21`).
+    ///
+    /// Empty in, empty out — and the caller pushes no `--` in that case, so a
+    /// search with nothing to exclude runs exactly the command it ran before.
+    fn exclusion_pathspecs(exclude: &[String]) -> Vec<String> {
+        if exclude.is_empty() {
+            return Vec::new();
+        }
+        let mut specs = vec![".".to_string()];
+        specs.extend(exclude.iter().map(|dir| format!(":(exclude){dir}/*")));
+        specs
+    }
+
     /// Does the working tree contain it right now?
-    pub fn tree_mentions(&self, needle: &str) -> Result<Vec<String>> {
-        let run = self.run_unchecked(&["grep", "-l", "--", needle])?;
+    pub fn tree_mentions(&self, needle: &str, exclude: &[String]) -> Result<Vec<String>> {
+        let mut args = vec!["grep", "-l", "-e", needle, "--"];
+        let specs = Self::exclusion_pathspecs(exclude);
+        args.extend(specs.iter().map(String::as_str));
+        let run = self.run_unchecked(&args)?;
         // Exit 1 from `git grep` means "no matches", which is an answer.
         Ok(run.stdout_tail.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
     }
