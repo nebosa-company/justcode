@@ -54,7 +54,22 @@ use crate::error::{Error, Result};
 use crate::process::{self, Env, Spec};
 
 /// How much of a result the loop is shown, unless a call asks for less.
-pub const DEFAULT_BUDGET: usize = 8_000;
+///
+/// `T-32`: sized for the files that exist, not for the ones a small window
+/// assumes. At 8_000 a 36KB module took five reads and a 71KB one took nine,
+/// and every read is a turn — so a step touching two ordinary source files
+/// spent fourteen turns before it could write anything, against a give-up rule
+/// that starts pressing at eight.
+///
+/// **Measured on Janitor's cycle 26.** The coder read `rule.rs` fifteen times,
+/// paging a single file through a window a quarter its size, then ended the
+/// step having written nothing. Nothing was wrong with the model's plan; it
+/// ran out of turns looking at the code it had been asked to change.
+///
+/// Cheaper, not dearer: with `S-21` the conversation lives in a cached CLI
+/// session, so one large read costs less than five overlapping small ones that
+/// each re-anchor the model and re-send their own framing.
+pub const DEFAULT_BUDGET: usize = 32_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Tool {
