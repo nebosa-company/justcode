@@ -56,7 +56,6 @@ cost.rs::by_step
 cost.rs::cache_ratio
 cost.rs::is_free
 cost.rs::spent_on
-engine.rs::all_green
 engine.rs::concurrency
 engine.rs::describe_unbound
 engine.rs::with_budgets

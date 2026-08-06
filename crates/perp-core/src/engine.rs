@@ -912,6 +912,20 @@ impl Gates {
         }
         Some(self.results.iter().all(gate::GateResult::is_green))
     }
+
+    /// May a batch's code be committed on the strength of these gates (`G-16`)?
+    ///
+    /// Not the same question as "did anything fail", and the difference is the
+    /// whole point. A run that stops before its gate steps — paused, out of
+    /// budget, killed — has a failure count of zero, because zero gates ran.
+    /// Deciding on that count lands a commit saying `Deliver J-23` on a tree
+    /// nothing has compiled.
+    ///
+    /// A project that declares no gate at all is a different case and keeps its
+    /// behaviour: it opted out, and there is no verdict being ignored.
+    pub fn approved_for_commit(&self) -> bool {
+        self.gates.is_empty() || self.all_green()
+    }
 }
 
 impl Work for Gates {
@@ -1434,6 +1448,30 @@ mod tests {
         assert!(
             !task.requirements.contains(&"V-2".to_string()),
             "and never the harness's own id, which the target has never heard of"
+        );
+    }
+
+    /// `G-16`: a gate that never ran is not a gate that passed.
+    ///
+    /// Measured, not hypothetical. Janitor's cycle 9 was paused after the coder
+    /// committed and before the three gate steps, and the commit guard asked
+    /// `report.failed == 0` — true, because nothing ran to fail. The branch
+    /// kept `Deliver J-23` on a tree with a stray token in it that `cargo
+    /// build` rejects, and the next run started from a base that would not
+    /// compile. `all_green` already answered this correctly and the decision
+    /// read a different value; this is the wiring, not the logic.
+    #[test]
+    fn a_gate_that_never_ran_does_not_approve_a_commit() {
+        let root = workspace("engine-unrun-gates");
+        let binding = crate::Binding::load(&root).expect("binding");
+        let target = root.join("target");
+
+        let gates = Gates::from_binding(&binding, &target).expect("gates");
+        assert!(!gates.gates.is_empty(), "this fixture declares gates, else the test proves nothing");
+        assert_eq!(gates.verdict(), None, "nothing ran, so there is no verdict to have");
+        assert!(
+            !gates.approved_for_commit(),
+            "unrun is unverified: the old guard read `failed == 0` here and committed"
         );
     }
 

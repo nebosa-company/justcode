@@ -818,7 +818,12 @@ impl Driver<'_> {
 
         // Green gate, and only then. A red one leaves the tree exactly as it is
         // for someone to look at — the driver stops the cycle on it anyway.
-        if branch.is_some() && report.failed == 0 {
+        //
+        // `G-16`: asked of the gates, not of the failure count. Those differ in
+        // exactly the case that matters — a leg that never reached its gate
+        // steps has nothing failed and nothing checked, and the count cannot
+        // tell the two apart.
+        if branch.is_some() && report.failed == 0 && leg.second().approved_for_commit() {
             let step = report
                 .last_step
                 .as_ref()
