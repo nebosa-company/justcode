@@ -525,6 +525,18 @@ impl Repo {
         specs
     }
 
+    /// Does git ignore this path (`T-29`)?
+    ///
+    /// Asked because a write is not work if nothing keeps it. A step that
+    /// wrote only under `target/` produced no change a commit could carry, and
+    /// counting it as productive lets a step report success having delivered
+    /// nothing. `check-ignore` exits 0 when the path *is* ignored.
+    pub fn ignores(&self, path: &str) -> bool {
+        self.run_unchecked(&["check-ignore", "-q", "--", path])
+            .map(|run| run.is_success())
+            .unwrap_or(false)
+    }
+
     /// Does the working tree contain it right now?
     pub fn tree_mentions(&self, needle: &str, exclude: &[String]) -> Result<Vec<String>> {
         let mut args = vec!["grep", "-l", "-e", needle, "--"];

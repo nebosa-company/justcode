@@ -35,6 +35,12 @@ pub struct RealityCheck {
     pub needles: Vec<String>,
     pub in_tree: Vec<String>,
     pub in_history: Vec<String>,
+    /// Where the requirement's **id** was found, as opposed to where any word
+    /// of its summary was (`V-22`). The verdict comes from this; `in_tree`
+    /// stays the wider evidence a person reads.
+    pub id_in_tree: Vec<String>,
+    /// The same distinction in the history.
+    pub id_in_history: Vec<String>,
 }
 
 impl RealityCheck {
@@ -50,8 +56,15 @@ impl RealityCheck {
         needles: &[&str],
         exclude: &[String],
     ) -> Result<RealityCheck> {
-        let mut in_tree = BTreeSet::new();
-        let mut in_history = BTreeSet::new();
+        // `V-22`: asked separately, because only this one decides. The other
+        // needles are words lifted from the requirement's prose, and prose
+        // words are not identifiers — `never` matches seven files in a Rust
+        // workspace that has never heard of the requirement.
+        let id_in_tree: Vec<String> = repo.tree_mentions(requirement, exclude)?;
+        let id_in_history: Vec<String> = repo.history_mentions(requirement, exclude)?;
+
+        let mut in_tree: BTreeSet<String> = id_in_tree.iter().cloned().collect();
+        let mut in_history: BTreeSet<String> = id_in_history.iter().cloned().collect();
         for needle in needles {
             in_tree.extend(repo.tree_mentions(needle, exclude)?);
             in_history.extend(repo.history_mentions(needle, exclude)?);
@@ -61,19 +74,27 @@ impl RealityCheck {
             needles: needles.iter().map(|n| (*n).to_string()).collect(),
             in_tree: in_tree.into_iter().collect(),
             in_history: in_history.into_iter().collect(),
+            id_in_tree,
+            id_in_history,
         })
     }
 
     /// Present in the working tree — do not build it again.
+    ///
+    /// `V-22`: the requirement's **id**, not any word of its summary. Getting
+    /// this wrong in the permissive direction tells a coder the work exists
+    /// when it does not, and a coder handed that premise fills the gap with
+    /// invention. Getting it wrong the other way costs one wasted search. The
+    /// asymmetry decides which way to lean.
     pub fn already_built(&self) -> bool {
-        !self.in_tree.is_empty()
+        !self.id_in_tree.is_empty()
     }
 
     /// Absent now, but the history has touched it. Worth a human's attention:
     /// something removed it, and rebuilding it blind may re-break whatever
     /// that removal fixed.
     pub fn was_removed(&self) -> bool {
-        self.in_tree.is_empty() && !self.in_history.is_empty()
+        self.id_in_tree.is_empty() && !self.id_in_history.is_empty()
     }
 
     pub fn evidence(&self) -> String {
@@ -1652,6 +1673,40 @@ mod tests {
     /// again", primed the coder with the claim, and the coder — after one glob
     /// that matched nothing — reported a full implementation of a repository
     /// that does not exist. Excluded now, so a match means code.
+    /// `V-22`: a common word from the summary is not evidence either.
+    ///
+    /// `V-21` took the harness's own directory out of the search and the check
+    /// still said "may already be present" — because the needles are the id
+    /// *plus* words lifted from the requirement's prose, and any one match was
+    /// enough. Measured on Janitor at `c11/b1/s225`: searching `J-23, refuses,
+    /// never, deleted` over the source, the id matched **zero** files and
+    /// `never` matched seven. The verdict was being decided by English.
+    ///
+    /// Leaning is deliberate. A false "already built" hands a coder a premise
+    /// it cannot check and gets invention back; a false "not built" costs one
+    /// wasted search.
+    #[test]
+    fn a_word_from_the_summary_does_not_decide_whether_it_is_built() {
+        let (repo, root) = red_repo("verify-reality-prose-needles", "marker");
+        std::fs::write(root.join("src.rs"), "// this never happens
+").expect("write");
+        repo.stage(&["src.rs"]).expect("stage");
+        repo.commit(&crate::git::CommitMessage::new("Add prose")).expect("commit");
+
+        let check = RealityCheck::run(&repo, "Z-99", &["Z-99", "never"], &[]).expect("check");
+
+        assert!(
+            check.in_tree.iter().any(|f| f.contains("src.rs")),
+            "the wider evidence still shows it, for a person to read: {:?}",
+            check.in_tree
+        );
+        assert!(
+            !check.already_built(),
+            "but a prose word does not decide: {:?}",
+            check.id_in_tree
+        );
+    }
+
     #[test]
     fn the_requirements_file_is_not_evidence_that_a_requirement_is_built() {
         let (repo, root) = red_repo("verify-reality-harness-dir", "marker");

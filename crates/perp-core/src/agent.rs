@@ -949,7 +949,18 @@ impl<'a> Agent<'a> {
         }
         let Some(path) = call.get("path") else { return };
         let path = path.trim().to_string();
-        if !path.is_empty() && !self.touched.contains(&path) {
+        if path.is_empty() {
+            return;
+        }
+        // `T-29`: a write git will not keep is not work. Everything that reads
+        // `touched` is asking "did this step change anything" — the give-up
+        // rule, the quiet-turn rule, the map and the staging — and a file under
+        // `target/` answers no to all four, however many bytes it took.
+        if crate::git::Repo::at(&self.host.root).ignores(&path) {
+            crate::verbose::say("t-29", &format!("ignored by git, not counted as work: {path}"));
+            return;
+        }
+        if !self.touched.contains(&path) {
             self.touched.push(path);
         }
     }
@@ -2247,6 +2258,68 @@ command: echo hi
     /// Cycle 12 is the case. Three steps read for 47, 59 and 56 turns, decided
     /// they understood the problem and wrote a summary; `V-13` failed them
     /// afterwards, which is correct and far too late to be useful to them.
+    /// `T-29`: a write git will not keep is not work.
+    ///
+    /// Measured on Janitor's cycle 11. Across 997 lines of transcript the coder
+    /// wrote to exactly three paths, all under `target/` — throwaway fixtures
+    /// it made to demonstrate the behaviour — and never once attempted a source
+    /// file. `touched` was non-empty, so `V-13` passed the step, the give-up
+    /// rule never fired, and the step was recorded `ok=True` while `git status`
+    /// showed nothing but the journal. The final report described four
+    /// committed files, a checkpoint, and a green workspace test run, none of
+    /// which existed. `T-28` had caught the previous cycle only because that
+    /// one wrote nothing at all; writing to an ignored path walked straight
+    /// past it.
+    #[test]
+    fn a_write_to_an_ignored_path_is_not_counted_as_work() {
+        let dir = tmpdir("agent-t29-ignored");
+        let repo = crate::git::Repo::at(&dir);
+        for args in [
+            vec!["init", "-q", "-b", "perp/fixture"],
+            vec!["config", "user.email", "loop@perpetum.test"],
+            vec!["config", "user.name", "Perpetum test"],
+        ] {
+            repo.run_unchecked(&args).expect("git");
+        }
+        std::fs::write(dir.join(".gitignore"), "target/
+").expect("gitignore");
+
+        // Every reply writes, and every write lands somewhere git discards.
+        let writes: Vec<String> = (0..30)
+            .map(|n| {
+                format!("```perp-call
+tool: write
+path: target/j{n}.o
+content: bytes
+```")
+            })
+            .collect();
+        let transport = Scripted::new(writes.iter().map(String::as_str).collect());
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("T-29", "write into target", "try").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let _ = agent.perform(&task);
+
+        assert!(
+            dir.join("target/j0.o").exists(),
+            "the write itself is not blocked — only its status as work is"
+        );
+        let sent = transport.seen.borrow().join("
+");
+        assert!(
+            sent.contains("nothing has been written"),
+            "a step that only wrote into target/ has written nothing: {}",
+            &sent[sent.len().saturating_sub(400)..]
+        );
+    }
+
     #[test]
     fn a_step_that_has_written_nothing_is_told_while_it_can_still_act() {
         let dir = tmpdir("agent-l25");
