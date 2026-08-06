@@ -448,6 +448,25 @@ impl Repo {
     }
 
     /// Stage exactly these paths (`G-3`).
+    /// Tracked files the working tree has changed (`G-18`).
+    ///
+    /// Tracked only: an untracked file is not work this batch declared, and
+    /// sweeping one in would stage whatever a step happened to leave behind.
+    pub fn modified_tracked(&self) -> Vec<String> {
+        let Ok(run) = self.run_unchecked(&["diff", "--name-only", "HEAD"]) else {
+            return Vec::new();
+        };
+        if !run.is_success() {
+            return Vec::new();
+        }
+        run.stdout_tail
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(String::from)
+            .collect()
+    }
+
     /// Is this path in the index — so an absence is a deletion to record
     /// rather than a name git has never heard of (`G-17`)?
     fn is_tracked(&self, path: &str) -> bool {

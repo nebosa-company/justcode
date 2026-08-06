@@ -857,6 +857,25 @@ impl Driver<'_> {
             // The step's own files, plus the evidence the harness wrote about
             // them — a commit with the work and no journal is half a record.
             let mut paths = crate::engine::Work::touched(&leg);
+            // `G-18`: what the step declared, plus what the tree says actually
+            // changed. `touched` records the paths the *edit tools* named, and a
+            // `shell` call can change anything — so a step that edits through a
+            // script it wrote is invisible to it.
+            //
+            // Measured on Janitor's cycle 32: the coder wrote
+            // `tools/j26_scan_edit.py` and `tools/j26_plan_edit.py`, ran them,
+            // and delivered `J-26` with 150 tests green. `plan.rs`, `scan.rs`
+            // and `lib.rs` — 465 insertions — were never staged, and the commit
+            // said `Deliver J-26` while carrying only `elevation.rs`. A partial
+            // delivery that claims a requirement is worse than no delivery.
+            //
+            // Tracked files only. An untracked file still has to be declared,
+            // so scratch a step leaves behind does not sweep itself in.
+            for path in crate::git::Repo::at(&self.root).modified_tracked() {
+                if !paths.contains(&path) {
+                    paths.push(path);
+                }
+            }
             for path in evidence_paths(&self.root, engine.session().binding()) {
                 if !paths.contains(&path) {
                     paths.push(path);
