@@ -855,7 +855,7 @@ You wrote text framed as tool output. Only this harness                         
             // repeat merely failed to count as learning. Nothing stopped it, so
             // a model could ask the same thing until the turn ceiling.
             if let crate::watchdog::Watch::Stop { reason } =
-                self.watchdogs.call(&call.signature())
+                self.watchdogs.call(&call.signature(), self.touched.len())
             {
                 self.tripped = Some(reason);
                 return (out, progressed);

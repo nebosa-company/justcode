@@ -267,6 +267,92 @@ pub fn cli_system(request: &ChatRequest) -> Option<String> {
 ///
 /// System messages are not here. They go to [`cli_system`] and reach the command
 /// as a system prompt, for the reason given on [`cli_invocation`].
+/// One user turn, as `--input-format stream-json` wants it (`S-21`).
+///
+/// The whole point is that this is *one turn*. The old path flattened the
+/// conversation into a single string labelled `Human:` and `Assistant:`, which
+/// handed the model a transcript and no boundary — so it continued the
+/// transcript, writing its own tool results and the harness's replies. A turn
+/// the protocol delimits cannot be continued past.
+pub fn stream_json_turn(text: &str) -> String {
+    let turn = crate::json::Value::Obj(vec![
+        ("type".to_string(), crate::json::Value::str("user")),
+        (
+            "message".to_string(),
+            crate::json::Value::Obj(vec![
+                ("role".to_string(), crate::json::Value::str("user")),
+                (
+                    "content".to_string(),
+                    crate::json::Value::Arr(vec![crate::json::Value::Obj(vec![
+                        ("type".to_string(), crate::json::Value::str("text")),
+                        ("text".to_string(), crate::json::Value::str(text)),
+                    ])]),
+                ),
+            ]),
+        ),
+    ]);
+    format!("{}
+", crate::json::to_string(&turn))
+}
+
+/// The argv for a streamed-input call, resuming a session when there is one.
+///
+/// `resume` carries the conversation inside the CLI rather than in the prompt,
+/// so each call sends only what is new. That is the fix for `S-20`, and it
+/// costs less: the transcript stops being re-sent on every turn.
+pub fn cli_session_invocation(
+    program: &str,
+    model: &str,
+    system: Option<&std::path::Path>,
+    effort: Option<&str>,
+    resume: Option<&str>,
+) -> Vec<String> {
+    let mut args = vec![
+        program.to_string(),
+        "-p".to_string(),
+        "--input-format".to_string(),
+        "stream-json".to_string(),
+        "--output-format".to_string(),
+        "stream-json".to_string(),
+        // `stream-json` output is refused without it.
+        "--verbose".to_string(),
+        "--model".to_string(),
+        model.to_string(),
+        "--safe-mode".to_string(),
+        "--tools".to_string(),
+        String::new(),
+    ];
+    if let Some(effort) = effort {
+        args.push("--effort".to_string());
+        args.push(effort.to_string());
+    }
+    // The system prompt belongs to the session, so it is sent when the session
+    // is opened and never again — resending it on a resume would stack a
+    // second copy on top of the one the CLI already holds.
+    match resume {
+        Some(id) => {
+            args.push("--resume".to_string());
+            args.push(id.to_string());
+        }
+        None => {
+            if let Some(path) = system {
+                args.push("--system-prompt-file".to_string());
+                args.push(path.display().to_string());
+            }
+        }
+    }
+    args
+}
+
+/// The session id the CLI reports, so the next turn can resume it (`S-21`).
+pub fn session_of(stdout: &str) -> Option<String> {
+    stdout
+        .lines()
+        .filter_map(|line| crate::json::parse(line).ok())
+        .filter_map(|value| value.get("session_id").and_then(|v| v.as_str()).map(str::to_string))
+        .find(|id| !id.is_empty())
+}
+
 pub fn cli_prompt(request: &ChatRequest) -> String {
     let mut out = String::new();
     for message in request.messages.iter().filter(|m| m.role != "system") {
@@ -293,8 +379,28 @@ pub fn cli_prompt(request: &ChatRequest) -> String {
 }
 
 /// Read the CLI's `--output-format json` answer.
+/// The answer object, whether the CLI buffered it or streamed it (`S-21`).
+///
+/// `--output-format json` writes one object. `--output-format stream-json`
+/// writes one JSON object per line and ends with the same result object — so
+/// parsing the whole body finds trailing content and fails, which is what
+/// every call did the moment the invocation switched. Take the last line that
+/// carries a `result`, and fall back to parsing the body whole so the buffered
+/// form keeps working unchanged.
+fn parse_cli_body(body: &str) -> Result<Value> {
+    let streamed = body
+        .lines()
+        .rev()
+        .filter_map(|line| json::parse(line.trim()).ok())
+        .find(|value| value.get("result").is_some() || value.get("is_error").is_some());
+    match streamed {
+        Some(value) => Ok(value),
+        None => json::parse(body),
+    }
+}
+
 pub fn parse_cli(body: &str, model: &str) -> Result<Reply> {
-    let parsed = json::parse(body)?;
+    let parsed = parse_cli_body(body)?;
 
     // The CLI reports failure in the payload as well as by exit code, and the
     // payload says why.

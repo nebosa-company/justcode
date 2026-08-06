@@ -90,7 +90,8 @@ impl NoProgress {
 pub struct Repetition {
     limit: usize,
     window: usize,
-    recent: VecDeque<String>,
+    /// The call, and how much had been written when it was made (`L-31`).
+    recent: VecDeque<(String, usize)>,
 }
 
 impl Default for Repetition {
@@ -106,12 +107,21 @@ impl Repetition {
 
     /// `signature` identifies the call *and* its arguments — two different
     /// greps are not a repetition, and the same grep twice is.
-    pub fn observe(&mut self, signature: &str) -> Watch {
-        self.recent.push_back(signature.to_string());
+    ///
+    /// `written` is how many files the step has changed so far (`L-31`). Two
+    /// identical calls with a write between them are not a repetition: the
+    /// state they are asking about is different, and asking again is the
+    /// correct thing to do. Only repeats made against unchanged state count.
+    pub fn observe_after(&mut self, signature: &str, written: usize) -> Watch {
+        self.recent.push_back((signature.to_string(), written));
         while self.recent.len() > self.window {
             self.recent.pop_front();
         }
-        let count = self.recent.iter().filter(|seen| *seen == signature).count();
+        let count = self
+            .recent
+            .iter()
+            .filter(|(seen, at)| seen == signature && *at == written)
+            .count();
         if count >= self.limit {
             Watch::Stop {
                 reason: format!(
@@ -193,8 +203,8 @@ impl Watchdogs {
         self.no_progress.observe(changed_something)
     }
 
-    pub fn call(&mut self, signature: &str) -> Watch {
-        self.repetition.observe(signature)
+    pub fn call(&mut self, signature: &str, written: usize) -> Watch {
+        self.repetition.observe_after(signature, written)
     }
 
     pub fn file_written(&mut self, path: &Path, contents: &[u8]) -> Watch {
@@ -204,6 +214,39 @@ impl Watchdogs {
 
 #[cfg(test)]
 mod tests {
+
+    /// `L-31`: re-running a check after an edit is not a stuck loop.
+    ///
+    /// Measured on Janitor's cycle 19 — the first cycle in nineteen where the
+    /// loop wrote real code. It produced `guard.rs` at 407 lines, wired
+    /// refusals through `plan.rs`, took the suite from 84 tests to 107, and
+    /// passed lint and build. Then `L-12` killed the step for running
+    /// `cargo test --workspace` three times in ten calls, and because the step
+    /// failed the batch never committed: 800 lines of green, gated work left
+    /// uncommitted in the tree.
+    ///
+    /// Re-running a verification command after changing something is what
+    /// working looks like. What makes a repeat a loop is that nothing moved
+    /// between the repeats.
+    #[test]
+    fn a_check_repeated_after_a_write_is_progress_not_a_loop() {
+        let mut spinning = Repetition::default();
+        assert_eq!(spinning.observe_after("cargo test", 0), Watch::Continue);
+        assert_eq!(spinning.observe_after("cargo test", 0), Watch::Continue);
+        assert!(
+            matches!(spinning.observe_after("cargo test", 0), Watch::Stop { .. }),
+            "same call, nothing written between: that is the loop the rule is for"
+        );
+
+        let mut working = Repetition::default();
+        assert_eq!(working.observe_after("cargo test", 0), Watch::Continue);
+        assert_eq!(working.observe_after("cargo test", 1), Watch::Continue);
+        assert_eq!(
+            working.observe_after("cargo test", 2),
+            Watch::Continue,
+            "a write between each run makes every run a question about new state"
+        );
+    }
     use super::*;
 
     #[test]
@@ -241,18 +284,18 @@ mod tests {
     #[test]
     fn the_same_call_three_times_is_a_stuck_loop() {
         let mut watchdog = Repetition::new(3, 10);
-        assert_eq!(watchdog.observe("grep(fn main)"), Watch::Continue);
-        assert_eq!(watchdog.observe("grep(fn main)"), Watch::Continue);
-        assert!(watchdog.observe("grep(fn main)").is_stop());
+        assert_eq!(watchdog.observe_after("grep(fn main)", 0), Watch::Continue);
+        assert_eq!(watchdog.observe_after("grep(fn main)", 0), Watch::Continue);
+        assert!(watchdog.observe_after("grep(fn main)", 0).is_stop());
     }
 
     #[test]
     fn different_arguments_are_different_calls() {
         let mut watchdog = Repetition::new(3, 10);
-        assert_eq!(watchdog.observe("grep(a)"), Watch::Continue);
-        assert_eq!(watchdog.observe("grep(b)"), Watch::Continue);
-        assert_eq!(watchdog.observe("grep(c)"), Watch::Continue);
-        assert_eq!(watchdog.observe("grep(a)"), Watch::Continue);
+        assert_eq!(watchdog.observe_after("grep(a)", 0), Watch::Continue);
+        assert_eq!(watchdog.observe_after("grep(b)", 0), Watch::Continue);
+        assert_eq!(watchdog.observe_after("grep(c)", 0), Watch::Continue);
+        assert_eq!(watchdog.observe_after("grep(a)", 0), Watch::Continue);
     }
 
     #[test]
@@ -260,17 +303,17 @@ mod tests {
         // limit 2 in a window of 3: without trimming, the two `cargo build`s
         // below would be a stop. They are far enough apart that they are not.
         let mut watchdog = Repetition::new(2, 3);
-        assert_eq!(watchdog.observe("cargo build"), Watch::Continue);
-        watchdog.observe("x");
-        watchdog.observe("y");
-        watchdog.observe("z");
+        assert_eq!(watchdog.observe_after("cargo build", 0), Watch::Continue);
+        watchdog.observe_after("x", 0);
+        watchdog.observe_after("y", 0);
+        watchdog.observe_after("z", 0);
         assert_eq!(
-            watchdog.observe("cargo build"),
+            watchdog.observe_after("cargo build", 0),
             Watch::Continue,
             "the first `cargo build` has fallen out of the window"
         );
         // Two inside the window is still a stop.
-        assert!(watchdog.observe("cargo build").is_stop());
+        assert!(watchdog.observe_after("cargo build", 0).is_stop());
     }
 
     #[test]
@@ -317,7 +360,7 @@ mod tests {
     #[test]
     fn the_three_watch_independently() {
         let mut dogs = Watchdogs::new();
-        assert_eq!(dogs.call("ls"), Watch::Continue);
+        assert_eq!(dogs.call("ls", 0), Watch::Continue);
         assert_eq!(dogs.file_written(Path::new("x"), b"a"), Watch::Continue);
         assert_eq!(dogs.step_finished(true), Watch::Continue);
         assert_eq!(dogs.no_progress.quiet_steps(), 0);

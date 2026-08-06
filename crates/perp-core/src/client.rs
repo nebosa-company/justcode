@@ -396,6 +396,18 @@ pub struct Client<'a> {
     /// Which hosts may be reached at all (`S-4`). Empty means "the links the
     /// operator configured, and nothing else" — set by [`Client::with_egress`].
     egress: Option<crate::security::Egress>,
+    /// Open `claude-cli` sessions, keyed by the conversation that opened them
+    /// (`S-21`).
+    ///
+    /// The CLI holds the turns; this holds only the id and how many messages
+    /// have been handed over, so the next call sends what is new and nothing
+    /// else. Interior mutability because `command` takes `&self` and a session
+    /// is a fact about a call in flight, not about the client's configuration.
+    ///
+    /// Losing this is survivable by design: an absent session opens a fresh one
+    /// and the step replays from the journal, which is where truth lives
+    /// (`L-4`). The CLI's copy is a cache, never a second source.
+    sessions: std::cell::RefCell<std::collections::HashMap<String, (String, usize)>>,
 }
 
 impl<'a> Client<'a> {
@@ -408,6 +420,7 @@ impl<'a> Client<'a> {
             permits: std::sync::Arc::new(crate::link::Permits::new()),
             redact: Vec::new(),
             egress: None,
+            sessions: std::cell::RefCell::new(std::collections::HashMap::new()),
         }
     }
 
@@ -719,22 +732,64 @@ impl<'a> Client<'a> {
     /// [`crate::anthropic::cli_invocation`] for what happens when it does not.
     fn command(&self, link: &Link, request: &ChatRequest) -> Result<Reply> {
         let program = std::env::var("PERP_CLAUDE_BIN").unwrap_or_else(|_| "claude".to_string());
-        let prompt = crate::anthropic::cli_prompt(request);
 
-        // Redacted on the way out, the same as an HTTP body: a prompt assembled
-        // from a workspace can carry anything the workspace does. The system text
-        // is assembled the same way and gets the same treatment.
-        let stdin = crate::security::outbound(&prompt, link, &self.redact).text;
+        // `S-21`: one turn per call, with the CLI holding the conversation.
+        //
+        // The key is the system text plus the opening user message — stable for
+        // as long as a step runs, and different for the next one, so a resumed
+        // session is always the same conversation continued and never someone
+        // else's.
         let system = crate::anthropic::cli_system(request)
             .map(|text| crate::security::outbound(&text, link, &self.redact).text);
-        let handed = system.as_deref().map(SystemFile::write).transpose()?;
+        let opening = request
+            .messages
+            .iter()
+            .find(|m| m.role == "user")
+            .map(|m| m.content.as_str())
+            .unwrap_or_default();
+        let key = format!(
+            "{}\u{1e}{}\u{1e}{}",
+            link.name,
+            system.as_deref().unwrap_or(""),
+            opening
+        );
 
-        let (args, stdin) = crate::anthropic::cli_invocation(
+        let held = self.sessions.borrow().get(&key).cloned();
+        let resume = held.as_ref().map(|(id, _)| id.clone());
+        // Only what the CLI has not been given: on a resume that is the turns
+        // added since, which for this loop is the tool results and nothing more.
+        let turns: String = match &held {
+            Some((_, sent)) => request.messages.iter().skip(*sent).collect::<Vec<_>>(),
+            None => request.messages.iter().collect::<Vec<_>>(),
+        }
+        .iter()
+        .filter(|m| m.role == "user")
+        .map(|m| {
+            let text = crate::security::outbound(&m.content, link, &self.redact).text;
+            crate::anthropic::stream_json_turn(&text)
+        })
+        .collect();
+        // Nothing new to say is not a call worth making, and an empty stdin
+        // leaves the CLI waiting on a turn that will never arrive.
+        let stdin = if turns.is_empty() {
+            crate::anthropic::stream_json_turn(
+                &crate::security::outbound(opening, link, &self.redact).text,
+            )
+        } else {
+            turns
+        };
+
+        let handed = match resume {
+            Some(_) => None,
+            None => system.as_deref().map(SystemFile::write).transpose()?,
+        };
+
+        let args = crate::anthropic::cli_session_invocation(
             &program,
             &link.model,
             handed.as_ref().map(SystemFile::path),
-            &stdin,
             link.effort.as_deref(),
+            resume.as_deref(),
         );
 
         // The arguments go as a list. Joined into a line and split back apart,
@@ -803,6 +858,14 @@ impl<'a> Client<'a> {
                 ),
             ));
         }
+        // `S-21`: remember the session and how much it has been told, so the
+        // next turn sends only what is new. Recorded before parsing: a reply
+        // the parser rejects still happened, and reopening the conversation
+        // from scratch would repeat every turn the CLI already holds.
+        if let Some(id) = crate::anthropic::session_of(&run.stdout_tail) {
+            self.sessions.borrow_mut().insert(key, (id, request.messages.len()));
+        }
+
         crate::anthropic::parse_cli(&run.stdout_tail, &link.model)
     }
 
