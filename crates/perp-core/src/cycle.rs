@@ -884,7 +884,31 @@ impl Driver<'_> {
             match land_batch(&self.root, &step, &covered, &subject, &paths, crate::engine::Work::author(&leg)) {
                 Ok(Some(sha)) => {
                     let mut report = report;
-                    report.warnings.push(format!("committed {} as {sha}", covered.join(", ")));
+                    // `G-19`: what the commit contains must cover what the step
+                    // claims. A commit headed `Deliver X` is the record that X
+                    // was done, and a person marks from that record — so a
+                    // commit that carries part of the work says something false
+                    // in the one place the harness treats as true.
+                    //
+                    // Measured on Janitor's cycle 32: `Deliver J-26` carried
+                    // `elevation.rs` and left 465 insertions across `plan.rs`,
+                    // `scan.rs` and `lib.rs` in the tree, because the coder had
+                    // edited them through shell scripts `touched` never saw.
+                    // Gates green, verifier passed, 150 tests. `G-18` closed
+                    // that route; this refuses to trust that it closed every
+                    // route, because the next one will be found the same way.
+                    let repo = crate::git::Repo::at(&self.root);
+                    let left = repo.modified_tracked();
+                    if !left.is_empty() {
+                        report.warnings.push(format!(
+                            "PARTIAL DELIVERY — {} was committed as {sha} but these                              tracked files are still uncommitted: {}. The commit does not                              cover the work it claims; do not mark from it.",
+                            covered.join(", "),
+                            left.join(", ")
+                        ));
+                        report.failed += 1;
+                    } else {
+                        report.warnings.push(format!("committed {} as {sha}", covered.join(", ")));
+                    }
                     return Ok(report);
                 }
                 Ok(None) => {}
@@ -1273,6 +1297,108 @@ path.requirements = .harness/perpetum.md
                 ])),
             })
         }
+    }
+
+    /// `G-19`: a commit must cover the work it claims.
+    ///
+    /// A commit headed `Deliver X` is the record that X was done, and a person
+    /// marks from that record — so one carrying part of the work says something
+    /// false in the one place this harness treats as true.
+    ///
+    /// Measured on Janitor's cycle 32: `Deliver J-26` carried `elevation.rs`
+    /// and left 465 insertions across three files in the tree, because the
+    /// coder edited them through shell scripts `touched` never saw. Every gate
+    /// green, verifier passed, 150 tests. `G-18` closed that route; this
+    /// refuses to assume it closed every route.
+    ///
+    /// Here the gate itself writes a tracked file after the coder has finished,
+    /// so the change cannot reach `touched` by any route — the shape of the
+    /// cycle-32 failure. The assertion is the invariant itself: after a
+    /// delivery, nothing tracked is left over. `G-19` is the backstop that says
+    /// so out loud and fails the batch when some future route defeats it.
+    #[test]
+    fn a_commit_that_leaves_the_work_behind_is_not_a_delivery() {
+        // A gate that edits a tracked file and passes.
+        let meddling = if cfg!(windows) {
+            "cmd /C \"echo meddled>> tracked.txt\""
+        } else {
+            "sh -c \"echo meddled >> tracked.txt\""
+        };
+        let (dir, _binding) = bound(&format!(
+            "path.links = .harness/links.md
+             gate.cwd = .
+             gate.timeout = 60
+             gate.test = {meddling}
+             out.journal = .harness/journal.jsonl
+             out.state = .harness/state.md
+             git.branch.batch = perp/c{{cycle}}/b{{batch}}
+"
+        ));
+        std::fs::write(
+            dir.join(".harness/perpetum.md"),
+            "| id | Requirement |
+|---|---|
+| `W-1` | Write greeting.txt. |
+",
+        )
+        .expect("reqs");
+        std::fs::write(
+            dir.join(".harness/links.md"),
+            "```perp-links
+link.here.kind = openai-compat
+             link.here.base_url = http://127.0.0.1:1/v1
+link.here.privacy = local
+             link.here.model = small
+role.coder = here
+```
+",
+        )
+        .expect("links");
+        // Tracked before the seed commit, so the gate's edit to it is a change
+        // to a file git already knows — the case `modified_tracked` reports.
+        std::fs::write(dir.join("tracked.txt"), "original
+").expect("write");
+        let _repo = seeded(&dir);
+
+        let coder = ScriptedCoder::new(vec![
+            "```perp-call
+tool: write
+path: greeting.txt
+content: hello
+```",
+            "Done.",
+        ]);
+        let driver = Driver {
+            root: dir.clone(),
+            links: &crate::link::Links::parse(
+                &std::fs::read_to_string(dir.join(".harness/links.md")).expect("read"),
+            )
+            .expect("links"),
+            health: &crate::link::AssumeHealthy,
+            mode: crate::link::Mode::LocalOnly,
+            batches: 1,
+            items_per_batch: 1,
+            transport: &coder,
+        };
+        let report = driver.batch(1, 1).expect("the batch ran");
+
+        let said = report.warnings.join(" | ");
+        assert!(said.contains("committed W-1"), "the batch landed: {said}");
+        assert!(
+            !said.contains("PARTIAL DELIVERY"),
+            "and it landed whole — nothing was left behind to warn about: {said}"
+        );
+
+        // The invariant, checked against the tree rather than against the
+        // report: after a delivery there is nothing tracked left over. The gate
+        // edited `tracked.txt` after the coder finished, by a route `touched`
+        // cannot see, and it still went into the commit.
+        let left = crate::git::Repo::at(&dir).modified_tracked();
+        assert!(
+            left.is_empty(),
+            "a delivery must leave no tracked work behind, and left: {left:?}"
+        );
+        assert_eq!(report.failed, 0, "so the batch is clean and a person may mark from it");
     }
 
     /// **The invariant nothing asserted: green work becomes a commit.**
