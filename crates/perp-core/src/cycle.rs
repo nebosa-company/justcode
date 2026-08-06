@@ -756,6 +756,18 @@ impl Driver<'_> {
                 .collect();
             crate::security::patterns_from_entries(&entries)
         };
+        // `T-30`: the binding may size the repo map, or turn it off with `0`.
+        // Read here as well as on the `run` path — `with_map_budget` was called
+        // in exactly one place, `cmd_run`, so every batch that went through a
+        // cycle got no map at all whatever the binding said.
+        let map_budget = engine
+            .session()
+            .binding()
+            .get("map.budget")
+            .ok()
+            .and_then(|text| text.trim().parse::<usize>().ok())
+            .unwrap_or(crate::agent::DEFAULT_MAP_BUDGET);
+
         let mut agent = Agent::new(
             crate::client::Client::new(self.transport)
                 .with_redaction(redact)
@@ -771,7 +783,8 @@ impl Driver<'_> {
             crate::agent::host_for(&self.root),
             items,
         )
-        .picked_over(passed_over);
+        .picked_over(passed_over)
+        .with_map_budget(map_budget);
         if self.mode == crate::link::Mode::LocalOnly {
             agent = agent.local_only();
         }

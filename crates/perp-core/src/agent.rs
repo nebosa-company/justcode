@@ -43,6 +43,16 @@ use crate::tool::{Call, Host, Output};
 /// times the tokens per stuck step.
 pub const MAX_TURNS: u32 = 100;
 
+/// How many bytes of repository map a step gets when the binding does not say
+/// (`T-30`).
+///
+/// Not zero. A coder that begins with no map begins not knowing what it is
+/// looking at: measured on Janitor, whose first move in two separate cycles
+/// was `glob(**/*.py)` in a Rust workspace, because nothing had told it
+/// otherwise. `map.budget = 0` remains an explicit opt-out; silence is not
+/// one.
+pub const DEFAULT_MAP_BUDGET: usize = 4096;
+
 /// Consecutive turns that changed nothing before a step is called stuck
 /// (`L-11`).
 ///
@@ -2341,6 +2351,80 @@ content: bytes
             sent.contains("nothing has been written"),
             "a step that only wrote into target/ has written nothing: {}",
             &sent[sent.len().saturating_sub(400)..]
+        );
+    }
+
+    /// `T-30`: a step is told what repository it is in.
+    ///
+    /// `with_map_budget` was called in exactly one place — `cmd_run` — so every
+    /// batch that went through `perp cycle` ran with `map_budget` at its
+    /// default of zero and `repo_map` returned empty before it read anything.
+    /// The coder's whole brief was the requirement sentence.
+    ///
+    /// Measured on Janitor: in two separate cycles the first move was
+    /// `glob(**/*.py)` in a Rust workspace. Nothing had said otherwise, and a
+    /// model that cannot see where it is either gives up or invents a
+    /// repository that fits the sentence it was given — this run did the
+    /// first, `c11` through `c13` did the second.
+    #[test]
+    fn a_map_budget_puts_the_repository_in_front_of_the_step() {
+        let dir = tmpdir("agent-t30-map");
+        let repo = crate::git::Repo::at(&dir);
+        for args in [
+            vec!["init", "-q", "-b", "perp/fixture"],
+            vec!["config", "user.email", "loop@perpetum.test"],
+            vec!["config", "user.name", "Perpetum test"],
+        ] {
+            repo.run_unchecked(&args).expect("git");
+        }
+        std::fs::create_dir_all(dir.join("crates/janitor-core/src")).expect("dirs");
+        std::fs::write(
+            dir.join("crates/janitor-core/src/scan.rs"),
+            "pub struct ScanReport { pub bytes: u64 }
+pub fn scan() -> ScanReport { ScanReport { bytes: 0 } }
+",
+        )
+        .expect("rs");
+        std::fs::write(dir.join("Cargo.toml"), "[workspace]
+").expect("toml");
+        repo.run_unchecked(&["add", "-A"]).expect("add");
+        repo.commit(&crate::git::CommitMessage::new("Skeleton")).expect("commit");
+
+        let transport = Scripted::new(vec!["done"]);
+        let links = links();
+        let mut off = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("T-30", "look around", "try").expect("item")],
+        );
+        let task = Work::next(&mut off).expect("one item");
+        let _ = off.perform(&task);
+        let blind = transport.seen.borrow().join("
+");
+        assert!(
+            !blind.contains("scan.rs"),
+            "the default-off behaviour, kept as the contrast"
+        );
+
+        let transport = Scripted::new(vec!["done"]);
+        let mut on = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("T-30", "look around", "try").expect("item")],
+        )
+        .with_map_budget(DEFAULT_MAP_BUDGET);
+        let task = Work::next(&mut on).expect("one item");
+        let _ = on.perform(&task);
+        let sighted = transport.seen.borrow().join("
+");
+        assert!(
+            sighted.contains("scan.rs"),
+            "the step should be able to see it is in a Rust workspace: {}",
+            &sighted[..sighted.len().min(600)]
         );
     }
 
