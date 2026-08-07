@@ -2223,7 +2223,7 @@ fn cmd_cycle(args: &[&str]) -> std::result::Result<(), String> {
         println!(
             "  gated       {} waiting on a person: {}",
             waiting_on_you.len(),
-            waiting_on_you.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>().join(", ")
+            waiting_on_you.iter().map(|g| g.id.as_str()).collect::<Vec<_>>().join(", ")
         );
         if waiting == 0 {
             println!(

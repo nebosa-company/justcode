@@ -854,8 +854,20 @@ function renderGated(body, view) {
   section.append(el("h3", "perp-gated-title", t("panel.waitingOnYou", { n: gated.length })));
   for (const item of gated) {
     const card = el("div", "perp-approval");
-    card.append(el("div", "perp-what", item.id));
+    // `O-17`: the kind beside the id, so twelve rows can be told apart without
+    // reading twelve paragraphs.
+    const head = el("div", "perp-what", item.id);
+    if (item.kind) head.append(el("span", "perp-gate-kind", item.kind));
+    card.append(head);
     card.append(el("p", "perp-why", item.waiting_for));
+    // The author's options, in the order written. Not a control: choosing one
+    // means editing the requirements source, which only a person writes
+    // (`V-12`), so this shows the choice and leaves the act to them.
+    if ((item.options || []).length) {
+      const list = el("ul", "perp-gate-options");
+      for (const option of item.options) list.append(el("li", null, option));
+      card.append(list);
+    }
     section.append(card);
   }
   body.append(section);

@@ -55,7 +55,7 @@ pub struct View {
     /// are a person's, and only one of them had a surface — so a loop stalled
     /// on twelve gated requirements reported an empty backlog and looked
     /// finished.
-    pub gated: Vec<(String, String)>,
+    pub gated: Vec<crate::cycle::Gate>,
     /// The working tree's diff, read from git rather than stored.
     pub diff: Option<String>,
 }
@@ -462,10 +462,20 @@ impl View {
                 Value::Arr(
                     self.gated
                         .iter()
-                        .map(|(id, text)| {
+                        .map(|gate| {
                             obj(vec![
-                                ("id", Value::str(id.clone())),
-                                ("waiting_for", Value::str(text.clone())),
+                                ("id", Value::str(gate.id.clone())),
+                                ("kind", Value::str(gate.kind.clone())),
+                                ("waiting_for", Value::str(gate.waiting_for.clone())),
+                                (
+                                    "options",
+                                    Value::Arr(
+                                        gate.options
+                                            .iter()
+                                            .map(|o| Value::str(o.clone()))
+                                            .collect(),
+                                    ),
+                                ),
                             ])
                         })
                         .collect(),

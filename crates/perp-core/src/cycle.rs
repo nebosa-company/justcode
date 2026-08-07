@@ -155,8 +155,50 @@ pub fn marked(source: &str) -> Vec<(String, crate::verify::Marker)> {
 /// The text is returned whole because the gate's reason lives in it: the row
 /// says which kind of gate and what is missing, and a summary that dropped that
 /// would surface the fact without the thing a person needs to act on it.
-pub fn gated(source: &str) -> Vec<(String, String)> {
-    let mut waiting: Vec<(String, String)> = Vec::new();
+/// What a gated requirement is waiting for, pulled apart (`O-17`).
+///
+/// The prose already carries this and cannot show it: `J-38` states the ask,
+/// the argument for it and a prerequisite in one paragraph, and a reader
+/// separates them by hand — twelve times, every time they look.
+///
+/// **The options are the requirement author's**, read from the row rather than
+/// invented here. Ungating edits a source only a person may write (`V-12`), and
+/// a loop that authored the choices for a decision reserved from it would have
+/// reserved nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Gate {
+    pub id: String,
+    /// `**Gated: dependency approval**` yields `dependency approval`. Empty
+    /// when the row does not say, which is a row worth improving rather than a
+    /// reason to refuse to show it.
+    pub kind: String,
+    /// The row's text, whole. The kind and the options are lifted out of it and
+    /// left in it: a reader who wants the argument still needs the paragraph.
+    pub waiting_for: String,
+    /// `**Options:** approve `windows`; refuse, drop the Windows shell` — semicolons,
+    /// because `|` is the markdown table cell separator and would end the row.
+    pub options: Vec<String>,
+}
+
+/// Lift `**Key:** …` out of a requirement's prose, to the end of its line.
+fn gate_field(text: &str, key: &str) -> Option<String> {
+    let open = format!("**{key}:");
+    let at = text.find(&open)? + open.len();
+    let rest = &text[at..];
+    let end = rest.find("**").unwrap_or(rest.len());
+    // A marker written `**Gated: dependency approval**` closes after the value;
+    // one written `**Options:** a | b` closes before it. Both are in use, so
+    // take whichever side has the text.
+    let inside = rest[..end].trim();
+    let value = if inside.is_empty() { rest[end..].trim_start_matches('*').trim() } else { inside };
+    let value = value.split(" — ").next().unwrap_or(value);
+    let value = value.split(". ").next().unwrap_or(value);
+    let value = value.trim().trim_matches('*').trim();
+    if value.is_empty() { None } else { Some(value.to_string()) }
+}
+
+pub fn gated(source: &str) -> Vec<Gate> {
+    let mut waiting: Vec<Gate> = Vec::new();
     for line in source.lines() {
         let line = line.trim();
         if !line.starts_with('|') {
@@ -180,7 +222,18 @@ pub fn gated(source: &str) -> Vec<(String, String)> {
         if !is_requirement_id(&id) || text.trim().is_empty() {
             continue;
         }
-        waiting.push((id, text.trim().to_string()));
+        let text = text.trim().to_string();
+        let options = gate_field(&text, "Options")
+            .map(|list| {
+                list.split(';').map(|o| o.trim().to_string()).filter(|o| !o.is_empty()).collect()
+            })
+            .unwrap_or_default();
+        waiting.push(Gate {
+            id,
+            kind: gate_field(&text, "Gated").unwrap_or_default(),
+            waiting_for: text,
+            options,
+        });
     }
     waiting
 }
@@ -1171,11 +1224,11 @@ mod tests {
 
         let waiting = gated(source);
         assert_eq!(waiting.len(), 1, "one row is gated: {waiting:?}");
-        assert_eq!(waiting[0].0, "J-38");
+        assert_eq!(waiting[0].id, "J-38");
         assert!(
-            waiting[0].1.contains("toolkit dependency"),
+            waiting[0].waiting_for.contains("toolkit dependency"),
             "and carries what it waits for, not just that it waits: {:?}",
-            waiting[0].1
+            waiting[0].waiting_for
         );
 
         let open: Vec<String> =

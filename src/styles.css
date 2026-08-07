@@ -2303,6 +2303,27 @@ body.perp-resizing {
 /* `O-16`: work waiting on a person, above the approvals it sits beside.
    Reuses .perp-approval for the cards so the two read as one queue — they are
    both "your turn", differing only in whether the loop has already done it. */
+.perp-gate-kind {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.8;
+  background: rgba(127, 127, 127, 0.18);
+}
+
+.perp-gate-options {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.perp-gate-options li {
+  margin: 0.15rem 0;
+}
+
 .perp-gated {
   margin-bottom: 1rem;
 }
