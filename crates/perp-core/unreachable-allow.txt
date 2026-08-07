@@ -35,7 +35,6 @@ budget.rs::money
 budget.rs::none
 budget.rs::seconds
 budget.rs::tokens
-capture.rs::is_intact
 capture.rs::policy
 chat.rs::chunks
 chat.rs::filed

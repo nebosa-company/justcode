@@ -402,3 +402,105 @@ fn an_unknown_command_fails_loudly() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("unknown command"));
 }
+
+// ── a person editing the list (O-18, L-34, V-2) ────────────────────────────
+
+/// A source with one of each marker, so an edit and a delete can be checked
+/// against a row that claims something.
+fn with_markers(root: &Path) {
+    std::fs::write(
+        root.join(".harness/perpetum.md"),
+        "# requirements\n\n\
+         | id | Requirement |\n|---|---|\n\
+         | ✅ ~~`L-1`~~ | the journal is append-only. |\n\
+         | ⛔ `L-2` | a thing. **Gated: dependency approval** |\n\
+         | `L-3` | the journal |\n",
+    )
+    .expect("requirements");
+}
+
+#[test]
+fn requirement_add_files_a_row_with_no_marker() {
+    let root = fixture("req-add");
+    let out = run(&root, &["requirement", "add", "a web front end over a workspace"]);
+    assert!(out.ok(), "stderr: {}", out.stderr);
+    assert!(out.says("filed L-4"), "{}", out.stdout);
+
+    let text = std::fs::read_to_string(root.join(".harness/perpetum.md")).expect("read");
+    assert!(text.contains("| `L-4` | a web front end over a workspace |"), "{text}");
+    assert!(!text.contains('✅'), "nothing here writes a marker: {text}");
+}
+
+/// `L-34`: the reason edit is its own command and not a file write. It changes
+/// what a row says; it cannot change what the row claims.
+#[test]
+fn requirement_edit_replaces_the_text_and_leaves_the_marker_alone() {
+    let root = fixture("req-edit");
+    with_markers(&root);
+
+    let out = run(&root, &["requirement", "edit", "L-1", "the journal is append-only, always."]);
+    assert!(out.ok(), "stderr: {}", out.stderr);
+
+    let text = std::fs::read_to_string(root.join(".harness/perpetum.md")).expect("read");
+    assert!(text.contains("| ✅ ~~`L-1`~~ | the journal is append-only, always. |"), "{text}");
+    // And the panel — the surface a person actually reads — still says done.
+    let panel = run(&root, &["panel"]);
+    assert!(panel.says("append-only, always"), "{}", panel.stdout);
+    assert!(panel.says("\"state\":\"done\""), "{}", panel.stdout);
+}
+
+/// `V-2`, through the CLI: there is no argument that promotes a row. The text
+/// is a text cell, and a marker written into it is prose (`V-23`).
+#[test]
+fn nothing_on_this_command_can_mark_a_requirement_done() {
+    let root = fixture("req-no-green");
+    with_markers(&root);
+
+    // The obvious attempts, all of them refused or inert.
+    assert!(!run(&root, &["requirement", "done", "L-3"]).ok());
+    assert!(!run(&root, &["requirement", "mark", "L-3", "done"]).ok());
+    assert!(!run(&root, &["requirement", "edit", "L-3", "--state", "done"]).ok());
+    assert!(run(&root, &["requirement", "edit", "L-3", "✅ done now, honestly"]).ok());
+
+    let panel = run(&root, &["panel"]);
+    assert!(panel.says("\"id\":\"L-3\""), "{}", panel.stdout);
+    // One `done` in the whole catalogue, and it is `L-1` — the row that
+    // already had it.
+    assert_eq!(panel.stdout.matches("\"state\":\"done\"").count(), 1, "{}", panel.stdout);
+}
+
+#[test]
+fn requirement_delete_removes_the_row_and_says_what_it_said() {
+    let root = fixture("req-delete");
+    with_markers(&root);
+
+    let out = run(&root, &["requirement", "delete", "L-2"]);
+    assert!(out.ok(), "stderr: {}", out.stderr);
+    assert!(out.says("a thing."), "the text comes back out with it: {}", out.stdout);
+
+    let text = std::fs::read_to_string(root.join(".harness/perpetum.md")).expect("read");
+    assert!(!text.contains("`L-2`"), "{text}");
+    assert!(text.contains("| ✅ ~~`L-1`~~ |"), "its neighbours are untouched: {text}");
+    assert!(text.contains("| `L-3` | the journal |"), "{text}");
+
+    // And the id is not handed to the next requirement filed.
+    assert!(run(&root, &["requirement", "add", "something else"]).says("filed L-4"));
+}
+
+#[test]
+fn a_write_against_a_row_that_is_not_there_fails_and_changes_nothing() {
+    let root = fixture("req-missing");
+    with_markers(&root);
+    let before = std::fs::read_to_string(root.join(".harness/perpetum.md")).expect("read");
+
+    for args in [
+        &["requirement", "edit", "L-9", "x"][..],
+        &["requirement", "delete", "L-9"][..],
+        &["ungate", "L-9"][..],
+        &["requirement", "edit", "L-3", "ends | the row"][..],
+    ] {
+        let out = run(&root, args);
+        assert!(!out.ok(), "`{args:?}` should fail: {}", out.stdout);
+    }
+    assert_eq!(std::fs::read_to_string(root.join(".harness/perpetum.md")).ok(), Some(before));
+}

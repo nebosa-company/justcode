@@ -655,13 +655,30 @@ fn perp_write(subcommand: String, args: Vec<String>, root: String) -> Result<Str
     // a person's click, not the loop's write. `ungate` clears a `⛔`;
     // `requirement add` appends a row (`O-18`).
     //
+    // **The verb is part of the entry, not just the subcommand.** This list read
+    // `["ungate", "requirement"]`, and `perp requirement` grew `edit` and
+    // `delete` (`L-34`) — so a door opened for *append a row* was, from that
+    // commit, a door that deleted them, without anybody deciding it. A
+    // subcommand is a program to run; a permission is a program **and what it
+    // is being asked to do**.
+    //
+    // Narrower than the harness's own allowlist on purpose. `perp-web` offers
+    // all four writes and this panel offers the two it has controls for: an
+    // entry with no caller is not a spare feature, it is a hole that opened
+    // early. Widening it is a decision somebody comes here and makes, next to
+    // the button they are adding.
+    //
     // What is still absent is the one that matters: nothing here can write a
     // `✅`. A person may put work on the list and may unblock it, and the
     // marker that says it is finished remains something only gates earn.
-    const ALLOWED_WRITES: &[&str] = &["ungate", "requirement"];
-    if !ALLOWED_WRITES.contains(&subcommand.as_str()) {
+    const ALLOWED_WRITES: &[&str] = &["ungate", "requirement add"];
+    let asked = match args.first() {
+        Some(verb) => format!("{subcommand} {verb}"),
+        None => subcommand.clone(),
+    };
+    if !ALLOWED_WRITES.contains(&subcommand.as_str()) && !ALLOWED_WRITES.contains(&asked.as_str()) {
         return Err(format!(
-            "`{subcommand}` is not a panel write. Only {} may change anything from here.",
+            "`{asked}` is not a panel write. Only {} may change anything from here.",
             ALLOWED_WRITES.join(", ")
         ));
     }

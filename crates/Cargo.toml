@@ -1,5 +1,5 @@
 [workspace]
-members = ["perp-core", "perp"]
+members = ["perp-core", "perp", "perp-web"]
 resolver = "2"
 
 # A workspace of its own, separate from ../src-tauri, so the editor's build

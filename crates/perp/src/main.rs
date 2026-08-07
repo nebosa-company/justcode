@@ -123,6 +123,15 @@ usage:
       slice's table. A person's command: the loop may not file its own
       requirements, and this does not let it.
 
+  perp requirement edit <id> \"<text>\" [--root <dir>]
+      Say it differently. Replaces the row's text and only its text — the
+      status cell is carried across verbatim, so an edit cannot mark anything
+      done. Only a gate earns a green.
+
+  perp requirement delete <id> [--root <dir>]
+      Take a row off the list, and print what it said on the way out. The id is
+      not reused: the next one is still counted from the highest.
+
   perp explain <id|step|sha> [--root <dir>]
       Render the evidence chain: the steps that cited it, the gate transcripts,
       the commit it was pinned to, and which link wrote it.
@@ -418,167 +427,64 @@ fn cmd_init(args: &[&str]) -> Result<()> {
 /// picked, but the file only ever loses a `⛔`: encoding which option won into
 /// the row is the author's edit, not a flag's.
 fn cmd_ungate(args: &[&str]) -> std::result::Result<(), String> {
-    let Some(id) = args.iter().find(|a| !a.starts_with("--")) else {
+    if !args.iter().any(|a| !a.starts_with("--")) {
         return Err("ungate needs a requirement id: perp ungate J-38".to_string());
-    };
-    let binding = load(args).map_err(|e| e.to_string())?;
-    let resolved = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
-
-    // The row lives in one file even when the source is a directory (`O-18`).
-    // Reading the resolved path directly failed there with a permission error,
-    // which is a true message about a question nobody asked.
-    let marker = format!("| ⛔ `{id}` |");
-    let source = writable_source(&resolved, &marker)?;
-    let text = std::fs::read_to_string(&source).map_err(|e| format!("{}: {e}", source.display()))?;
-
-    if !text.contains(&marker) {
-        return Err(format!("`{id}` is not gated in {}", source.display()));
     }
-    let updated = text.replace(&marker, &format!("| `{id}` |"));
-    std::fs::write(&source, updated).map_err(|e| format!("{}: {e}", source.display()))?;
-
-    match flag(args, "--choose") {
-        Some(choice) => println!("{id} is no longer gated — you chose: {choice}"),
-        None => println!("{id} is no longer gated"),
-    }
-    println!("the row still says what it was gated on; edit it if that is now wrong");
-    Ok(())
+    apply_write("ungate", args)
 }
 
-/// The section a filed requirement lands in, created if it is not there.
-///
-/// A new row never joins an existing table. Every table in a requirements
-/// source sits under a heading that says something about the rows in it —
-/// which slice they belong to, what is deliberately excluded, what gates them —
-/// and appending to whichever table happened to be last would silently give a
-/// filed requirement that heading's meaning.
-const FILED_SECTION: &str = "## Filed in the app";
-
-/// `perp requirement add "<text>"` — a person putting something on the list
-/// (`O-18`).
+/// `perp requirement add|edit|delete` — a person changing the list (`O-18`,
+/// `L-34`).
 ///
 /// The same door `ungate` uses and for the same reason: `V-12` says only a
 /// person may write the requirements source, and this runs because somebody
 /// typed it or clicked it. What the loop still cannot do is unchanged — it may
 /// not file its own requirements and it may not mark anything done.
 ///
-/// The id is minted here rather than asked for. A person choosing the number is
-/// a person who has to read the file first to avoid colliding with it, and the
-/// collision is silent when they get it wrong: two rows with one id, and the
-/// parser keeps the first.
+/// The id for `add` is minted rather than asked for. A person choosing the
+/// number is a person who has to read the file first to avoid colliding with
+/// it, and the collision is silent when they get it wrong: two rows with one
+/// id, and the parser keeps the first.
 fn cmd_requirement(args: &[&str]) -> std::result::Result<(), String> {
-    let positional = positionals(args);
-    let (Some(&"add"), Some(&text)) = (positional.first(), positional.get(1)) else {
-        return Err("usage: perp requirement add \"<what it should do>\"".to_string());
-    };
-    let text = text.trim();
-    if text.is_empty() {
-        return Err("a requirement with no text is not a requirement".to_string());
+    match positionals(args).first().copied() {
+        Some("add" | "edit" | "delete") => apply_write("requirement", args),
+        _ => Err("usage: perp requirement add \"<what it should do>\"\n       \
+                  perp requirement edit <id> \"<what it should say instead>\"\n       \
+                  perp requirement delete <id>"
+            .to_string()),
     }
-    if text.contains('|') || text.contains('\n') {
-        return Err(
-            "a requirement may not contain `|` or a line break — both end a table row".to_string()
-        );
+}
+
+/// Every write this CLI makes to the requirements source, through the one
+/// allowlist (`L-34`).
+///
+/// The CLI does not have a write path of its own. `perp requirement` and the
+/// editor's panel and the web front end are three doors into one file, and the
+/// thing that decides what may come through them is
+/// [`perp_core::requirement::Write::parse`] — so a fourth door cannot be built
+/// with a fifth opinion about what a person is allowed to do.
+fn apply_write(subcommand: &str, args: &[&str]) -> std::result::Result<(), String> {
+    // Flags are the CLI's business, not the allowlist's: `--root` says which
+    // workspace and `--choose` is carried through, and neither is a positional
+    // the parser should have to know about.
+    let mut positional = positionals(args);
+    if let Some(choice) = flag(args, "--choose") {
+        positional.push("--choose");
+        positional.push(choice);
     }
+    let write = perp_core::requirement::Write::parse(subcommand, &positional)
+        .map_err(|e| e.to_string())?;
 
     let binding = load(args).map_err(|e| e.to_string())?;
     let resolved = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
+    let done = write.apply(&resolved).map_err(|e| e.to_string())?;
 
-    // The id counts against every source, and the row is written to one of
-    // them. A workspace whose requirements are a directory would otherwise
-    // mint an id that a sibling file already uses.
-    let whole = perp_core::layout::requirements_text(&resolved);
-    let id = next_requirement_id(&whole)
-        .ok_or_else(|| format!("{}: no requirement id to count from", resolved.display()))?;
-    let row = format!("| `{id}` | {text} |\n");
-
-    let source = writable_source(&resolved, FILED_SECTION)?;
-    let existing = if source.exists() {
-        std::fs::read_to_string(&source).map_err(|e| format!("{}: {e}", source.display()))?
-    } else {
-        String::new()
-    };
-
-    let mut updated = existing.clone();
-    if updated.contains(FILED_SECTION) {
-        // Append under the heading's table, which is the end of the file only
-        // because the section is always written last.
-        if !updated.ends_with('\n') {
-            updated.push('\n');
-        }
-        updated.push_str(&row);
-    } else {
-        // One blank line between the section and whatever came before it, and
-        // none at the top of a file this call is creating.
-        if !updated.is_empty() {
-            if !updated.ends_with('\n') {
-                updated.push('\n');
-            }
-            updated.push('\n');
-        }
-        updated.push_str(&format!(
-            "{FILED_SECTION}\n\nFiled by a person from the panel, not by the loop. These rows \
-             carry no slice's gating: they say what should happen and nothing about when.\n\n\
-             | id | Requirement |\n|---|---|\n{row}"
-        ));
+    println!("{}", done.summary);
+    if let Some(note) = &done.note {
+        println!("{note}");
     }
-    std::fs::write(&source, updated).map_err(|e| format!("{}: {e}", source.display()))?;
-
-    println!("filed {id}: {text}");
-    println!("wrote: {}", source.display());
+    println!("wrote: {}", done.source.display());
     Ok(())
-}
-
-/// Which file a write lands in, when `path.requirements` may name a directory
-/// (`O-18`).
-///
-/// `requirements_text` concatenates a directory's markdown for reading, and
-/// nothing had to write one back — so `ungate` read the resolved path with
-/// `read_to_string` and failed on a directory workspace with
-/// `Access is denied. (os error 5)`, an error about the wrong thing entirely.
-///
-/// A file resolves to itself. A directory resolves to whichever file already
-/// carries `needle`, so a second write joins the first, and otherwise to
-/// `filed.md` — a new file rather than an arbitrary existing one, because
-/// every file in there is somebody's chapter and appending to whichever sorted
-/// first is a coin toss with a person's document.
-fn writable_source(
-    resolved: &std::path::Path,
-    needle: &str,
-) -> std::result::Result<std::path::PathBuf, String> {
-    if resolved.is_file() {
-        return Ok(resolved.to_path_buf());
-    }
-    if !resolved.is_dir() {
-        return Err(format!("{}: no requirements source there", resolved.display()));
-    }
-    for path in perp_core::layout::requirement_sources(resolved) {
-        if std::fs::read_to_string(&path).is_ok_and(|text| text.contains(needle)) {
-            return Ok(path);
-        }
-    }
-    Ok(resolved.join("filed.md"))
-}
-
-/// The next unused id, in the prefix the source already uses (`O-18`).
-///
-/// Highest number plus one rather than lowest gap: a gap is usually a row
-/// somebody deleted, and handing its id to something unrelated makes every
-/// older reference to it point at the wrong requirement.
-fn next_requirement_id(source: &str) -> Option<String> {
-    let mut prefix: Option<String> = None;
-    let mut highest = 0u32;
-    for entry in perp_core::cycle::catalogue(source) {
-        let (found, number) = entry.id.split_once('-')?;
-        let number: u32 = number.parse().ok()?;
-        if prefix.is_none() {
-            prefix = Some(found.to_string());
-        }
-        if prefix.as_deref() == Some(found) && number > highest {
-            highest = number;
-        }
-    }
-    prefix.map(|prefix| format!("{prefix}-{}", highest + 1))
 }
 
 fn cmd_bind(args: &[&str]) -> Result<()> {
@@ -1839,9 +1745,7 @@ fn run_command(
 /// The next step id for a conversational record. Chat shares the loop's stream
 /// (`C-5`), so it continues the sequence rather than starting its own.
 fn next_step_for(records: &[Record], stage: &str) -> StepId {
-    let cycle = records.last().map(|r| r.step.cycle).unwrap_or(1);
-    let seq = records.iter().map(|r| r.step.seq).max().unwrap_or(0) + 1;
-    StepId::new(cycle, stage, seq).unwrap_or(StepId { cycle, stage: stage.into(), seq })
+    perp_core::capture::next_step(records, stage)
 }
 
 /// Render artifacts from the journal (`A-1`–`A-7`, `O-2`).

@@ -82,6 +82,7 @@ pub mod cycle;
 pub mod engine;
 pub mod error;
 pub mod gate;
+pub mod idea;
 pub mod git;
 pub mod job;
 pub mod init;
@@ -107,6 +108,7 @@ pub mod prompt;
 /// reachable from a real run (`V-15`).
 pub mod reachable;
 pub mod repo;
+pub mod requirement;
 pub mod runtime;
 pub mod security;
 pub mod session;

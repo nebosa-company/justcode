@@ -72,8 +72,16 @@ mod tests {
         std::fs::read_to_string(path).unwrap_or_default()
     }
 
-    /// Every `.rs` file the shipped binary is built from: this crate, plus the
-    /// CLI, which is where a great many of these are legitimately called.
+    /// Every `.rs` file a shipped binary is built from: this crate, plus the
+    /// binaries over it, which is where a great many of these are legitimately
+    /// called.
+    ///
+    /// A binary's files are named with their crate (`perp-web/main.rs`) and a
+    /// name with a `/` in it is a **caller only** — [`public_functions`] skips
+    /// them. This crate is the surface under test; what the binaries expose to
+    /// nobody is their own business. Missing one of them out is not a smaller
+    /// test, it is a wrong one: `perp-web` is a real run, and a function only
+    /// it calls read as unreachable until it was listed here.
     fn sources() -> Vec<(String, String)> {
         let root = crate_root();
         let mut out = Vec::new();
@@ -92,9 +100,19 @@ mod tests {
             }
         }
 
-        let cli = root.join("../perp/src/main.rs");
-        if cli.exists() {
-            out.push(("main.rs".to_string(), production_only(&read(&cli)).to_string()));
+        for binary in ["perp", "perp-web"] {
+            let dir = root.join(format!("../{binary}/src"));
+            let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().is_some_and(|e| e == "rs") {
+                    let file = path.file_name().map(|n| n.to_string_lossy().into_owned());
+                    out.push((
+                        format!("{binary}/{}", file.unwrap_or_default()),
+                        production_only(&read(&path)).to_string(),
+                    ));
+                }
+            }
         }
         out
     }
@@ -103,8 +121,8 @@ mod tests {
     fn public_functions(sources: &[(String, String)]) -> Vec<(String, String)> {
         let mut out = Vec::new();
         for (file, body) in sources {
-            if file == "main.rs" {
-                continue; // The CLI is the caller, not the surface.
+            if file.contains('/') {
+                continue; // A binary is the caller, not the surface.
             }
             for line in body.lines() {
                 let trimmed = line.trim_start();

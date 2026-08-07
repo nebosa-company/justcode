@@ -217,6 +217,55 @@ fn gate_field(text: &str, key: &str) -> Option<String> {
     if value.is_empty() { None } else { Some(value.to_string()) }
 }
 
+/// The markers a status cell may open with. Listed once because three readers
+/// and one writer all have to agree on them, and a marker missing from one of
+/// those lists is a row that parses differently depending on who is looking.
+pub const MARKERS: [char; 6] = ['✅', '🟡', '⛔', '🔶', '❌', '🚧'];
+
+/// The requirement id in a row's status cell, or `None` when the cell holds
+/// something that is not one.
+///
+/// The cell is `` `L-3` ``, or `✅ ~~`L-3`~~`, or `⛔ `J-38``. Every reader of
+/// this file wants the id out of it and none of them wants the marker, so the
+/// stripping happens here rather than three times — [`catalogue`], [`gated`]
+/// and [`crate::requirement`] were the three, and the fourth would have been
+/// the one that got it subtly wrong.
+pub fn row_id(cell: &str) -> Option<String> {
+    let id = cell
+        .trim()
+        .trim_start_matches(MARKERS)
+        .replace('~', "")
+        .trim()
+        .trim_matches('`')
+        .trim()
+        .to_string();
+    is_requirement_id(&id).then_some(id)
+}
+
+/// What a row's status cell says about the work: `open`, `in progress`,
+/// `done`, `blocked`, `gated`, `conflicting` or `won't do`.
+///
+/// The **cell**, never the line (`V-23`): a requirement whose prose mentions a
+/// marker is not in that state by saying so.
+pub fn row_state(cell: &str) -> &'static str {
+    let cell = cell.trim();
+    if cell.starts_with('✅') {
+        "done"
+    } else if cell.starts_with('🟡') {
+        "in progress"
+    } else if cell.starts_with('🚧') {
+        "blocked"
+    } else if cell.starts_with('⛔') {
+        "gated"
+    } else if cell.starts_with('🔶') {
+        "conflicting"
+    } else if cell.starts_with('❌') {
+        "won't do"
+    } else {
+        "open"
+    }
+}
+
 pub fn gated(source: &str) -> Vec<Gate> {
     let mut waiting: Vec<Gate> = Vec::new();
     for line in source.lines() {
@@ -231,17 +280,7 @@ pub fn gated(source: &str) -> Vec<Gate> {
         if !first.contains('⛔') {
             continue;
         }
-        let id = first
-            .trim()
-            .trim_start_matches(['✅', '🟡', '⛔', '🔶', '❌', '🚧'])
-            .replace('~', "")
-            .trim()
-            .trim_matches('`')
-            .trim()
-            .to_string();
-        if !is_requirement_id(&id) || text.trim().is_empty() {
-            continue;
-        }
+        let (Some(id), false) = (row_id(first), text.trim().is_empty()) else { continue };
         let text = text.trim().to_string();
         let options = gate_field(&text, "Options")
             .map(|list| {
@@ -320,30 +359,9 @@ pub fn catalogue(source: &str) -> Vec<Catalogued> {
         if text.trim().is_empty() {
             continue;
         }
-        let first = first.trim();
-        let state = if first.starts_with('✅') {
-            "done"
-        } else if first.starts_with('🟡') {
-            "in progress"
-        } else if first.starts_with('🚧') {
-            "blocked"
-        } else if first.starts_with('⛔') {
-            "gated"
-        } else if first.starts_with('🔶') {
-            "conflicting"
-        } else if first.starts_with('❌') {
-            "won't do"
-        } else {
-            "open"
-        };
-        let id = first
-            .trim_start_matches(['✅', '🟡', '⛔', '🔶', '❌', '🚧'])
-            .replace('~', "")
-            .trim()
-            .trim_matches('`')
-            .trim()
-            .to_string();
-        if !is_requirement_id(&id) || all.iter().any(|seen| seen.id == id) {
+        let state = row_state(first);
+        let Some(id) = row_id(first) else { continue };
+        if all.iter().any(|seen| seen.id == id) {
             continue;
         }
         let text = text.trim().to_string();
@@ -504,7 +522,12 @@ pub fn backlog(source: &str, limit: usize) -> Vec<Item> {
     items
 }
 
-fn is_requirement_id(text: &str) -> bool {
+/// Whether `text` is a requirement id: one uppercase letter, a dash, digits.
+///
+/// Public because a write has to refuse an id before it goes looking for a row
+/// ([`crate::requirement`]), and "looks like an id" is the same question the
+/// readers here ask.
+pub fn is_requirement_id(text: &str) -> bool {
     let Some((prefix, number)) = text.split_once('-') else { return false };
     prefix.len() == 1
         && prefix.chars().all(|c| c.is_ascii_uppercase())
