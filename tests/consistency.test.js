@@ -285,6 +285,11 @@ test("no string is written in English at the point it is shown", () => {
         const literal = match[1];
         const inner = literal.slice(1, -1);
         if (NAMES.has(inner)) continue;
+        // A command is shown verbatim because it is typed verbatim. A
+        // translated `perp ungate` is a line that does not run, so these are
+        // the one kind of visible English that is right to leave alone — the
+        // prose around them is still a `t(...)` call.
+        if (/^perp\s/.test(inner)) continue;
         const withoutValues = literal.replace(/\$\{[^}]*\}/g, "");
         // Prose is two or more letters once the placeholders are taken out.
         // `·`, `#` and `/` are not.
