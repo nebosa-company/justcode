@@ -20,6 +20,7 @@ single call site knowing which.
 | `link.<name>.model` | checked against what the link actually offers at startup (`M-14`) |
 | `link.<name>.privacy` | `local` or `cloud`; implied by kind where the kind settles it |
 | `link.<name>.auth_env` | the **name** of the environment variable holding the key — never the key (`S-2`) |
+| `link.<name>.vision` | `true` if this link's model can be shown an image (`M-36`). Default `false`. Declared rather than guessed from the model id, and read across the whole role chain — a chain with one text-only link in it cannot be sent images at all, because the conversation outlives a failover |
 | `link.<name>.first_token_seconds` | how long this link may say nothing before it is failed over (`M-23`). Default 20. Raise it for a link that is slow to *begin* answering — a blocked batch and a wedged server look identical until the deadline tells them apart |
 | `role.<role>` | an ordered chain; the first healthy, eligible link wins (`M-3`) |
 | `deprecated.<id>` | a model id known to be dead, and what replaced it |

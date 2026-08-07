@@ -325,6 +325,15 @@ pub struct Link {
     /// a 101-task benchmark run, two batches were blocked because a cloud link
     /// took longer than twenty seconds to begin answering.
     pub first_token: Duration,
+    /// Whether this link's model can be shown an image (`M-36`).
+    ///
+    /// Declared, never guessed. A model id says nothing reliable about vision —
+    /// the same name gains and loses it across releases — and guessing wrong
+    /// costs a rejected request after the bytes are already on the wire. Default
+    /// `false`, which is the direction that fails safely: a link that could have
+    /// seen an image and was not asked to loses a capability, and one that could
+    /// not loses the call.
+    pub sees_images: bool,
 }
 
 impl Link {
@@ -598,6 +607,21 @@ impl Links {
     }
 
     /// The links a role would try, in order (`M-3`).
+    /// Whether every link this role might be answered by can see an image
+    /// (`M-36`).
+    ///
+    /// Every, not any. Images live in the conversation, and the conversation
+    /// outlives a failover: a chain whose second link is text-only would be
+    /// handed image parts it cannot read, and fail after the bytes are on the
+    /// wire. A role with no chain at all sees nothing, which is the same
+    /// direction the default takes.
+    pub fn role_sees_images(&self, role: Role) -> bool {
+        match self.chain(role) {
+            Ok(chain) => !chain.is_empty() && chain.iter().all(|link| link.sees_images),
+            Err(_) => false,
+        }
+    }
+
     pub fn chain(&self, role: Role) -> Result<Vec<&Link>> {
         let (_, names) = self
             .chains
@@ -828,6 +852,20 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
         None => Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
     };
 
+    let sees_images = match field("vision") {
+        Some(text) => match text.trim() {
+            "true" | "yes" => true,
+            "false" | "no" => false,
+            other => {
+                return Err(Error::unbound(
+                    format!("link.{name}.vision"),
+                    format!("`{other}` is not true or false"),
+                ))
+            }
+        },
+        None => false,
+    };
+
     Ok(Link {
         name: name.to_string(),
         kind,
@@ -839,6 +877,7 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
         concurrency,
         effort,
         first_token,
+        sees_images,
     })
 }
 

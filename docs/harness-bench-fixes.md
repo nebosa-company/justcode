@@ -8,7 +8,7 @@ What a full Harness-Bench run found wrong with this harness, and what to change.
 id goes in the requirements source first and this document becomes commentary on
 it.
 
-**Status: fixes 1 to 4 are implemented and gated; fix 5 is not.** Every
+**Status: all five fixes are implemented and gated.** Every
 number below is measured from a run that has already happened, not projected.
 
 **One of those numbers was wrong, and fix 2 says so at length.** Its refusal
@@ -301,7 +301,12 @@ not here.
 
 ## 5. Image content in the model client
 
-**Cited:** `M-21`
+**Cited:** `M-21` · **filed as `M-36`** · **implemented, partly**
+
+> **Sight, not drawing.** `008-image-recognize` needs the model to *receive* an
+> image and is now reachable. `013-image-edit` needs it to *produce* one, which
+> no client work provides, and stays at 0.00. Half the row, and the half that
+> was achievable.
 
 ### What happens now
 
@@ -339,7 +344,7 @@ supposed.
 | 2 | Path normalisation and candidate narrowing in `X-13`/`X-2` | **2** | small | done, `X-15` |
 | 3 | Refuse git outside the workspace repository | 15 | small | done, `G-18` |
 | 4 | First-token deadline as a link key | 2 | trivial | done, `M-35` |
-| 5 | Image content in the model client | 2 | large | open |
+| 5 | Image content in the model client | 2 | large | done, `M-36` (008 only) |
 
 Row 2 read **11** until its refusals were resolved against their own workspace
 roots. That count was tasks which *recorded* a refusal, not tasks a refusal

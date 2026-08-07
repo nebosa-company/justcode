@@ -302,7 +302,11 @@ impl<'a> Agent<'a> {
             links,
             health,
             mode: Mode::Any,
-            host,
+            // `M-36`: whether a read may hand back an image is a fact about the
+            // role's chain, not about the workspace, so the host is told rather
+            // than left to guess. Recomputed by `as_role` — a verifier and a
+            // coder need not be the same links.
+            host: host.seeing_images(links.role_sees_images(Role::Coder)),
             role: Role::Coder,
             items,
             at: 0,
@@ -335,6 +339,7 @@ impl<'a> Agent<'a> {
     }
 
     pub fn as_role(mut self, role: Role) -> Agent<'a> {
+        self.host.set_seeing_images(self.links.role_sees_images(role));
         self.role = role;
         self
     }
@@ -704,7 +709,7 @@ impl<'a> Agent<'a> {
                     // mostly greps; guessing from the enum made every
                     // fourth-turn grep reset the quiet counter and made
                     // `L-11`'s watchdog unreachable.
-                    let (mut results, progressed) = self.run_calls(&calls);
+                    let (mut results, progressed, images) = self.run_calls(&calls);
 
                     // A watchdog that trips ends the step. `L-12` and `L-13`
                     // both say "is an error", and an error the loop carries on
@@ -785,9 +790,11 @@ You wrote text framed as tool output. Only this harness                         
                     // after a single `glob` it reported five calls it had
                     // never made, complete with invented byte counts and a
                     // commit sha. Saying what happens next costs one line.
-                    messages.push(Message::user(format!("{results}
+                    messages.push(
+                        Message::user(format!("{results}
 
-{CARRY_ON}")));
+{CARRY_ON}")).with_images(images),
+                    );
                 }
                 Next::Repair { complaint, attempt, .. } => {
                     quiet += 1;
@@ -886,9 +893,13 @@ You wrote text framed as tool output. Only this harness                         
     /// deduplicated set kept for staging (`G-3`), so a second write to a path
     /// already in it — exactly what a careful model does when it verifies and
     /// re-writes — would not grow it and would wrongly read as a quiet turn.
-    fn run_calls(&mut self, calls: &[Call]) -> (String, bool) {
+    /// Returns what the model is shown, whether the workspace moved, and any
+    /// images a read produced (`M-36`) — carried apart from the text because
+    /// they go in a different part of the request and nowhere else.
+    fn run_calls(&mut self, calls: &[Call]) -> (String, bool, Vec<crate::client::Image>) {
         let mut out = String::new();
         let mut progressed = false;
+        let mut images: Vec<crate::client::Image> = Vec::new();
         for call in calls {
             // `T-22`: a local commit of what this step touched.
             //
@@ -918,7 +929,7 @@ You wrote text framed as tool output. Only this harness                         
                 self.watchdogs.call(&call.signature(), self.touched.len())
             {
                 self.tripped = Some(reason);
-                return (out, progressed);
+                return (out, progressed, images);
             }
 
             // `T-14`: a call that needs a person is enqueued, not merely
@@ -1029,6 +1040,9 @@ You wrote text framed as tool output. Only this harness                         
                         }
                     }
                     self.record_touched(call);
+                    if let Some(image) = output.image.clone() {
+                        images.push(image);
+                    }
                     output.render()
                 }
                 // A refusal is a result, not an error. The model needs to see
@@ -1038,7 +1052,7 @@ You wrote text framed as tool output. Only this harness                         
             };
             out.push_str(&format!("\n{}\n{rendered}\n", call.signature()));
         }
-        (out, progressed)
+        (out, progressed, images)
     }
 
     /// Note a path a call actually changed, for staging (`G-3`) and for the

@@ -293,6 +293,12 @@ pub struct Output {
     /// For a file read: the lines shown and how many the file has, so a model
     /// that was cut off can ask for the rest by number (`T-6`).
     pub lines: Option<Shown>,
+    /// An image the read produced, for a link that can be shown one (`M-36`).
+    ///
+    /// Carried apart from `text` and never inside it. The transcript, the
+    /// journal and the byte budget all treat this output as the one line of
+    /// prose it looks like; only the request assembly knows there are bytes.
+    pub image: Option<crate::client::Image>,
 }
 
 /// Which lines of a file a read actually returned.
@@ -307,7 +313,7 @@ impl Output {
     fn of(tool: Tool, text: String, budget: usize) -> Output {
         let full_bytes = text.len();
         if full_bytes <= budget {
-            return Output { tool, text, truncated: false, full_bytes, budget, lines: None };
+            return Output { tool, text, truncated: false, full_bytes, budget, lines: None, image: None };
         }
         // Keep the tail: a failing command says why at the end.
         let start = text.len() - budget;
@@ -323,6 +329,7 @@ impl Output {
             full_bytes,
             budget,
             lines: None,
+            image: None,
         }
     }
 
@@ -354,6 +361,7 @@ impl Output {
                 full_bytes: 0,
                 budget,
                 lines: Some(Shown { first, last: first.saturating_sub(1), total }),
+                image: None,
             };
         }
 
@@ -379,6 +387,30 @@ impl Output {
             full_bytes,
             budget,
             lines: Some(Shown { first, last: shown_last, total }),
+            image: None,
+        }
+    }
+
+    /// An image read, for a link that can be shown one (`M-36`).
+    ///
+    /// The text is what everything except the request assembly sees: the
+    /// transcript, the journal and the byte budget get one line of prose, and
+    /// the megabyte of base64 goes only where it is needed. `capture.rs` already
+    /// settled this for screenshots — a PNG in a JSONL record is a megabyte of
+    /// base64 in a file meant to be read with `tail`.
+    fn of_image(path: &Path, media_type: &str, bytes: usize, image: crate::client::Image) -> Output {
+        let text = format!(
+            "{} — {media_type}, {bytes} bytes, attached to this message",
+            path.display()
+        );
+        Output {
+            tool: Tool::Read,
+            full_bytes: text.len(),
+            text,
+            truncated: false,
+            budget: 0,
+            lines: None,
+            image: Some(image),
         }
     }
 
@@ -734,6 +766,10 @@ pub struct Host {
     /// Cycle 8 aimed two patches at it. They failed on a pre-image mismatch, so
     /// the guarantee survived by luck rather than by rule.
     protected: Vec<PathBuf>,
+    /// Whether anything this role can reach is able to look at an image
+    /// (`M-36`). False by default, which is what makes a read of a PNG a
+    /// refusal that says why rather than a UTF-8 error that does not.
+    sees_images: bool,
 }
 
 impl Host {
@@ -750,7 +786,22 @@ impl Host {
             timeout: Duration::from_secs(120),
             egress: crate::security::Egress::default(),
             protected: Vec::new(),
+            sees_images: false,
         }
+    }
+
+    /// Declare that a link this role can reach is able to see an image
+    /// (`M-36`). Set from the role's chain, not from a single link: the
+    /// conversation carries its images across a failover, so the answer has to
+    /// hold for every link that might be asked next.
+    pub fn seeing_images(mut self, sees: bool) -> Host {
+        self.sees_images = sees;
+        self
+    }
+
+    /// The same, in place, for a caller that holds the host by reference.
+    pub fn set_seeing_images(&mut self, sees: bool) {
+        self.sees_images = sees;
     }
 
     /// Refuse every writing tool on these paths, and on anything under them
@@ -887,6 +938,28 @@ impl Host {
         let text = match call.tool {
             Tool::Read => {
                 let path = self.resolve(call.need("path")?)?;
+                // An image is read as an image or not at all. `read_to_string`
+                // on a PNG fails on invalid UTF-8, and the model that asked was
+                // right to ask — the failure was the harness having no way to
+                // answer (`M-36`).
+                if let Some(media_type) = image_media_type(&path) {
+                    if !self.sees_images {
+                        return Err(Error::refused(
+                            format!("read {}", path.display()),
+                            format!(
+                                "`{}` is an image, and no link this role can reach declared \
+                                 `vision = true`. Nothing here can look at it (`M-36`)",
+                                path.display()
+                            ),
+                        ));
+                    }
+                    let bytes = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
+                    let image = crate::client::Image {
+                        media_type: media_type.to_string(),
+                        base64: crate::client::base64(&bytes),
+                    };
+                    return Ok(Output::of_image(&path, media_type, bytes.len(), image));
+                }
                 let text = std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
                 let line = |name: &str| call.get(name).and_then(|raw| raw.trim().parse().ok());
                 return Ok(Output::of_file(&text, line("from"), line("to"), self.budget));
@@ -1314,6 +1387,22 @@ fn derived_excludes() -> String {
     ]
     .map(|spec| format!("\"{spec}\""))
     .join(" ")
+}
+
+/// The media type of an image this harness can hand to a model (`M-36`).
+///
+/// A closed list, by extension. Sniffing the bytes would be more thorough and
+/// answer a question nobody asked: the wire formats accept these four, so a
+/// file that is not one of them has nowhere to go regardless of what it is.
+fn image_media_type(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
 }
 
 /// Whether a shell command line runs `git`.
@@ -2176,6 +2265,60 @@ struct Held {
         }
         for no in ["grep git README.md", "echo 'git is a program'", "python git_helper.py", ""] {
             assert!(!invokes_git(no), "{no}");
+        }
+    }
+
+    /// `M-36`: a read of an image hands back the image, for a role whose links
+    /// can see one — and the base64 stays out of the text everything else
+    /// reads.
+    #[test]
+    fn reading_an_image_attaches_it_rather_than_printing_it() {
+        let (host, root) = host();
+        let host = host.seeing_images(true);
+        // A one-pixel PNG is still a PNG; what matters is the bytes round-trip.
+        let bytes: Vec<u8> = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2, 3];
+        std::fs::write(root.join("shot.png"), &bytes).expect("write");
+
+        let out = host
+            .run(&Call::new(Tool::Read).arg("path", "shot.png"))
+            .expect("an image is readable");
+        let image = out.image.as_ref().expect("it carries the image");
+        assert_eq!(image.media_type, "image/png");
+        assert_eq!(image.base64, crate::client::base64(&bytes));
+        assert!(out.text.contains("image/png"), "the text says what it is: {}", out.text);
+        assert!(!out.text.contains(&image.base64), "and not what it holds: {}", out.text);
+    }
+
+    /// And a role that cannot see one is told so, rather than being handed a
+    /// UTF-8 error that says nothing about why.
+    #[test]
+    fn reading_an_image_without_a_link_that_can_see_it_says_so() {
+        let (host, root) = host();
+        std::fs::write(root.join("shot.png"), [0x89, b'P', b'N', b'G']).expect("write");
+
+        let err = host
+            .run(&Call::new(Tool::Read).arg("path", "shot.png"))
+            .expect_err("nothing here can look at it");
+        let text = format!("{err}");
+        assert!(text.contains("is an image"), "{text}");
+        assert!(text.contains("M-36"), "it cites the rule: {text}");
+        assert!(!text.contains("UTF-8") && !text.contains("utf-8"), "not a decoding error: {text}");
+    }
+
+    /// Only the four the wire formats accept, and text files stay text.
+    #[test]
+    fn only_the_image_types_a_model_can_be_shown_count() {
+        for (name, expected) in [
+            ("a.png", Some("image/png")),
+            ("a.JPG", Some("image/jpeg")),
+            ("a.jpeg", Some("image/jpeg")),
+            ("a.gif", Some("image/gif")),
+            ("a.webp", Some("image/webp")),
+            ("a.txt", None),
+            ("a.rs", None),
+            ("noext", None),
+        ] {
+            assert_eq!(image_media_type(Path::new(name)), expected, "{name}");
         }
     }
 
