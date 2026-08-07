@@ -422,10 +422,15 @@ fn cmd_ungate(args: &[&str]) -> std::result::Result<(), String> {
         return Err("ungate needs a requirement id: perp ungate J-38".to_string());
     };
     let binding = load(args).map_err(|e| e.to_string())?;
-    let source = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
+    let resolved = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
+
+    // The row lives in one file even when the source is a directory (`O-18`).
+    // Reading the resolved path directly failed there with a permission error,
+    // which is a true message about a question nobody asked.
+    let marker = format!("| ⛔ `{id}` |");
+    let source = writable_source(&resolved, &marker)?;
     let text = std::fs::read_to_string(&source).map_err(|e| format!("{}: {e}", source.display()))?;
 
-    let marker = format!("| ⛔ `{id}` |");
     if !text.contains(&marker) {
         return Err(format!("`{id}` is not gated in {}", source.display()));
     }
