@@ -11,10 +11,19 @@ it.
 **Status: all five fixes are implemented and gated.** Every
 number below is measured from a run that has already happened, not projected.
 
-**One of those numbers was wrong, and fix 2 says so at length.** Its refusal
-count was tasks that *recorded* a refusal rather than tasks a refusal harmed;
-resolving each refused token against its own workspace root cut the real figure
-from 11 tasks to 2. The other rows have not been checked that way.
+**Two of the numbers below were wrong, and both corrections are recorded in
+place.** Fix 2's refusal count was tasks that *recorded* a refusal rather than
+tasks a refusal harmed — 11 became 2. Fix 5 named `013-image-edit` as a vision
+failure on the strength of its name; its journal said `no-op-step`, and it
+scored 1.00 on a text-only link once that was fixed.
+
+**And the largest finding here has a cause underneath it.** The no-op signature
+that fix 1 was written from — 37 tasks at mean 0.465 — was substantially an
+artifact: the benchmark's sandboxes lived inside another project's checkout,
+whose `.gitignore` matched them, so `T-29` discarded every write from `touched`
+and `V-13` recorded "changed nothing" for steps that had written plenty. That is
+filed as `T-30` and fixed. Fix 1 remains a real gap in a real mechanism; its
+evidence was contaminated.
 
 ---
 
@@ -303,36 +312,51 @@ not here.
 
 **Cited:** `M-21` · **filed as `M-36`** · **implemented, partly**
 
-> **Sight, not drawing.** `008-image-recognize` needs the model to *receive* an
-> image and is now reachable. `013-image-edit` needs it to *produce* one, which
-> no client work provides, and stays at 0.00. Half the row, and the half that
-> was achievable.
+> **This row named two tasks and only one of them belonged to it.** It read
+> `008-image-recognize` and `013-image-edit` as a matched pair of vision
+> failures. `013` was not one: its zero carried the `no-op-step` signature —
+> `T-30`'s contamination — and once that was fixed it scored **1.00** on a
+> text-only link, with no vision configured anywhere. It was filed here on the
+> strength of its name rather than its journal.
+>
+> `008` is the real case and remains open at **0.00**: it asks what is *in* a
+> picture, which nothing but a model looking at it can answer.
 
 ### What happens now
 
-There is no image path in `perp-core`. The client sends text; `cli_prompt`
-flattens a conversation to a string. `008-image-recognize` and `013-image-edit`
-score **0.00**, having been asked to describe pictures they could never receive.
+There was no image path in `perp-core`. The client sent text; `cli_prompt`
+flattens a conversation to a string, so a `read` of a PNG failed on invalid
+UTF-8 and a model asked to look at a picture got a decoding error.
 
-Their process scores are **0.88 and 0.70** — the model used its tools sensibly
-on a task the harness structurally cannot do.
+### What each of the two actually needed
 
-### The finding that argues for fixing it
+**`013-image-edit` needed nothing from this row.** Its oracle asks for two PNGs
+that exist, differ from their originals, and are described — all of which a
+model satisfies by driving PIL through the shell, which is exactly what it did:
 
-The same two tasks scored **1.00 under a `claude-cli` link**, on both Sonnet and
-Opus.
+```
+shell :: python -c "from PIL import Image; im = Image.open(...)"
+```
 
-Not because those models are better. Because a `claude-cli` link runs the CLI as
-a subprocess, and the CLI reads image files with *its own* tools — so Perpetum
-inherited a capability through the subprocess boundary that it does not itself
-possess. The gap is entirely in `perp`'s own model client.
+Its 0.00 was `touched` being empty, not sight being absent.
 
-### Proposed change
+**`008-image-recognize` needed sight and still does.** No link in the benchmark
+configuration declares `vision = true`, and the model under test is not
+vision-capable, so the plumbing this row built has nothing to carry. Reaching it
+needs a vision model in the role chain, not another code change.
 
-Image content blocks on the OpenAI-compatible and Anthropic paths, for links
-whose model accepts them. Larger than everything above and worth scoping
-separately; the note here is that the requirement is now measured rather than
-supposed.
+### The finding that argued for fixing it
+
+Both tasks scored **1.00 under a `claude-cli` link** while scoring 0.00 on an
+API link — and that contrast is what made them look like one problem.
+
+For `008` the reading holds: a `claude-cli` link runs the CLI as a subprocess,
+and the CLI reads image files with *its own* tools, so Perpetum inherited a
+capability through the subprocess boundary that it did not itself possess.
+
+For `013` it was a coincidence. The CLI link happened to succeed at a task the
+API link was failing for an unrelated reason, and two zeros side by side read as
+a pattern. A signature in the journal would have said otherwise, and did.
 
 ---
 
@@ -344,7 +368,7 @@ supposed.
 | 2 | Path normalisation and candidate narrowing in `X-13`/`X-2` | **2** | small | done, `X-15` |
 | 3 | Refuse git outside the workspace repository | 15 | small | done, `G-18` |
 | 4 | First-token deadline as a link key | 2 | trivial | done, `M-35` |
-| 5 | Image content in the model client | 2 | large | done, `M-36` (008 only) |
+| 5 | Image content in the model client | **1** | large | built, `M-36`; `008` still needs a vision model, `013` never belonged here |
 
 Row 2 read **11** until its refusals were resolved against their own workspace
 roots. That count was tasks which *recorded* a refusal, not tasks a refusal
