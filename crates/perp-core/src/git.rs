@@ -467,6 +467,46 @@ impl Repo {
             .collect()
     }
 
+    /// Files the working tree has that git does not, and does not ignore
+    /// (`G-19`).
+    ///
+    /// A new crate is untracked by definition, so `touched` is its only route
+    /// into a commit and a step that creates one through a shell script has no
+    /// route at all. **Measured on Janitor's cycle 38:** the loop created
+    /// `janitor-gui`, moved the view-model into it, and committed nothing —
+    /// twelve modified files staged by `G-18` and three untracked ones,
+    /// including the crate's `Cargo.toml`, did not.
+    ///
+    /// `--exclude-standard` is what keeps this honest: anything `.gitignore`
+    /// covers stays out, so `target/`, scratch and build output cannot sweep
+    /// themselves in. What is left is a file somebody deliberately added to
+    /// the workspace.
+    pub fn untracked_unignored(&self) -> Vec<String> {
+        let Ok(run) =
+            self.run_unchecked(&["ls-files", "--others", "--exclude-standard"])
+        else {
+            return Vec::new();
+        };
+        if !run.is_success() {
+            return Vec::new();
+        }
+        // The harness's own runtime state is not the step's work. A lock it
+        // took while gating (`L-18`) is untracked and, in a workspace whose
+        // ignore rules do not name the build directory, unignored — so without
+        // this it would be staged as though a coder had written it, and would
+        // read as work a delivery left behind.
+        const HARNESS_RUNTIME: &[&str] = &["gate.lock", "write.lock"];
+        run.stdout_tail
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .filter(|line| {
+                !HARNESS_RUNTIME.iter().any(|name| line.ends_with(name))
+            })
+            .map(String::from)
+            .collect()
+    }
+
     /// Is this path in the index — so an absence is a deletion to record
     /// rather than a name git has never heard of (`G-17`)?
     fn is_tracked(&self, path: &str) -> bool {
@@ -766,6 +806,42 @@ impl CommitMessage {
 
 #[cfg(test)]
 mod tests {
+
+    /// `G-19`: a file git does not have yet still reaches the commit.
+    ///
+    /// A new crate is untracked by definition, so `touched` is its only route
+    /// in — and a step that creates one through a shell script has no route at
+    /// all. Measured on Janitor's cycle 38: the loop created `janitor-gui`,
+    /// moved the view-model into it, and committed nothing. Twelve modified
+    /// files staged; three untracked ones, including the crate's `Cargo.toml`,
+    /// did not, and a workspace missing a member's manifest does not build.
+    ///
+    /// Ignored files stay out, which is what stops scratch and build output
+    /// sweeping themselves in.
+    #[test]
+    fn an_untracked_file_is_offered_to_the_commit_unless_it_is_ignored() {
+        let repo = repo("git-g19-untracked");
+        let root = repo.root.clone();
+        std::fs::write(root.join(".gitignore"), "target/
+").expect("gitignore");
+        std::fs::create_dir_all(root.join("crates/janitor-gui/src")).expect("dirs");
+        std::fs::write(root.join("crates/janitor-gui/Cargo.toml"), "[package]
+")
+            .expect("manifest");
+        std::fs::create_dir_all(root.join("target")).expect("target");
+        std::fs::write(root.join("target/build.log"), "noise
+").expect("ignored file");
+
+        let found = repo.untracked_unignored();
+        assert!(
+            found.iter().any(|p| p.contains("janitor-gui/Cargo.toml")),
+            "a new crate's manifest is work, not noise: {found:?}"
+        );
+        assert!(
+            !found.iter().any(|p| p.contains("target/")),
+            "and what .gitignore covers stays out: {found:?}"
+        );
+    }
 
     /// `G-17`: a scratch file the step cleaned up does not take the commit with it.
     ///

@@ -871,7 +871,13 @@ impl Driver<'_> {
             //
             // Tracked files only. An untracked file still has to be declared,
             // so scratch a step leaves behind does not sweep itself in.
-            for path in crate::git::Repo::at(&self.root).modified_tracked() {
+            let repo = crate::git::Repo::at(&self.root);
+            // `G-19`: and files git does not have yet but does not ignore. A
+            // new crate is untracked by definition, so without this a step that
+            // creates one has no route into the commit at all.
+            for path in
+                repo.modified_tracked().into_iter().chain(repo.untracked_unignored())
+            {
                 if !paths.contains(&path) {
                     paths.push(path);
                 }
