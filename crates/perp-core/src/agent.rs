@@ -138,6 +138,40 @@ fn notice(requirement: &str, turns: u32) -> String {
     )
 }
 
+/// What a step that *stops* having changed nothing is told, once (`L-25`).
+///
+/// [`notice`] rides back with tool results, so it only reaches a step that is
+/// still calling tools — and `TELL_AFTER_TURNS` means not before its eighth
+/// turn. A step that reads three files and then answers in prose is told
+/// nothing at all: it ends on `V-13` at turn four, having never been informed
+/// it had failed.
+///
+/// Measured on Harness-Bench against `deepseek-v4-flash`: **37 of 101 runs**
+/// ended on that outcome, averaging **0.465** against **0.780** for runs with no
+/// failure signature at all. `004-meeting-summary`, `011-code-debug` and
+/// `014-task-decomposition` are the bare case — four model calls, eleven to
+/// fifteen seconds, nothing written, nothing said back.
+///
+/// `L-11` is not violated by telling it. A first attempt that produced nothing
+/// is not a repetition; the model has not been asked twice, it has not been
+/// asked once. If it stops empty a *second* time, that is the repetition, and
+/// the step ends as it did before.
+///
+/// Says the same thing [`notice`] says, in the tense that fits: it has already
+/// stopped. It does not say *make an edit* — a step with genuinely nothing to
+/// change should still end having changed nothing (`V-13`), and steering it into
+/// writing something to clear a check is the failure this whole rule exists to
+/// catch.
+fn notice_on_answer(requirement: &str) -> String {
+    format!(
+        "\n[`L-25`] You have ended {requirement} without writing, patching or \
+         deleting anything, so it is recorded as failed whatever the summary \
+         says (`V-13`). You have one further turn. Make the change if the \
+         requirement asks for one; if it genuinely asks for none, say so and \
+         stop — that answer is the intended one, not a way of failing.\n"
+    )
+}
+
 /// One unit of work a model is asked to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
@@ -399,6 +433,10 @@ impl<'a> Agent<'a> {
         let mut asked: std::collections::HashSet<String> = std::collections::HashSet::new();
         // `L-23`: journalled once, on the turn that makes the first call.
         let mut stated = false;
+        // Whether a step that stopped empty has already been told so (`L-25`).
+        // Once, not every time: the second empty answer is the repetition
+        // `L-11` refuses to keep paying for.
+        let mut told_on_answer = false;
         // What the workspace looked like before this step wrote anything, so
         // the end of it can tell whether it did (`V-13`).
         let touched_before = self.touched.len();
@@ -589,6 +627,28 @@ impl<'a> Agent<'a> {
                     // to call done. A person reads the transcript and marks
                     // (`V-2`).
                     if self.touched.len() == touched_before {
+                        // Told once, while it can still act (`L-25`). The
+                        // detection was already exact; what was missing was
+                        // saying it to the only party that could do anything
+                        // about it. See [`notice_on_answer`] for what this cost
+                        // when the step simply ended here.
+                        if !told_on_answer {
+                            told_on_answer = true;
+                            // The turn learned nothing and changed nothing, so
+                            // it counts against `GIVE_UP_AFTER_TOLD` like any
+                            // other — being told does not buy a step out of the
+                            // bound that ends it.
+                            unproductive += 1;
+                            let told = notice_on_answer(&item.requirement);
+                            transcript.push_str(&told);
+                            crate::verbose::say(
+                                "l-25",
+                                "the step stopped having changed nothing; telling it once",
+                            );
+                            messages.push(Message::assistant(content));
+                            messages.push(Message::user(told));
+                            continue;
+                        }
                         return Done::Failed {
                             summary: format!(
                                 "{}: read and reported, but changed nothing — \
@@ -1435,7 +1495,10 @@ mod tests {
         std::fs::write(dir.join("f.txt"), "hello\n").expect("write");
 
         let call = Scripted::native("read", r#"{"path":"f.txt"}"#);
-        let transport = Scripted::new(vec![&call, "I read it."]);
+        // Two prose replies, not one: a step that stops having changed nothing
+        // is told so and given one further turn (`L-25`), so the outcome lands
+        // on the second. Same reason in the three tests below.
+        let transport = Scripted::new(vec![&call, "I read it.", "Nothing to change."]);
         let links = native_links();
         let mut agent = Agent::new(
             Client::new(&transport),
@@ -1693,6 +1756,7 @@ path: f.txt
         let transport = Scripted::new(vec![
             "```perp-call\ntool: shell\ncommand: kubectl apply -f prod.yaml\n```",
             "Understood — that is not something I can do.",
+            "There is nothing else I can do here.",
         ]);
         let links = links();
         let mut agent = Agent::new(
@@ -1712,8 +1776,10 @@ path: f.txt
         let Done::Failed { detail, .. } = &done else { panic!("{done:?}") };
         assert!(detail.contains("Never list") || detail.contains("refused"), "{detail}");
         // And the refusal reached the model, which is what the second reply
-        // proves — it only exists because the first turn came back.
-        assert_eq!(agent.turns.len(), 2);
+        // proves — it only exists because the first turn came back. Three, not
+        // two: the third is the further turn `L-25` grants a step that stopped
+        // having changed nothing.
+        assert_eq!(agent.turns.len(), 3);
     }
 
     /// `V-13`. The case cycle 8 actually produced, three times: a step that
@@ -1731,6 +1797,7 @@ path: f.txt
         let transport = Scripted::new(vec![
             "```perp-call\ntool: read\npath: f.txt\n```",
             "Findings: this repository contains f.txt, which holds some content.",
+            "That remains my answer; there is nothing to write.",
         ]);
         let links = links();
         let mut agent = Agent::new(
@@ -1748,6 +1815,82 @@ path: f.txt
             panic!("reading is not doing: {done:?}")
         };
         assert!(summary.contains("changed nothing"), "{summary}");
+        assert!(Work::touched(&agent).is_empty(), "and it staged nothing");
+    }
+
+    /// `L-25`, the half that was missing. A step that stops having changed
+    /// nothing is told so and given one further turn — and a model that then
+    /// makes the edit ends green.
+    ///
+    /// The notice existed and rode back with tool results, so it never reached
+    /// a step that answered in prose before its eighth turn. On Harness-Bench
+    /// that was 37 of 101 runs.
+    #[test]
+    fn a_step_that_stops_empty_is_told_and_may_still_deliver() {
+        let dir = tmpdir("agent-told-on-answer");
+        std::fs::write(dir.join("f.txt"), "content\n").expect("write");
+
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: read\npath: f.txt\n```",
+            "Findings: f.txt holds some content. Nothing further seems needed.",
+            "```perp-call\ntool: write\npath: out.txt\ncontent: <<EOF\nthe summary\nEOF\n```",
+            "Written out.txt.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-25", "summarise it", "write a summary").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        let Done::Ok { detail, .. } = &done else {
+            panic!("being told should not end the step: {done:?}")
+        };
+        let detail = detail.as_deref().unwrap_or_default();
+        assert!(detail.contains("[`L-25`]"), "it was told: {detail}");
+        assert!(dir.join("out.txt").is_file(), "and it acted on being told");
+        assert!(
+            Work::touched(&agent).iter().any(|p| p.contains("out.txt")),
+            "the write is staged: {:?}",
+            Work::touched(&agent)
+        );
+    }
+
+    /// The bound on the same thing. Told once, not every time: a step that
+    /// stops empty a second time is repeating itself, which is exactly what
+    /// `L-11` refuses to keep paying for.
+    #[test]
+    fn a_step_told_once_that_stops_empty_again_fails() {
+        let dir = tmpdir("agent-told-then-empty");
+        std::fs::write(dir.join("f.txt"), "content\n").expect("write");
+
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: read\npath: f.txt\n```",
+            "Findings: nothing to do here.",
+            "I still consider that no change is required.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-25", "look into it", "report").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        let Done::Failed { summary, detail } = &done else {
+            panic!("a second empty answer is the repetition: {done:?}")
+        };
+        assert!(summary.contains("changed nothing"), "{summary}");
+        assert_eq!(detail.matches("[`L-25`]").count(), 1, "told once, not twice");
         assert!(Work::touched(&agent).is_empty(), "and it staged nothing");
     }
 
@@ -1936,6 +2079,7 @@ path: f.txt
         let transport = Scripted::new(vec![
             "```perp-call\ntool: write\npath: .harness/perpetum.md\ncontent: <<EOF\n| done |\nEOF\n```",
             "Marked it.",
+            "I cannot mark it any other way.",
         ]);
         let links = links();
         let mut agent = Agent::new(
