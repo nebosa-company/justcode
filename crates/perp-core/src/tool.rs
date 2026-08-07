@@ -941,11 +941,19 @@ impl Host {
             Tool::Shell => {
                 let command = call.need("command")?;
                 self.confined(command)?;
+                // `shell git commit` is a git call wearing a shell, and the
+                // repository it lands in is decided the same way. Measured:
+                // a model refused at `git(args=…)` reached for
+                // `shell(command=git -C <path> …)` in the same run.
+                if invokes_git(command) {
+                    self.own_repository(command)?;
+                }
                 self.shell_within(command, self.asked_timeout(call))?
             }
             Tool::Git => {
                 let args = call.need("args")?;
                 self.confined(args)?;
+                self.own_repository(args)?;
                 self.shell(&format!("git {args}"))?
             }
             Tool::Gate => {
@@ -1147,6 +1155,62 @@ impl Host {
         Ok(())
     }
 
+    /// Refuse git when the repository is not the workspace (`X-13`, `G-1`).
+    ///
+    /// `git` walks *up* from the working directory until it finds a `.git`, so
+    /// a workspace sitting inside somebody else's checkout has that checkout as
+    /// its repository. Every classification upstream of this holds — `G-3`
+    /// staging, `G-4` hooks, `G-5` push — and all of them are answering about
+    /// the wrong repository. `T-22` reasons that a local commit is the loop's
+    /// own business, which is true exactly while the repository *is* the loop's.
+    ///
+    /// Found by running this harness over a benchmark whose sandboxes lived
+    /// under another project's checkout: **fourteen commits** landed on that
+    /// project's `main`, unattended and unapproved, each carrying a bench task's
+    /// output files. The thirteen runs that journalled `checkpoint commit
+    /// failed` were the ones where a `.gitignore` happened to refuse the `git
+    /// add` — the failures were luck, not a boundary, and the successes were
+    /// invisible until somebody read the other repository's log.
+    ///
+    /// Refuses reads too. A `git status` against the wrong repository answers
+    /// with thousands of unrelated files, and a model that believes that answer
+    /// is worse off than one told no.
+    ///
+    /// Equality, not ancestry: a workspace that is a subdirectory of its own
+    /// repository is refused here as well, and deliberately. That may be a
+    /// legitimate layout — a package inside a monorepo — and the answer is for
+    /// a person to say so, not for the harness to assume it from a path
+    /// relationship it cannot tell apart from this one.
+    fn own_repository(&self, args: &str) -> Result<()> {
+        let spec = Spec::new("git rev-parse --show-toplevel", &self.root, Duration::from_secs(30))
+            .with_env(Env::declared());
+        let Ok(run) = process::run(&spec) else { return Ok(()) };
+        if !run.is_success() {
+            // Not a repository at all. Git will say so itself, in its own
+            // words, and saying it twice helps nobody.
+            return Ok(());
+        }
+        let Some(top) = run.stdout_tail.lines().map(str::trim).find(|l| !l.is_empty()) else {
+            return Ok(());
+        };
+        let repo = PathBuf::from(top);
+        let repo = repo.canonicalize().unwrap_or(repo);
+        let root = self.root.canonicalize().unwrap_or_else(|_| self.root.clone());
+        if repo == root {
+            return Ok(());
+        }
+        Err(Error::refused(
+            format!("git {args}"),
+            format!(
+                "the repository here is `{}`, which is not the workspace `{}`. A commit, a \
+                 branch or a stage would land in somebody else's checkout, so git is refused \
+                 until the workspace is its own repository (`G-1`)",
+                repo.display(),
+                root.display()
+            ),
+        ))
+    }
+
     fn shell(&self, command: &str) -> Result<String> {
         // Say what is actually wrong, while it can still be acted on. Without
         // this the operator arrives at the first program as an argument and the
@@ -1250,6 +1314,23 @@ fn derived_excludes() -> String {
     ]
     .map(|spec| format!("\"{spec}\""))
     .join(" ")
+}
+
+/// Whether a shell command line runs `git`.
+///
+/// The program only — `grep git README` is not a git call, and neither is a
+/// commit message that says the word. Leading `VAR=value` assignments are
+/// stepped over because that is how a shell reads them, and `/usr/bin/git` and
+/// `git.exe` are the same program by another spelling.
+fn invokes_git(command: &str) -> bool {
+    let Ok(tokens) = process::split_command(command) else { return false };
+    let program = tokens
+        .iter()
+        .find(|token| !token.contains('=') || token.starts_with('-'))
+        .map(String::as_str)
+        .unwrap_or_default();
+    let base = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    base.eq_ignore_ascii_case("git") || base.eq_ignore_ascii_case("git.exe")
 }
 
 /// `/d/repos/x` read as `D:\repos\x` — the MSYS spelling of a Windows path.
@@ -2047,6 +2128,55 @@ struct Held {
         // The narrowing is exactly that shape and no wider: a real path in the
         // same command line is still caught.
         assert!(host.confined("cat /etc/hosts").is_err(), "a real path still escapes nothing");
+    }
+
+    /// `G-1`: git in a repository that is not the workspace is refused, and the
+    /// refusal names both paths so a person can see which checkout was about to
+    /// be written to.
+    ///
+    /// The case this comes from: a benchmark whose sandboxes lived under
+    /// another project's checkout, where fourteen commits landed on that
+    /// project's `main` unattended.
+    #[test]
+    fn git_in_someone_elses_repository_is_refused() {
+        let (host, root) = host();
+        // A repository *around* the workspace, which is the shape that did it.
+        let outer = root.parent().expect("a parent");
+        if !outer.join(".git").exists() {
+            let spec = Spec::new("git init", outer, Duration::from_secs(30)).with_env(Env::declared());
+            if !matches!(process::run(&spec), Ok(run) if run.is_success()) {
+                return; // no git on this machine; nothing to assert
+            }
+        }
+
+        let err = host
+            .run(&Call::new(Tool::Git).arg("args", "status --short"))
+            .expect_err("the repository is not the workspace");
+        let text = format!("{err}");
+        assert!(text.contains("not the workspace"), "{text}");
+        assert!(text.contains("G-1"), "it cites the rule: {text}");
+
+        // And the same call wearing a shell, which is how the refusal was
+        // worked around once it existed for `git(args=…)`.
+        let err = host
+            .run(&Call::new(Tool::Shell).arg("command", "git status --short"))
+            .expect_err("a git call is a git call");
+        assert!(format!("{err}").contains("not the workspace"), "{err}");
+
+        std::fs::remove_dir_all(outer.join(".git")).ok();
+    }
+
+    /// Only the program counts. A commit message that says `git`, or a grep for
+    /// it, is not a git call — and refusing those would be a new way to be
+    /// wrong about the same thing.
+    #[test]
+    fn only_a_git_program_counts_as_a_git_call() {
+        for yes in ["git status", "git -C x log", "GIT_DIR=x git status", "/usr/bin/git add f"] {
+            assert!(invokes_git(yes), "{yes}");
+        }
+        for no in ["grep git README.md", "echo 'git is a program'", "python git_helper.py", ""] {
+            assert!(!invokes_git(no), "{no}");
+        }
     }
 
     /// A pattern is not a path, and `glob` would be useless if it were.

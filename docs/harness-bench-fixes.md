@@ -8,7 +8,7 @@ What a full Harness-Bench run found wrong with this harness, and what to change.
 id goes in the requirements source first and this document becomes commentary on
 it.
 
-**Status: fixes 1 and 2 are implemented and gated; fixes 3 to 5 are not.** Every
+**Status: fixes 1, 2 and 3 are implemented and gated; fixes 4 and 5 are not.** Every
 number below is measured from a run that has already happened, not projected.
 
 **One of those numbers was wrong, and fix 2 says so at length.** Its refusal
@@ -206,13 +206,23 @@ Keep the bluntness for anything genuinely ambiguous. The point is not to relax
 
 ---
 
-## 3. Refuse the checkpoint loudly when the workspace is not its own repository
+## 3. Refuse git when the repository is not the workspace
 
-**Cited:** `T-22`, `G-5`
+**Cited:** `T-22`, `G-5`, `G-1` · **filed as `G-18`** · **implemented**
+
+> **Verified, and worse than this section claimed.** It said the checkpoint
+> "silently failed" 13 times. It also silently *succeeded*: **fourteen commits
+> landed on the other project's `main`**, unattended and unapproved, each
+> carrying a bench task's output files. The failures were the runs where a
+> `.gitignore` happened to refuse the `git add` — luck, not a boundary.
+>
+> Score impact remains **nil**: the oracle grades files, not git. The severity
+> is entirely a safety one, and higher than a bind-time warning answers. So the
+> fix refuses rather than warns.
 
 ### What happens now
 
-13 tasks logged:
+15 tasks logged a failed commit or a gitignore refusal; 13 of them this:
 
 > `checkpoint commit failed: workspace path data_try6 is ignored by .gitignore, so git add refused`
 
@@ -226,17 +236,22 @@ And `perp`'s git tooling is aimed at a repository that is not the workspace and
 not ours to write to. Nothing was damaged here, because the ignore rule happened
 to refuse the `git add`. That is luck, not a boundary.
 
-### Proposed change
+### The change
 
-`perp bind` already checks every path the binding names and exits non-zero if
-one is missing. It should also resolve the git root and compare it to the
-binding root. If they differ, say so there — at bind time, once, in the place a
-person is already reading — rather than failing per-step later with a message
-about someone else's `.gitignore`.
+`Host::own_repository` resolves `git rev-parse --show-toplevel` and refuses
+unless it equals the workspace root, naming both paths. Applied at `Tool::Git`
+and — because `shell git commit` is a git call wearing a shell — at `Tool::Shell`
+whenever `invokes_git` says the program is git. Both were used in the run: a
+model refused at `git(args=…)` reached for `shell(command=git -C <path> …)`.
 
-Whether a foreign repository should be a hard bind failure or a declared-and-
-accepted condition is a design decision, not a bug fix, and belongs in the
-requirements source before it is built.
+Reads are refused too. A `git status` against the wrong repository answers with
+thousands of unrelated files, and a model that believes that answer is worse off
+than one told no.
+
+Equality, not ancestry. A workspace that is a subdirectory of its own repository
+is refused as well, deliberately: that may be a legitimate layout, and a person
+should say so rather than the harness assume it from a path relationship it
+cannot tell apart from this one.
 
 ---
 
@@ -317,7 +332,7 @@ supposed.
 |---|---|---|---|---|
 | 1 | Second attempt after a detected no-op | 31 | small | done, `L-35` |
 | 2 | Path normalisation and candidate narrowing in `X-13`/`X-2` | **2** | small | done, `X-15` |
-| 3 | Foreign-repository check at bind time | 13 | small | open |
+| 3 | Refuse git outside the workspace repository | 15 | small | done, `G-18` |
 | 4 | First-token deadline as a binding key | 2 | trivial | open |
 | 5 | Image content in the model client | 2 | large | open |
 
