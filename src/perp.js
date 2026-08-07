@@ -883,6 +883,34 @@ function renderGated(body, view) {
     // start spending against twelve requirements, which belongs at the machine
     // and deliberately, rather than behind something clickable while somebody
     // is scanning a panel.
+    // `O-17`: each option is a button, and choosing one confirms first. The
+    // panel already starts whole cycles from a button, so refusing one here
+    // was never a principle — but ungating lets the loop add a dependency and
+    // spend against everything behind the gate, so it asks before it acts.
+    if ((item.options || []).length) {
+      const choices = el("div", "perp-gate-choices");
+      for (const option of item.options) {
+        const pick = el("button", "perp-gate-pick", option);
+        pick.type = "button";
+        pick.addEventListener("click", async () => {
+          if (!window.confirm(t("panel.ungateConfirm", { id: item.id, option }))) return;
+          pick.disabled = true;
+          try {
+            await invoke("perp_write", {
+              subcommand: "ungate",
+              args: [item.id, "--choose", option],
+              root: state.root,
+            });
+            refresh();
+          } catch (e) {
+            pick.disabled = false;
+            window.alert(String(e));
+          }
+        });
+        choices.append(pick);
+      }
+      card.append(choices);
+    }
     card.append(el("code", "perp-gate-how", `perp ungate ${item.id} --choose <option>`));
     section.append(card);
   }

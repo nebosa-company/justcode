@@ -124,6 +124,10 @@ export const EN = {
   // `panel.waitingOnYou` on screen — and a key inserted into thirty-five
   // blocks by hand is a key inserted into thirty-four of them.
   "panel.waitingOnYou": "{n} waiting on you",
+  // `O-17`. The requirement and the choice both named, because a confirm
+  // dialog that says "are you sure?" is one somebody clicks through.
+  "panel.ungateConfirm":
+    "Ungate {id} with your choice: {option}? This lets the loop start work behind this gate.",
   "panel.noWorkspace": "No workspace open.",
   "panel.nothingRecorded": "nothing recorded yet",
   "panel.reading": "Reading the journal…",

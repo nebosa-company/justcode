@@ -2315,6 +2315,33 @@ body.perp-resizing {
   background: rgba(127, 127, 127, 0.18);
 }
 
+.perp-gate-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.perp-gate-pick {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: 0.3rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.perp-gate-pick:hover:not(:disabled) {
+  background: rgba(127, 127, 127, 0.15);
+}
+
+.perp-gate-pick:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .perp-gate-how {
   display: block;
   margin-top: 0.5rem;

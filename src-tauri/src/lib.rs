@@ -636,6 +636,33 @@ fn files_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<FileTarget> {
 /// - **A missing binary is an ordinary answer.** JustCode must build, start and
 ///   work with `crates/` deleted, so "not installed" comes back as a message
 ///   rather than an error the panel has to special-case.
+/// The panel's writing door, separate from `perp_run` on purpose (`O-17`).
+///
+/// `perp_run`'s allowlist is every subcommand that only reads, and its message
+/// says so: *the panel reads, and may leave a `/btw`*. Adding a writing command
+/// to that list would make the rule "the panel reads, except" — and a rule with
+/// an except is a rule that grows one more each time somebody needs it.
+///
+/// So this is a second door with its own list, and the list is short because
+/// widening it is a decision somebody has to come here and make. What passes
+/// through it changes a file a person owns, which is why the caller is expected
+/// to have asked them first: this runs the command, it does not ask the
+/// question.
+#[tauri::command]
+fn perp_write(subcommand: String, args: Vec<String>, root: String) -> Result<String, String> {
+    // `ungate` and nothing else. It clears a `⛔` from the requirements source,
+    // which `V-12` keeps out of the loop's reach — the loop's host still
+    // refuses that path, and this is a person's click, not the loop's write.
+    const ALLOWED_WRITES: &[&str] = &["ungate"];
+    if !ALLOWED_WRITES.contains(&subcommand.as_str()) {
+        return Err(format!(
+            "`{subcommand}` is not a panel write. Only {} may change anything from here.",
+            ALLOWED_WRITES.join(", ")
+        ));
+    }
+    perp_invoke(&subcommand, &args, &root)
+}
+
 #[tauri::command]
 fn perp_run(subcommand: String, args: Vec<String>, root: String) -> Result<String, String> {
     // Reads, plus the one write the harness designed for outside messages.
@@ -664,9 +691,16 @@ fn perp_run(subcommand: String, args: Vec<String>, root: String) -> Result<Strin
         ));
     }
 
+    perp_invoke(&subcommand, &args, &root)
+}
+
+/// Run the binary. Shared by both doors so they cannot drift: the difference
+/// between reading and writing is which list let you in, never what happens
+/// afterwards.
+fn perp_invoke(subcommand: &str, args: &[String], root: &str) -> Result<String, String> {
     let program = std::env::var("PERP_BIN").unwrap_or_else(|_| "perp".to_string());
     let mut command = std::process::Command::new(&program);
-    command.arg(&subcommand).args(&args).arg("--root").arg(&root);
+    command.arg(subcommand).args(args).arg("--root").arg(root);
 
     #[cfg(windows)]
     {
@@ -2090,6 +2124,7 @@ pub fn run() {
             run_script,
             reveal_in_file_manager,
             perp_run,
+            perp_write,
             perp_root,
             perp_start,
             perp_init,
