@@ -823,7 +823,22 @@ impl Host {
     /// canonicalisable at any depth. The root itself always exists, so the
     /// walk terminates.
     fn resolve(&self, relative: &str) -> Result<PathBuf> {
-        let joined = self.root.join(relative);
+        // A model that believes it is in a POSIX shell writes `/d/repos/x` for
+        // `D:\repos\x`. Windows `join` reads a leading slash as rooted on the
+        // current drive, so the two spellings of one place land in different
+        // ones and the workspace's own path is refused as leaving it.
+        //
+        // Rare, and measured rather than assumed: across 59 `X-13`/`X-2`
+        // refusals in a Harness-Bench run, **two** were this. The other 57 were
+        // correct — ancestors, `..`, `/`, and tokens like `/s` that are not
+        // paths at all. Worth fixing because refusing a path for being spelled
+        // differently is wrong however seldom it happens, not because it was
+        // costing much.
+        //
+        // The original spelling is what the refusal quotes: the model needs to
+        // see the token it wrote, not the harness's rewrite of it.
+        let rewritten = cfg!(windows).then(|| msys_drive_path(relative)).flatten();
+        let joined = self.root.join(rewritten.as_deref().unwrap_or(relative));
         let root = self.root.canonicalize().unwrap_or_else(|_| self.root.clone());
         let mut probe = joined.clone();
         while !probe.exists() {
@@ -1237,12 +1252,50 @@ fn derived_excludes() -> String {
     .join(" ")
 }
 
+/// `/d/repos/x` read as `D:\repos\x` — the MSYS spelling of a Windows path.
+///
+/// Windows only, and the caller enforces that: on a real POSIX system `/d/repos`
+/// is an ordinary absolute path and rewriting it would be the bug this fixes,
+/// pointed the other way.
+///
+/// A single-letter first segment is the whole signal, which is what keeps
+/// `/tmp/x` and `/etc` out of it. `/d` with nothing after it is the drive root.
+/// Nothing here decides whether the result is inside the workspace — it is
+/// still resolved and compared exactly as any other path is, so a normalised
+/// token pointing somewhere else is refused exactly as before.
+fn msys_drive_path(token: &str) -> Option<String> {
+    let rest = token.strip_prefix('/')?;
+    let mut chars = rest.chars();
+    let drive = chars.next().filter(char::is_ascii_alphabetic)?;
+    match chars.next() {
+        None => Some(format!("{}:\\", drive.to_ascii_uppercase())),
+        Some('/') => Some(format!(
+            "{}:\\{}",
+            drive.to_ascii_uppercase(),
+            rest[2..].replace('/', "\\")
+        )),
+        _ => None,
+    }
+}
+
 /// Whether a token is worth resolving as a path (`X-13`).
 ///
 /// A bare word is skipped because it cannot escape: joining it to the root
 /// lands inside the root. Only tokens that could name somewhere else are
 /// resolved.
 fn looks_like_path(token: &str) -> bool {
+    // A format string is not a path and cannot become one. `curl -w
+    // '\nHTTP:%{http_code}\n'` was refused for reaching outside the workspace,
+    // which it does not do and could not: the token names no file.
+    //
+    // Only brace-form specifiers, and deliberately not the backslash escapes in
+    // the same string. `\n` and `\t` are indistinguishable from the start of
+    // `new/` and `tests/` in a Windows path, so a rule that read them as escapes
+    // would let real paths through — and `X-13` erring toward refusal is the
+    // trade this whole check is built on.
+    if token.contains("%{") || token.contains("%(") {
+        return false;
+    }
     token.contains('/')
         || token.contains('\\')
         || token == ".."
@@ -1924,6 +1977,76 @@ struct Held {
         assert!(outcome.is_err(), "it ran: {text}");
 
         std::fs::remove_file(&outside).ok();
+    }
+
+    /// The MSYS spelling reads as the Windows path it names, and nothing else
+    /// does. Pure, so it is checked on every platform even though only Windows
+    /// calls it.
+    #[test]
+    fn an_msys_path_is_read_as_its_drive() {
+        assert_eq!(msys_drive_path("/d/repos/x"), Some("D:\\repos\\x".into()));
+        assert_eq!(msys_drive_path("/c/Users/a b/f.txt"), Some("C:\\Users\\a b\\f.txt".into()));
+        // A drive on its own is that drive's root.
+        assert_eq!(msys_drive_path("/d"), Some("D:\\".into()));
+
+        // Everything that is not a drive letter stays exactly as it was — most
+        // importantly a genuine POSIX path, which this must never rewrite.
+        for untouched in ["/tmp/x", "/etc", "/", "src/main.rs", "..", "D:\\repos\\x", ""] {
+            assert_eq!(msys_drive_path(untouched), None, "{untouched}");
+        }
+    }
+
+    /// `X-13`, the case that was refused wrongly: the workspace's own path,
+    /// written the way a model in a POSIX shell writes it.
+    #[cfg(windows)]
+    #[test]
+    fn the_workspace_named_in_msys_spelling_is_not_outside_it() {
+        let (host, root) = host();
+        let native = root.to_string_lossy().to_string();
+        let (drive, rest) = native.split_once(':').expect("an absolute windows path");
+        let msys = format!("/{}{}", drive.to_ascii_lowercase(), rest.replace('\\', "/"));
+
+        // The test is worthless if the string is not actually the MSYS shape,
+        // and a construction that quietly produced something else would still
+        // resolve. So assert what was built before asserting what it does.
+        assert!(
+            msys.starts_with('/') && msys.as_bytes()[1].is_ascii_lowercase() && msys.as_bytes()[2] == b'/',
+            "not the MSYS spelling: {msys}"
+        );
+        assert_ne!(msys, native, "and not the native one either");
+
+        host.resolve(&msys).unwrap_or_else(|e| panic!("its own workspace: {msys} — {e}"));
+        host.confined(&format!("ls -la {msys}"))
+            .unwrap_or_else(|e| panic!("a command naming it: {msys} — {e}"));
+    }
+
+    /// And the boundary still holds against the same spelling pointed out of
+    /// the workspace — normalising a token decides nothing about where it goes.
+    #[cfg(windows)]
+    #[test]
+    fn an_msys_path_outside_the_workspace_is_still_refused() {
+        let (host, _root) = host();
+
+        for outside in ["/c/Windows/System32", "/c/", "/d/definitely-not-here"] {
+            let err = host.resolve(outside).expect_err("must refuse");
+            assert!(format!("{err}").contains("outside the workspace"), "{outside}: {err}");
+        }
+    }
+
+    /// A curl format string names no file. It was refused for reaching outside
+    /// the workspace, which it cannot do.
+    #[test]
+    fn a_format_string_is_not_treated_as_a_path() {
+        let (host, _root) = host();
+
+        assert!(!looks_like_path("\\nHTTP:%{http_code}\\n"), "a format string is not a path");
+        assert!(!looks_like_path("%(refname)"), "nor a git format");
+        host.confined("curl -s -w \\nHTTP:%{http_code}\\n http://127.0.0.1:8080/x")
+            .expect("a format string is not an escape from the workspace");
+
+        // The narrowing is exactly that shape and no wider: a real path in the
+        // same command line is still caught.
+        assert!(host.confined("cat /etc/hosts").is_err(), "a real path still escapes nothing");
     }
 
     /// A pattern is not a path, and `glob` would be useless if it were.

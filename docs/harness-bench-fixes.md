@@ -8,8 +8,13 @@ What a full Harness-Bench run found wrong with this harness, and what to change.
 id goes in the requirements source first and this document becomes commentary on
 it.
 
-**Status: fix 1 is implemented and gated; fixes 2 to 5 are not.** Every number
-below is measured from a run that has already happened, not projected.
+**Status: fixes 1 and 2 are implemented and gated; fixes 3 to 5 are not.** Every
+number below is measured from a run that has already happened, not projected.
+
+**One of those numbers was wrong, and fix 2 says so at length.** Its refusal
+count was tasks that *recorded* a refusal rather than tasks a refusal harmed;
+resolving each refused token against its own workspace root cut the real figure
+from 11 tasks to 2. The other rows have not been checked that way.
 
 ---
 
@@ -116,12 +121,24 @@ in this document.
 
 ## 2. The workspace boundary refuses paths that are inside the workspace
 
-**Cited:** `X-2`, `X-13`
+**Cited:** `X-2`, `X-13` · **filed as `X-15`** · **implemented**
+
+> **This section overstated the problem by an order of magnitude, and the
+> correction is the more useful finding.** It claimed 20 of 50 refusals were
+> paths wrongly refused. Resolving every refused token against its own
+> workspace root says otherwise: of **59** refusals, **2** were wrong, 1 was a
+> format string, and **56 were correct** — ancestors of the workspace, `..`,
+> `/`, and fragments like `/s` that name nothing.
+>
+> The two defects below are real and are now fixed, because refusing a path for
+> being spelled differently is wrong however seldom it happens. But `X-13` was
+> not costing 11 tasks their scores, and the priority table's count for this row
+> was reading "tasks that recorded a refusal" as "tasks a refusal harmed". Most
+> of those refusals were the boundary working.
 
 ### What happens now
 
-50 refusals across 35 tasks under `X-13`, plus 13 occurrences across 7 tasks
-under `X-2`. Two distinct defects, both in
+Two distinct defects, both in
 [`perp-core/src/tool.rs`](../crates/perp-core/src/tool.rs).
 
 **MSYS-style paths are not recognised.** The model writes
@@ -131,9 +148,14 @@ shell find /d/repos/harness-bench/.../workspace -type f
 ```
 
 and is refused with ``is outside the workspace, which needs an approval
-(`X-13`)`` — for a path that is the workspace. 20 of the 50 refusals are this.
-`Host::resolve` canonicalises and compares against the root, and
-`/d/repos/...` never becomes `D:\repos\...` on the way.
+(`X-13`)`` — for a path that is the workspace. `Host::resolve` canonicalises and
+compares against the root, and `/d/repos/...` never becomes `D:\repos\...` on
+the way; Windows reads the leading slash as rooted on the current drive, so the
+two spellings of one place land in different ones.
+
+**Two** refusals across the run, on `097-research-claims-batch-evidence-audit`
+and `098-three-source-decision-record-synthesis`. Every other `/d/...` token
+refused was a genuine ancestor of the workspace and stays refused after the fix.
 
 **Arguments that are not paths are tested as paths.** From a real transcript:
 
@@ -142,7 +164,7 @@ refused `shell curl -s -w ...`: `\nHTTP:%{http_code}\n` is outside the
 workspace, which needs an approval (`X-13`)
 ```
 
-A curl format string is not a path and cannot be one.
+A curl format string is not a path and cannot be one. One refusal across the run.
 
 ### Why this matters more unattended than the code assumes
 
@@ -153,18 +175,31 @@ there to approve. Unattended — which is the whole design target — a false
 positive costs the call outright, and the model spends its next turn working
 around a refusal that should never have fired.
 
-`023-web-form-extraction` has the most of these and scores **0.05 completion
-against 0.17 process**: the judge saw the flailing the refusals caused.
+That argument still holds. What it does not license is the claim this section
+originally made next — that `023-web-form-extraction`, at **0.05 completion
+against 0.17 process**, was scored down by refusals that should not have fired.
+Its refusals were all correct ones. The step was reaching outside the workspace
+and the boundary said no; the low process score is the judge watching a step
+flail, not the harness causing it.
 
-### Proposed change
+The two wrong refusals were on `097` and `098`, both of which scored above the
+run's mean anyway. Nothing here bought back a score.
 
-1. Normalise `/<drive>/...` to `<DRIVE>:\...` before the boundary test, on
-   Windows only. One function, applied in `resolve` and in the `X-13` command
-   scan.
-2. Skip candidates that cannot be paths — an argument containing `%{`, or an
-   escape sequence, or one that follows a flag known to take a format string.
-   Narrowing what counts as a candidate does not weaken the boundary; every
-   real path still gets tested.
+### The change
+
+1. `msys_drive_path` reads `/<drive>/...` as `<DRIVE>:\...`, applied in
+   `Host::resolve` — which `confined` already routes through, so both `X-2` and
+   `X-13` get it from one place. Windows only: on a real POSIX system
+   `/d/repos` is an ordinary absolute path and rewriting it would be this same
+   bug pointed the other way. Normalising decides nothing about where a token
+   goes; it is still resolved and compared exactly as before.
+2. `looks_like_path` skips tokens carrying `%{` or `%(`.
+
+**Brace forms only, and deliberately not the backslash escapes in the same
+string.** `\n` and `\t` cannot be told apart from the start of `new/` and
+`tests/` in a Windows path, so a rule that read them as escapes would let real
+paths through. `X-13` erring toward refusal is the trade the whole check is
+built on, and the narrowing does not touch it.
 
 Keep the bluntness for anything genuinely ambiguous. The point is not to relax
 `X-13`, it is to stop it firing on things that are not paths at all.
@@ -278,13 +313,19 @@ supposed.
 
 ## Priority
 
-| | Fix | Tasks affected | Size |
-|---|---|---|---|
-| 1 | Second attempt after a detected no-op | 31 | small |
-| 2 | Path normalisation and candidate narrowing in `X-13`/`X-2` | 11 | small |
-| 3 | Foreign-repository check at bind time | 13 | small |
-| 4 | First-token deadline as a binding key | 2 | trivial |
-| 5 | Image content in the model client | 2 | large |
+| | Fix | Tasks affected | Size | State |
+|---|---|---|---|---|
+| 1 | Second attempt after a detected no-op | 31 | small | done, `L-35` |
+| 2 | Path normalisation and candidate narrowing in `X-13`/`X-2` | **2** | small | done, `X-15` |
+| 3 | Foreign-repository check at bind time | 13 | small | open |
+| 4 | First-token deadline as a binding key | 2 | trivial | open |
+| 5 | Image content in the model client | 2 | large | open |
+
+Row 2 read **11** until its refusals were resolved against their own workspace
+roots. That count was tasks which *recorded* a refusal, not tasks a refusal
+harmed — 56 of 59 were the boundary working correctly. The others in this table
+have not been checked that way and may be softer than they look for the same
+reason.
 
 Counts are tasks whose shortfall was *attributed* to that cause. 36 further
 shortfalls were the model's, on runs where the harness recorded no fault of its
