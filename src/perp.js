@@ -344,6 +344,7 @@ function render() {
 function paintTab(body, view) {
   if (state.tab === "timeline") renderTimeline(body, view);
   else if (state.tab === "chat") renderChat(body, view);
+  else if (state.tab === "requirements") renderRequirements(body, view);
   else if (state.tab === "approvals") renderApprovals(body, view);
   else if (state.tab === "diff") renderDiff(body, view);
   else if (state.tab === "btw") renderBtw(body, view);
@@ -447,6 +448,7 @@ function renderHeader(view) {
 export const TABS = [
   { name: "timeline", icon: "timeline" },
   { name: "chat", icon: "chat" },
+  { name: "requirements", icon: "requirements" },
   { name: "approvals", icon: "approvals" },
   { name: "diff", icon: "diff" },
   { name: "btw", icon: "btw" },
@@ -915,6 +917,134 @@ function renderGated(body, view) {
     section.append(card);
   }
   body.append(section);
+}
+
+/** The list itself: every requirement the source declares, and its state
+ * (`O-18`).
+ *
+ * The panel could say what a step was working on and what was waiting on a
+ * person, and never what the project had agreed to build. Both of those are
+ * slices of this list taken from the loop's point of view — what it may pick
+ * up, what it cannot begin — and neither answers a person asking what is on
+ * the list. Rows nobody will build appear here, marked, because a requirement
+ * that was decided against is a decision worth being able to find.
+ */
+function renderRequirements(body, view) {
+  const all = view.catalogue || [];
+
+  body.append(composer(view));
+
+  if (!all.length) {
+    body.append(el("p", "perp-empty", t("requirements.none")));
+    return;
+  }
+
+  // Counted from the rows rather than tracked, so the tally cannot disagree
+  // with the list under it.
+  const counts = new Map();
+  for (const item of all) counts.set(item.state, (counts.get(item.state) || 0) + 1);
+  const tally = el("p", "perp-req-tally");
+  tally.append(el("span", "perp-req-total", t("requirements.total", { n: all.length })));
+  for (const [state, n] of counts) {
+    tally.append(el("span", `perp-req-count perp-req-${slug(state)}`, `${n} ${state}`));
+  }
+  body.append(tally);
+
+  const list = el("div", "perp-req-list");
+  for (const item of all) {
+    const row = el("div", `perp-req perp-req-is-${slug(item.state)}`);
+    const head = el("div", "perp-req-head");
+    head.append(el("span", "perp-req-id", item.id));
+    head.append(el("span", `perp-req-state perp-req-${slug(item.state)}`, item.state));
+    head.append(el("span", "perp-req-name", item.name));
+    row.append(head);
+
+    // The whole text, behind a disclosure. A requirement here is a paragraph
+    // that argues for itself, and a list of fifty paragraphs is not a list —
+    // but truncating with no way to see the rest is what `T-6` forbids.
+    const more = el("details", "perp-req-more");
+    more.append(el("summary", "perp-req-summary", t("requirements.full")));
+    more.append(el("p", "perp-req-text", item.text));
+    row.append(more);
+    list.append(row);
+  }
+  body.append(list);
+}
+
+/** The add form (`O-18`).
+ *
+ * Writing here is a person's act and stays one: it goes through `perp_write`,
+ * the second door, and files a row with no marker. Nothing on this screen can
+ * write a `✅` — putting work on the list and declaring it finished are not the
+ * same permission, and only the second one is the loop's to earn.
+ */
+function composer(view) {
+  const form = el("form", "perp-req-add");
+  const field = el("input", "perp-req-input");
+  field.type = "text";
+  field.placeholder = t("requirements.placeholder");
+  field.required = true;
+
+  const submit = el("button", "perp-req-file", t("requirements.file"));
+  submit.type = "submit";
+
+  const note = el("p", "perp-req-note", t("requirements.note", { id: nextId(view) }));
+
+  form.append(field, submit);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = field.value.trim();
+    if (!text) return;
+    // A `|` would end the table row it is written into. Caught here so the
+    // message arrives beside the field rather than as a failure after a
+    // round trip, and caught again in `perp` because this is not the only
+    // caller.
+    if (text.includes("|")) {
+      window.alert(t("requirements.noPipe"));
+      return;
+    }
+    submit.disabled = true;
+    try {
+      await invoke("perp_write", {
+        subcommand: "requirement",
+        args: ["add", text],
+        root: state.root,
+      });
+      field.value = "";
+      refresh();
+    } catch (e) {
+      window.alert(String(e));
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  const wrap = el("div", "perp-req-compose");
+  wrap.append(form, note);
+  return wrap;
+}
+
+/** What the next filed requirement will be called, so the form can say so.
+ *
+ * Predicted here and minted in `perp`, which is a duplication with a reason:
+ * the number shown is a courtesy and the number written is the one that
+ * counts. They agree unless something else filed a row in between, and then
+ * the file is right and this was a guess that cost nothing.
+ */
+function nextId(view) {
+  let prefix = null;
+  let highest = 0;
+  for (const item of view.catalogue || []) {
+    const [found, number] = item.id.split("-");
+    if (prefix === null) prefix = found;
+    if (found === prefix) highest = Math.max(highest, Number(number) || 0);
+  }
+  return prefix ? `${prefix}-${highest + 1}` : "?";
+}
+
+/** A state name as a class suffix: `won't do` is not a class. */
+function slug(state) {
+  return state.replace(/[^a-z]+/gi, "-").toLowerCase();
 }
 
 function renderApprovals(body, view) {

@@ -282,6 +282,103 @@ pub fn gated(source: &str) -> Vec<Gate> {
     waiting
 }
 
+/// One row of the requirements source, as something a person can look at: what
+/// it is called, what it says, and what state it is in (`O-18`).
+///
+/// Every row, whatever its marker. [`marked`] drops `❌` because a check that
+/// disbelieves a marker has nothing to say about a requirement nobody is going
+/// to build, and [`backlog`] drops everything that is not workable — so between
+/// them there was no way to ask the plain question *what is on this project's
+/// list*. A surface that shows only what the loop may pick up next tells a
+/// person the ones it may not do not exist.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Catalogued {
+    pub id: String,
+    /// The opening sentence, for a list. Never the whole paragraph.
+    pub name: String,
+    /// What the row says, in full — truncating here is what `T-6` forbids.
+    pub text: String,
+    /// `open`, `in progress`, `done`, `blocked`, `gated`, `conflicting` or
+    /// `won't do`. A string rather than [`crate::verify::Marker`] because that
+    /// enum has no `❌` and gains nothing from one: it exists so a check can
+    /// name the marker it disbelieves, and there is no claim to disbelieve in
+    /// a row that says the work will not happen.
+    pub state: String,
+}
+
+/// Every requirement the source declares, in the order it declares them
+/// (`O-18`).
+pub fn catalogue(source: &str) -> Vec<Catalogued> {
+    let mut all: Vec<Catalogued> = Vec::new();
+    for line in source.lines() {
+        let line = line.trim();
+        if !line.starts_with('|') {
+            continue;
+        }
+        let mut cells = line.trim_matches('|').split('|');
+        let (Some(first), Some(text)) = (cells.next(), cells.next()) else { continue };
+        if text.trim().is_empty() {
+            continue;
+        }
+        let first = first.trim();
+        let state = if first.starts_with('✅') {
+            "done"
+        } else if first.starts_with('🟡') {
+            "in progress"
+        } else if first.starts_with('🚧') {
+            "blocked"
+        } else if first.starts_with('⛔') {
+            "gated"
+        } else if first.starts_with('🔶') {
+            "conflicting"
+        } else if first.starts_with('❌') {
+            "won't do"
+        } else {
+            "open"
+        };
+        let id = first
+            .trim_start_matches(['✅', '🟡', '⛔', '🔶', '❌', '🚧'])
+            .replace('~', "")
+            .trim()
+            .trim_matches('`')
+            .trim()
+            .to_string();
+        if !is_requirement_id(&id) || all.iter().any(|seen| seen.id == id) {
+            continue;
+        }
+        let text = text.trim().to_string();
+        all.push(Catalogued { id, name: opening_sentence(&text), text, state: state.to_string() });
+    }
+    all
+}
+
+/// The first sentence of a requirement, for a row in a list (`O-18`).
+///
+/// Requirements here have no name field — the id and the paragraph are all
+/// there is — so the name is taken rather than stored, and taking it is the
+/// honest option: a name kept beside the text is a second thing to update and
+/// the one that goes stale.
+fn opening_sentence(text: &str) -> String {
+    let plain = text.replace("**", "").replace('`', "");
+    let end = plain
+        .char_indices()
+        .find(|(at, c)| {
+            *c == '.'
+                && plain[at + c.len_utf8()..].chars().next().is_none_or(char::is_whitespace)
+        })
+        .map(|(at, _)| at);
+    let sentence = match end {
+        Some(at) => &plain[..at],
+        None => &plain,
+    };
+    let sentence = sentence.trim();
+    if sentence.chars().count() <= 96 {
+        return sentence.to_string();
+    }
+    let cut: String = sentence.chars().take(95).collect();
+    format!("{}…", cut.trim_end())
+}
+
 pub fn backlog_all(source: &str) -> Vec<(String, String)> {
     let mut all: Vec<(String, String)> = Vec::new();
     for line in source.lines() {
@@ -1249,6 +1346,71 @@ fn land_batch(
 
 #[cfg(test)]
 mod tests {
+
+    /// `O-18`: the catalogue carries every row, including the ones no other
+    /// reader keeps.
+    ///
+    /// `backlog` drops everything that is not workable and `marked` drops `❌`,
+    /// so a surface built on either answers "what may the loop do next" when
+    /// the question asked was "what is on the list". A person who filed a
+    /// requirement and then saw it marked won't-do would find it had vanished.
+    #[test]
+    fn the_catalogue_keeps_the_rows_the_other_readers_drop() {
+        let source = "| id | Requirement |
+|---|---|
+| `J-1` | A rule is a declarative value, not code. It has an id. |
+| ✅ ~~`J-2`~~ | Scanning resolves a rule to the paths that exist. |
+| ⛔ `J-3` | The macOS shell is AppKit. **Gated: dependency approval** (`objc2`). |
+| ❌ `J-4` | Split into `J-5` and `J-6` after failing twice as one step. |
+| 🚧 `J-7` | Blocked on something. |
+";
+        let all = super::catalogue(source);
+        let states: Vec<_> = all.iter().map(|e| (e.id.as_str(), e.state.as_str())).collect();
+        assert_eq!(
+            states,
+            vec![
+                ("J-1", "open"),
+                ("J-2", "done"),
+                ("J-3", "gated"),
+                ("J-4", "won't do"),
+                ("J-7", "blocked"),
+            ],
+            "every row, in source order, with the marker it carries"
+        );
+
+        // The name is the opening sentence, not the paragraph, and not a
+        // truncation at a fixed width that cuts a word in half.
+        assert_eq!(all[0].name, "A rule is a declarative value, not code");
+        assert!(all[0].text.ends_with("It has an id."), "the text stays whole: {}", all[0].text);
+
+        // Markdown is a rendering detail; a name is read, not rendered.
+        assert_eq!(all[2].name, "The macOS shell is AppKit");
+
+        // `marked` is the reader this one is not: it drops the won't-do row,
+        // which is exactly why the catalogue exists.
+        let marked: Vec<_> = super::marked(source).into_iter().map(|(id, _)| id).collect();
+        assert!(!marked.contains(&"J-4".to_string()));
+    }
+
+    /// `O-18`: a filed requirement gets an id nothing else is using.
+    #[test]
+    fn a_new_id_follows_the_highest_the_source_already_uses() {
+        // Deliberately out of order, with a done row and a gated row in the
+        // middle: the highest is the highest, not the last one written.
+        let source = "| id | Requirement |
+|---|---|
+| `J-7` | Seven. |
+| ✅ ~~`J-30`~~ | Thirty, and finished. |
+| ⛔ `J-12` | Twelve, and gated. |
+";
+        let all = super::catalogue(source);
+        let highest = all
+            .iter()
+            .filter_map(|e| e.id.split_once('-'))
+            .filter_map(|(_, n)| n.parse::<u32>().ok())
+            .max();
+        assert_eq!(highest, Some(30), "a gap is a deleted row, not a free id");
+    }
 
     /// `O-16`: a loop blocked on a person does not look like a finished one.
     ///

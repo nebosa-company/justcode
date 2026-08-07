@@ -72,6 +72,8 @@ export const PATHS = {
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>',
   timeline: '<path d="M5 4v16"/><circle cx="5" cy="8" r="1.6"/><circle cx="5" cy="16" r="1.6"/><path d="M9 8h10"/><path d="M9 16h6"/>',
   chat: '<path d="M20 12a7 7 0 0 1-7 7H9l-4 3v-4.6A7 7 0 0 1 13 5a7 7 0 0 1 7 7z"/>',
+  requirements:
+    '<path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 10h8"/><path d="M8 14h8"/><path d="M8 18h5"/>',
   approvals: '<path d="M4 7a2 2 0 0 1 2-2h9l5 5v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m8.5 13 2.5 2.5 4.5-5"/>',
   diff: '<path d="M6 4v10a3 3 0 0 0 3 3h6"/><path d="m12 14 3 3-3 3"/><circle cx="6" cy="4" r="1.6"/><path d="M18 6v6"/><path d="M15 9h6"/>',
   btw: '<path d="M5 5h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-7l-4 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M12 8v3"/><path d="M12 13h.01"/>',

@@ -45,6 +45,15 @@ pub struct View {
     /// (`I-2`). The panel puts `T-26` beside a step and had no way to say what
     /// `T-26` meant without opening the requirements file.
     pub requirements: Vec<(String, String)>,
+    /// Every requirement the source declares, with its state (`O-18`).
+    ///
+    /// Not `requirements` with a field added: that one is a lookup, keyed by
+    /// id so a surface showing a bare `T-26` can say what `T-26` means, and it
+    /// carries only what the loop may pick up next. This is the list itself,
+    /// in the order the source writes it, including the rows nobody is going
+    /// to build — a person asking what is on the list is asking a different
+    /// question from the one the loop asks.
+    pub catalogue: Vec<crate::cycle::Catalogued>,
     /// The approvals queue, and the diff each one is asking about (`I-3`).
     pub approvals: Vec<Pending>,
     /// Requirements waiting on a person's decision, with what each waits for
@@ -327,6 +336,7 @@ impl View {
             chat,
             artifacts,
             requirements: Vec::new(),
+            catalogue: Vec::new(),
             approvals: Vec::new(),
             gated: Vec::new(),
             diff: None,
@@ -345,6 +355,9 @@ impl View {
     /// that has the source passes it, and one that does not gets bare ids.
     pub fn with_requirements(mut self, source: &str) -> View {
         self.requirements = crate::cycle::backlog_all(source);
+        // `O-18`: the whole list, in source order, with each row's state. The
+        // same pass as the other two for the same reason.
+        self.catalogue = crate::cycle::catalogue(source);
         // `O-16`: read from the same source in the same pass. A gated
         // requirement that reaches the panel only when somebody remembers a
         // second call is one that will not reach it.
@@ -565,6 +578,22 @@ impl View {
                     self.requirements
                         .iter()
                         .map(|(id, text)| (id.clone(), Value::str(text.clone())))
+                        .collect(),
+                ),
+            ),
+            (
+                "catalogue",
+                Value::Arr(
+                    self.catalogue
+                        .iter()
+                        .map(|entry| {
+                            Value::Obj(vec![
+                                ("id".to_string(), Value::str(entry.id.clone())),
+                                ("name".to_string(), Value::str(entry.name.clone())),
+                                ("text".to_string(), Value::str(entry.text.clone())),
+                                ("state".to_string(), Value::str(entry.state.clone())),
+                            ])
+                        })
                         .collect(),
                 ),
             ),

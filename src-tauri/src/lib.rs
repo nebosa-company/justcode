@@ -650,10 +650,15 @@ fn files_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<FileTarget> {
 /// question.
 #[tauri::command]
 fn perp_write(subcommand: String, args: Vec<String>, root: String) -> Result<String, String> {
-    // `ungate` and nothing else. It clears a `⛔` from the requirements source,
-    // which `V-12` keeps out of the loop's reach — the loop's host still
-    // refuses that path, and this is a person's click, not the loop's write.
-    const ALLOWED_WRITES: &[&str] = &["ungate"];
+    // Both of these change the requirements source, which `V-12` keeps out of
+    // the loop's reach — the loop's host still refuses that path, and these are
+    // a person's click, not the loop's write. `ungate` clears a `⛔`;
+    // `requirement add` appends a row (`O-18`).
+    //
+    // What is still absent is the one that matters: nothing here can write a
+    // `✅`. A person may put work on the list and may unblock it, and the
+    // marker that says it is finished remains something only gates earn.
+    const ALLOWED_WRITES: &[&str] = &["ungate", "requirement"];
     if !ALLOWED_WRITES.contains(&subcommand.as_str()) {
         return Err(format!(
             "`{subcommand}` is not a panel write. Only {} may change anything from here.",

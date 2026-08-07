@@ -2298,6 +2298,85 @@ body.perp-resizing {
 .perp-link-text { text-decoration: underline; text-decoration-style: dotted; }
 .perp-link-href { opacity: 0.6; font-size: 0.9em; word-break: break-all; }
 
+/* `O-18`: the list itself. States get colour from the same neutral scale the
+   panel uses elsewhere, with only `gated` and `blocked` carrying a hue — those
+   are the two that are somebody's turn, and the rest are the loop's business.
+   Done is quiet rather than green: a finished row is the least interesting
+   thing on the screen. */
+.perp-req-compose { margin-bottom: 1rem; }
+.perp-req-add { display: flex; gap: 0.5rem; }
+.perp-req-input {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.35));
+  border-radius: 0.4rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.perp-req-file {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.35));
+  border-radius: 0.4rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.perp-req-file:hover:not(:disabled) { background: rgba(127, 127, 127, 0.12); }
+.perp-req-file:disabled { opacity: 0.5; cursor: default; }
+.perp-req-note { margin: 0.35rem 0 0; font-size: 0.8rem; opacity: 0.65; }
+
+.perp-req-tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+}
+.perp-req-total { font-weight: 600; margin-right: 0.25rem; }
+.perp-req-count {
+  padding: 0.05rem 0.45rem;
+  border-radius: 0.6rem;
+  background: rgba(127, 127, 127, 0.15);
+  opacity: 0.85;
+}
+
+.perp-req-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.perp-req {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(127, 127, 127, 0.22);
+  border-left-width: 3px;
+  border-radius: 0.35rem;
+}
+.perp-req-is-done { opacity: 0.55; }
+.perp-req-is-gated { border-left-color: rgba(230, 160, 60, 0.9); }
+.perp-req-is-blocked { border-left-color: rgba(215, 90, 80, 0.9); }
+.perp-req-is-in-progress { border-left-color: rgba(90, 160, 230, 0.9); }
+.perp-req-is-won-t-do { opacity: 0.45; }
+
+.perp-req-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.perp-req-id { font-family: var(--mono, monospace); font-weight: 600; }
+.perp-req-state {
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.6rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(127, 127, 127, 0.18);
+  opacity: 0.8;
+}
+.perp-req-name { flex: 1; min-width: 12rem; }
+.perp-req-more { margin-top: 0.35rem; }
+.perp-req-summary { font-size: 0.78rem; opacity: 0.6; cursor: pointer; }
+.perp-req-text { margin: 0.35rem 0 0; font-size: 0.85rem; opacity: 0.85; }
+
 /* The approvals queue and the diff (`I-3`). The diff is above the button on
    purpose: approving from the panel opens the diff first. */
 /* `O-16`: work waiting on a person, above the approvals it sits beside.
