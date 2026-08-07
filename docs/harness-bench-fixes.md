@@ -8,7 +8,7 @@ What a full Harness-Bench run found wrong with this harness, and what to change.
 id goes in the requirements source first and this document becomes commentary on
 it.
 
-**Status: fixes 1, 2 and 3 are implemented and gated; fixes 4 and 5 are not.** Every
+**Status: fixes 1 to 4 are implemented and gated; fix 5 is not.** Every
 number below is measured from a run that has already happened, not projected.
 
 **One of those numbers was wrong, and fix 2 says so at length.** Its refusal
@@ -257,7 +257,7 @@ cannot tell apart from this one.
 
 ## 4. The first-token deadline belongs in the binding
 
-**Cited:** `M-23`, `M-14`
+**Cited:** `M-23`, `M-14` · **filed as `M-35`** · **implemented**
 
 ### What happens now
 
@@ -282,10 +282,15 @@ twenty seconds out carefully — longer than a cold local model, far shorter tha
 the request timeout — and that reasoning is sound for the rigs it was written
 against. It is still a provider fact compiled into the binary.
 
-### Proposed change
+### The change
 
-A binding or link key — `link.<name>.first_token_seconds` — defaulting to the
-current 20. The constant stays as the default; it stops being the only option.
+`link.<name>.first_token_seconds`, defaulting to the same 20. The constant stays
+as the default and stops being the only option. Per link rather than global: a
+laptop model and a hosted API do not share a sensible number, and the three call
+sites in `client.rs` all had the link in hand already.
+
+Refused rather than clamped when it cannot work — a non-numeric value, or zero,
+is a typo far more often than an intention.
 
 Half of this failure was configuration on the caller's side: `role.coder` named
 a single link, so a failover had nowhere to go. Roles are chains by design and
@@ -333,7 +338,7 @@ supposed.
 | 1 | Second attempt after a detected no-op | 31 | small | done, `L-35` |
 | 2 | Path normalisation and candidate narrowing in `X-13`/`X-2` | **2** | small | done, `X-15` |
 | 3 | Refuse git outside the workspace repository | 15 | small | done, `G-18` |
-| 4 | First-token deadline as a binding key | 2 | trivial | open |
+| 4 | First-token deadline as a link key | 2 | trivial | done, `M-35` |
 | 5 | Image content in the model client | 2 | large | open |
 
 Row 2 read **11** until its refusals were resolved against their own workspace

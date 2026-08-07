@@ -630,7 +630,7 @@ impl<'a> Client<'a> {
         crate::stream::read(
             &crate::stream::streaming_args(args),
             stdin.as_deref(),
-            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            link.first_token,
             interrupt,
             on_event,
         )
@@ -679,7 +679,7 @@ impl<'a> Client<'a> {
             &args[1..],
             Some(&stdin),
             crate::stream::parse_cli_line,
-            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            link.first_token,
             interrupt,
             on_event,
         )
@@ -950,7 +950,7 @@ impl<'a> Client<'a> {
         let http = Self::authorise(link, Request::post_json(url, body));
         let response = self.transport.send_deadlined(
             &http,
-            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            link.first_token,
         )?;
         let reply = Self::interpret(link, &response)?;
         Ok((reply, response.body))

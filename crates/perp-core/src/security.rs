@@ -505,6 +505,7 @@ mod tests {
             privacy,
             auth_env: None,
             concurrency: 1,
+            first_token: std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
         }
     }
 

@@ -21,6 +21,7 @@
 //! with no GPU, no server and no API key.
 
 use std::fmt;
+use std::time::Duration;
 
 use crate::binding::parse_fenced;
 use crate::error::{Error, Result};
@@ -315,6 +316,15 @@ pub struct Link {
     /// and another tomorrow, because a CLI changed its default, is a run whose
     /// results cannot be compared with its own past.
     pub effort: Option<String>,
+    /// How long this link may say nothing before it is failed over (`M-23`).
+    ///
+    /// [`crate::stream::FIRST_TOKEN_SECONDS`] is the default and was, until
+    /// this line existed, the only value — a provider fact compiled into the
+    /// binary, which is the thing `M-14` says not to do. Time to first token
+    /// varies by link and by load in a way no constant can know: measured over
+    /// a 101-task benchmark run, two batches were blocked because a cloud link
+    /// took longer than twenty seconds to begin answering.
+    pub first_token: Duration,
 }
 
 impl Link {
@@ -796,6 +806,28 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
         None => None,
     };
 
+    // Refused rather than clamped, and zero refused with it: a deadline of no
+    // time fails every link on its first call, and a binding that says so is
+    // more likely to be a typo than an intention.
+    let first_token = match field("first_token_seconds") {
+        Some(text) => {
+            let seconds: u64 = text.trim().parse().map_err(|_| {
+                Error::unbound(
+                    format!("link.{name}.first_token_seconds"),
+                    format!("`{text}` is not a number of seconds"),
+                )
+            })?;
+            if seconds == 0 {
+                return Err(Error::unbound(
+                    format!("link.{name}.first_token_seconds"),
+                    "must be at least 1 — a deadline of no time fails every call".to_string(),
+                ));
+            }
+            Duration::from_secs(seconds)
+        }
+        None => Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+    };
+
     Ok(Link {
         name: name.to_string(),
         kind,
@@ -806,6 +838,7 @@ fn build_link(name: &str, fields: &[(String, String, String)]) -> Result<Link> {
         auth_env: field("auth_env"),
         concurrency,
         effort,
+        first_token,
     })
 }
 
@@ -1011,6 +1044,45 @@ deprecated.deepseek-reasoner = deepseek-v4-pro
         assert_eq!(rig.kind, Kind::LmLink);
         assert_eq!(rig.device.as_deref(), Some("workshop-4090"));
         assert_eq!(rig.base_url, None, "an lmlink peer has no URL of its own");
+    }
+
+    /// `M-23`, `M-14`: the first-token deadline is a fact about a provider
+    /// under load, so a link may say what its own is. Twenty seconds is the
+    /// default and was, until this key existed, the only value.
+    #[test]
+    fn a_link_may_name_its_own_first_token_deadline() {
+        let links = links();
+        assert_eq!(
+            links.get("ds").expect("ds").first_token,
+            Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            "unstated is the default, not zero"
+        );
+
+        let text = CONFIG.replace(
+            "link.ds.model       = deepseek-v4-flash",
+            "link.ds.model       = deepseek-v4-flash\nlink.ds.first_token_seconds = 90",
+        );
+        let links = Links::parse(&text).expect("parse");
+        assert_eq!(links.get("ds").expect("ds").first_token, Duration::from_secs(90));
+        // And only that link — a deadline is not a global.
+        assert_eq!(
+            links.get("here").expect("here").first_token,
+            Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS)
+        );
+    }
+
+    /// Refused rather than clamped. A deadline of no time fails every call on
+    /// the link, and a binding that says so is likelier a typo than a choice.
+    #[test]
+    fn a_first_token_deadline_that_cannot_work_is_refused() {
+        for (value, expected) in [("0", "at least 1"), ("soon", "not a number")] {
+            let text = CONFIG.replace(
+                "link.ds.model       = deepseek-v4-flash",
+                &format!("link.ds.model       = deepseek-v4-flash\nlink.ds.first_token_seconds = {value}"),
+            );
+            let err = Links::parse(&text).expect_err("must refuse");
+            assert!(format!("{err}").contains(expected), "{value}: {err}");
+        }
     }
 
     #[test]
