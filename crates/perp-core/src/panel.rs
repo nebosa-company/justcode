@@ -47,6 +47,15 @@ pub struct View {
     pub requirements: Vec<(String, String)>,
     /// The approvals queue, and the diff each one is asking about (`I-3`).
     pub approvals: Vec<Pending>,
+    /// Requirements waiting on a person's decision, with what each waits for
+    /// (`O-16`).
+    ///
+    /// Not the same queue as `approvals`: an approval is a thing the loop has
+    /// already done and wants blessed, and this is work it cannot begin. Both
+    /// are a person's, and only one of them had a surface — so a loop stalled
+    /// on twelve gated requirements reported an empty backlog and looked
+    /// finished.
+    pub gated: Vec<(String, String)>,
     /// The working tree's diff, read from git rather than stored.
     pub diff: Option<String>,
 }
@@ -319,6 +328,7 @@ impl View {
             artifacts,
             requirements: Vec::new(),
             approvals: Vec::new(),
+            gated: Vec::new(),
             diff: None,
         }
     }
@@ -335,6 +345,10 @@ impl View {
     /// that has the source passes it, and one that does not gets bare ids.
     pub fn with_requirements(mut self, source: &str) -> View {
         self.requirements = crate::cycle::backlog_all(source);
+        // `O-16`: read from the same source in the same pass. A gated
+        // requirement that reaches the panel only when somebody remembers a
+        // second call is one that will not reach it.
+        self.gated = crate::cycle::gated(source);
         self
     }
 
@@ -439,6 +453,23 @@ impl View {
             (
                 "approvals",
                 Value::int(as_i64(self.snapshot.approvals_pending)),
+            ),
+            // `O-16`: each with the text that says which kind of gate and what
+            // is missing, so a surface can list them and a person can act
+            // without opening the requirements file.
+            (
+                "gated",
+                Value::Arr(
+                    self.gated
+                        .iter()
+                        .map(|(id, text)| {
+                            obj(vec![
+                                ("id", Value::str(id.clone())),
+                                ("waiting_for", Value::str(text.clone())),
+                            ])
+                        })
+                        .collect(),
+                ),
             ),
             (
                 "btw",

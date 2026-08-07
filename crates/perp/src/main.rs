@@ -2212,8 +2212,25 @@ fn cmd_cycle(args: &[&str]) -> std::result::Result<(), String> {
     );
     let waiting = perp_core::cycle::backlog(&source, usize::MAX).len();
 
+    // `O-16`: an empty backlog that is empty because everything left is waiting
+    // on a person is not the same as one with nothing in it, and until now they
+    // printed the same line. A loop blocked on you must not look finished.
+    let waiting_on_you = perp_core::cycle::gated(&source);
+
     println!("cycle {cycle}, from phase {from}");
     println!("  backlog     {waiting} open requirement(s)");
+    if !waiting_on_you.is_empty() {
+        println!(
+            "  gated       {} waiting on a person: {}",
+            waiting_on_you.len(),
+            waiting_on_you.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>().join(", ")
+        );
+        if waiting == 0 {
+            println!(
+                "              the backlog is empty because of these, not because                  there is nothing to do"
+            );
+        }
+    }
     println!("  allowance   {batches} batches x {per_batch} items");
     println!("  budget      cycle {:?} / batch {:?}", budgets.cycle, budgets.batch);
     println!("  workspace   {}", root.display());

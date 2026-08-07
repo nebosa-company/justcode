@@ -140,6 +140,51 @@ pub fn marked(source: &str) -> Vec<(String, crate::verify::Marker)> {
 /// work on". This answers "what does this id mean", which has to include the
 /// finished ones: a step citing `T-2` is worth explaining long after `T-2` is
 /// ticked.
+/// Requirements waiting on a person, with what each is waiting for (`O-16`).
+///
+/// `backlog` drops these silently — correctly, since a loop must not pick work
+/// gated on a decision it is not allowed to make. But dropping them is all that
+/// happened: nothing carried them anywhere a person looks, so a loop blocked on
+/// somebody and a loop that had finished were indistinguishable.
+///
+/// Measured on Janitor: twelve requirements gated on a GUI toolkit choice — a
+/// third-party dependency, which the binding reserves to a person — and the
+/// cycle reported `backlog 0 open requirement(s)`, ran three batches and
+/// delivered nothing. The twelve were visible only by opening the file.
+///
+/// The text is returned whole because the gate's reason lives in it: the row
+/// says which kind of gate and what is missing, and a summary that dropped that
+/// would surface the fact without the thing a person needs to act on it.
+pub fn gated(source: &str) -> Vec<(String, String)> {
+    let mut waiting: Vec<(String, String)> = Vec::new();
+    for line in source.lines() {
+        let line = line.trim();
+        if !line.starts_with('|') {
+            continue;
+        }
+        let mut cells = line.trim_matches('|').split('|');
+        let (Some(first), Some(text)) = (cells.next(), cells.next()) else { continue };
+        // The status cell, not the line (`V-23`): a requirement whose prose
+        // mentions a marker is not gated by saying so.
+        if !first.contains('⛔') {
+            continue;
+        }
+        let id = first
+            .trim()
+            .trim_start_matches(['✅', '🟡', '⛔', '🔶', '❌', '🚧'])
+            .replace('~', "")
+            .trim()
+            .trim_matches('`')
+            .trim()
+            .to_string();
+        if !is_requirement_id(&id) || text.trim().is_empty() {
+            continue;
+        }
+        waiting.push((id, text.trim().to_string()));
+    }
+    waiting
+}
+
 pub fn backlog_all(source: &str) -> Vec<(String, String)> {
     let mut all: Vec<(String, String)> = Vec::new();
     for line in source.lines() {
@@ -1107,6 +1152,37 @@ fn land_batch(
 
 #[cfg(test)]
 mod tests {
+
+    /// `O-16`: a loop blocked on a person does not look like a finished one.
+    ///
+    /// `backlog` drops gated rows and nothing carried them anywhere else, so
+    /// twelve requirements waiting on a GUI toolkit choice produced
+    /// `backlog 0 open requirement(s)`, three batches, and no deliveries —
+    /// indistinguishable from having nothing to do.
+    #[test]
+    fn a_requirement_waiting_on_a_person_is_reported_as_waiting() {
+        let source = "| id | Requirement |
+|---|---|
+| ⛔ `J-38` | The Windows shell uses the platform's own controls. Needs a toolkit dependency. |
+| `J-39` | Ordinary open work. |
+| ✅ ~~`J-40`~~ | Done. |
+| `J-41` | Mentions ⛔ in its prose and is not gated by saying so. |
+";
+
+        let waiting = gated(source);
+        assert_eq!(waiting.len(), 1, "one row is gated: {waiting:?}");
+        assert_eq!(waiting[0].0, "J-38");
+        assert!(
+            waiting[0].1.contains("toolkit dependency"),
+            "and carries what it waits for, not just that it waits: {:?}",
+            waiting[0].1
+        );
+
+        let open: Vec<String> =
+            backlog(source, 10).iter().map(|i| i.requirement.clone()).collect();
+        assert!(!open.contains(&"J-38".to_string()), "still not picked: {open:?}");
+        assert!(open.contains(&"J-41".to_string()), "prose is not a marker (`V-23`): {open:?}");
+    }
 
     /// `V-23`: a marker in the prose is not a marker.
     ///
