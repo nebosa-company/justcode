@@ -820,3 +820,11 @@ M0–M4 are the harness. M5–M6 are Perpetum. M7 is the product.
 8. **Artifact rendering without a build step.** `A-5` wants self-contained pages
    with inlined assets and no CDN, rendered both in a Tauri webview and a plain
    browser. Diagrams are the hard case — an inline renderer or pre-rendered SVG.
+
+## Filed in the app
+
+Filed by a person from the panel, not by the loop. These rows carry no slice's gating: they say what should happen and nothing about when.
+
+| id | Requirement |
+|---|---|
+| `L-33` | The reality check answers whether a requirement is **delivered**, not whether files mentioning it exist. A step that reports `may already be present` names the behaviour it verified and how it verified it, and a source file that no build reaches is never evidence: `J-38` was reported present in four consecutive cycles while `window.rs` had never been compiled, and wiring it produced 21 errors including an invented call into the project's own core. Across cycles 46-49 six requirements were dismissed this way and nothing was built; every one the check was right about had already been implemented by hand. |
