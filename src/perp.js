@@ -414,6 +414,14 @@ function renderHeader(view) {
   if (view.approvals > 0) {
     counts.append(el("span", "perp-bad", t("panel.awaiting", { n: view.approvals })));
   }
+  // `O-16`: shown in the header, not only inside a tab. The state this exists
+  // for is one where nothing else looks wrong — the backlog is empty, no gate
+  // is red — and the only sign is that twelve requirements are waiting on you.
+  if ((view.gated || []).length > 0) {
+    counts.append(
+      el("span", "perp-bad", t("panel.waitingOnYou", { n: view.gated.length })),
+    );
+  }
   header.append(counts);
 
   if (position.in_flight) {
@@ -469,7 +477,7 @@ function renderTabs() {
   const counts = {
     timeline: view.timeline.length,
     chat: view.chat.length,
-    approvals: view.approvals_pending.length,
+    approvals: view.approvals_pending.length + (view.gated || []).length,
     diff: null,
     btw: view.btw.length,
     artifacts: view.artifacts.length,
@@ -830,9 +838,35 @@ function renderChat(body, view) {
 // load is exactly what the requirement was written to prevent. The operator
 // confirms what they can see, and if they can see nothing they should not be
 // confirming.
+// `O-16`: work the loop cannot begin, as opposed to work it has done and wants
+// blessed. Both are the operator's and only approvals had a section, so a loop
+// stalled on twelve gated requirements reported an empty backlog and looked
+// finished. The text is the row's own — it says which kind of gate and what is
+// missing, which is the thing somebody needs in order to act.
+//
+// A view, not a control (`I-5`), for the same reason approvals are: ungating is
+// an edit to the requirements source, which only a person may write (`V-12`).
+function renderGated(body, view) {
+  const gated = view.gated || [];
+  if (!gated.length) return;
+
+  const section = el("div", "perp-gated");
+  section.append(el("h3", "perp-gated-title", t("panel.waitingOnYou", { n: gated.length })));
+  for (const item of gated) {
+    const card = el("div", "perp-approval");
+    card.append(el("div", "perp-what", item.id));
+    card.append(el("p", "perp-why", item.waiting_for));
+    section.append(card);
+  }
+  body.append(section);
+}
+
 function renderApprovals(body, view) {
+  renderGated(body, view);
   if (!view.approvals_pending.length) {
-    body.append(el("p", "perp-empty", t("harness.noApprovals")));
+    if (!(view.gated || []).length) {
+      body.append(el("p", "perp-empty", t("harness.noApprovals")));
+    }
     return;
   }
   for (const pending of view.approvals_pending) {

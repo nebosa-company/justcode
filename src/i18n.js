@@ -119,6 +119,11 @@ export const EN = {
   "panel.blocked": "{n} blocked",
   "panel.gates": "gates {green}/{total}",
   "panel.awaiting": "{n} awaiting approval",
+  // `O-16`. Added to `EN` only: `t()` falls back through `EN` before the
+  // raw key, so the other locales degrade to English rather than showing
+  // `panel.waitingOnYou` on screen — and a key inserted into thirty-five
+  // blocks by hand is a key inserted into thirty-four of them.
+  "panel.waitingOnYou": "{n} waiting on you",
   "panel.noWorkspace": "No workspace open.",
   "panel.nothingRecorded": "nothing recorded yet",
   "panel.reading": "Reading the journal…",

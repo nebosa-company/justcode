@@ -2300,6 +2300,22 @@ body.perp-resizing {
 
 /* The approvals queue and the diff (`I-3`). The diff is above the button on
    purpose: approving from the panel opens the diff first. */
+/* `O-16`: work waiting on a person, above the approvals it sits beside.
+   Reuses .perp-approval for the cards so the two read as one queue — they are
+   both "your turn", differing only in whether the loop has already done it. */
+.perp-gated {
+  margin-bottom: 1rem;
+}
+
+.perp-gated-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
 .perp-approval {
   display: flex;
   flex-direction: column;
