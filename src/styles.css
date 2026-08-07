@@ -2315,6 +2315,16 @@ body.perp-resizing {
   background: rgba(127, 127, 127, 0.18);
 }
 
+.perp-gate-how {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.45rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  background: rgba(127, 127, 127, 0.14);
+  user-select: all;
+}
+
 .perp-gate-advice {
   margin: 0.4rem 0 0;
   font-size: 0.85rem;

@@ -237,6 +237,7 @@ fn run(args: &[&str]) -> std::result::Result<(), String> {
         }
         Some("init") => cmd_init(&args[1..]).map_err(|e| e.to_string()),
         Some("bind") => cmd_bind(&args[1..]).map_err(|e| e.to_string()),
+        Some("ungate") => cmd_ungate(&args[1..]),
         Some("record") => cmd_record(&args[1..]).map_err(|e| e.to_string()),
         Some("state") => cmd_state(&args[1..]).map_err(|e| e.to_string()),
         Some("gate") => cmd_gate(&args[1..]),
@@ -394,6 +395,41 @@ fn cmd_init(args: &[&str]) -> Result<()> {
     println!();
     println!("Next: set `gate.test` in {}, then add requirements.", perp_core::layout::BINDING);
     println!("It refuses to run until the gate is a real command, which is deliberate.");
+    Ok(())
+}
+
+/// Clear a requirement's gate, because a person decided (`O-17`).
+///
+/// **This writes the requirements source, and that is the point.** `V-12`
+/// keeps the source out of reach of the *loop* — its host refuses a write to
+/// the path the binding names, and that refusal stays exactly as it was. This
+/// runs at the machine because somebody typed it, which is the one hand that
+/// was ever allowed to move a marker.
+///
+/// It takes the id and nothing else. `--choose` is accepted and recorded in
+/// what it prints, so the command a card offers can name the option a person
+/// picked, but the file only ever loses a `⛔`: encoding which option won into
+/// the row is the author's edit, not a flag's.
+fn cmd_ungate(args: &[&str]) -> std::result::Result<(), String> {
+    let Some(id) = args.iter().find(|a| !a.starts_with("--")) else {
+        return Err("ungate needs a requirement id: perp ungate J-38".to_string());
+    };
+    let binding = load(args).map_err(|e| e.to_string())?;
+    let source = binding.resolve("path.requirements").map_err(|e| e.to_string())?;
+    let text = std::fs::read_to_string(&source).map_err(|e| format!("{}: {e}", source.display()))?;
+
+    let marker = format!("| ⛔ `{id}` |");
+    if !text.contains(&marker) {
+        return Err(format!("`{id}` is not gated in {}", source.display()));
+    }
+    let updated = text.replace(&marker, &format!("| `{id}` |"));
+    std::fs::write(&source, updated).map_err(|e| format!("{}: {e}", source.display()))?;
+
+    match flag(args, "--choose") {
+        Some(choice) => println!("{id} is no longer gated — you chose: {choice}"),
+        None => println!("{id} is no longer gated"),
+    }
+    println!("the row still says what it was gated on; edit it if that is now wrong");
     Ok(())
 }
 

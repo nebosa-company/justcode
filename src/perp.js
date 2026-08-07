@@ -878,6 +878,12 @@ function renderGated(body, view) {
       advice.append(document.createTextNode(" " + item.recommendation.says));
       card.append(advice);
     }
+    // `O-17`: the command, not a button — the same choice the approvals card
+    // makes, for the same reason. Ungating lets the loop add a dependency and
+    // start spending against twelve requirements, which belongs at the machine
+    // and deliberately, rather than behind something clickable while somebody
+    // is scanning a panel.
+    card.append(el("code", "perp-gate-how", `perp ungate ${item.id} --choose <option>`));
     section.append(card);
   }
   body.append(section);
