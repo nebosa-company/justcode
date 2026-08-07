@@ -868,6 +868,16 @@ function renderGated(body, view) {
       for (const option of item.options) list.append(el("li", null, option));
       card.append(list);
     }
+    // `O-17`: advice with the name of whoever gave it, below the options and
+    // never marking one of them. A recommendation from the party that wants to
+    // be unblocked has an interest, and highlighting an option would be the
+    // dialog deciding rather than the person it is reserved for.
+    if (item.recommendation) {
+      const advice = el("p", "perp-gate-advice");
+      advice.append(el("span", "perp-gate-from", item.recommendation.from));
+      advice.append(document.createTextNode(" " + item.recommendation.says));
+      card.append(advice);
+    }
     section.append(card);
   }
   body.append(section);

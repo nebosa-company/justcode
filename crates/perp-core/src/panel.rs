@@ -468,6 +468,16 @@ impl View {
                                 ("kind", Value::str(gate.kind.clone())),
                                 ("waiting_for", Value::str(gate.waiting_for.clone())),
                                 (
+                                    "recommendation",
+                                    match &gate.recommendation {
+                                        Some(advice) => obj(vec![
+                                            ("from", Value::str(advice.from.clone())),
+                                            ("says", Value::str(advice.says.clone())),
+                                        ]),
+                                        None => Value::Null,
+                                    },
+                                ),
+                                (
                                     "options",
                                     Value::Arr(
                                         gate.options

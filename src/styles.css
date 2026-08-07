@@ -2315,6 +2315,17 @@ body.perp-resizing {
   background: rgba(127, 127, 127, 0.18);
 }
 
+.perp-gate-advice {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.perp-gate-from {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
 .perp-gate-options {
   margin: 0.4rem 0 0;
   padding-left: 1.1rem;

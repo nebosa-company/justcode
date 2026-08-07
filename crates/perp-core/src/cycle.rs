@@ -178,6 +178,26 @@ pub struct Gate {
     /// `**Options:** approve `windows`; refuse, drop the Windows shell` — semicolons,
     /// because `|` is the markdown table cell separator and would end the row.
     pub options: Vec<String>,
+    /// `**Recommended by the loop:** approve — it has read `R8.9``, as the
+    /// advice and the name of whoever is giving it (`O-17`).
+    ///
+    /// **Never pre-selected, always attributed.** A recommendation from the
+    /// party that wants to be unblocked has an interest, and a pre-selected
+    /// option is a decision taken by whoever drew the dialog rather than by the
+    /// person the gate is reserved for. Carrying the source is what lets a
+    /// reader weigh it: *the loop recommends approving* and *you wrote that you
+    /// would approve* are different sentences and must not render alike.
+    pub recommendation: Option<Advice>,
+}
+
+/// Advice on a gate, and who is giving it (`O-17`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Advice {
+    /// `the loop`, `R8.9`, a person's name — whatever the row attributes it to.
+    /// Never inferred: an unattributed recommendation is not rendered at all,
+    /// because advice whose source a reader cannot weigh is worse than none.
+    pub from: String,
+    pub says: String,
 }
 
 /// Lift `**Key:** …` out of a requirement's prose, to the end of its line.
@@ -228,11 +248,35 @@ pub fn gated(source: &str) -> Vec<Gate> {
                 list.split(';').map(|o| o.trim().to_string()).filter(|o| !o.is_empty()).collect()
             })
             .unwrap_or_default();
+        // `**Recommended by <who>:** <advice>`. The attribution is part of the
+        // key, so a row cannot carry advice without saying whose it is.
+        let recommendation = text
+            .find("**Recommended by ")
+            .and_then(|at| {
+                let rest = &text[at + "**Recommended by ".len()..];
+                let (from, tail) = rest.split_once(':')?;
+                // Taken whole, unlike the other fields: for advice the reason
+                // *is* the value, and truncating at the first dash would leave
+                // `approve` with the argument for it cut off — which is the
+                // half a reader needs in order to disagree.
+                let says = tail
+                    .trim_start_matches('*')
+                    .split("**")
+                    .next()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+                if says.is_empty() {
+                    return None;
+                }
+                Some(Advice { from: from.trim().to_string(), says })
+            });
         waiting.push(Gate {
             id,
             kind: gate_field(&text, "Gated").unwrap_or_default(),
             waiting_for: text,
             options,
+            recommendation,
         });
     }
     waiting
