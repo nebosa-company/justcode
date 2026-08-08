@@ -997,8 +997,17 @@ impl Host {
                 self.resolve(where_)?;
                 // Quoted: a directory with a space in it is one argument, and
                 // `split_command` is what decides that.
+                //
+                // `T-36`, same split as `glob` one arm below: `git grep`
+                // answers for the repository, and only when the repository is
+                // this workspace is that the right place to ask. `--no-index`
+                // searches the working tree as plain files, which is always
+                // about this workspace. Exit 1 from either form is "no
+                // matches", which is an answer and not an error.
+                let no_index =
+                    if crate::git::Repo::at(&self.root).is_own_root() { "" } else { "--no-index " };
                 self.shell(&format!(
-                    "git grep -n -- \"{pattern}\" \"{where_}\" {}",
+                    "git grep {no_index}-n -- \"{pattern}\" \"{where_}\" {}",
                     derived_excludes()
                 ))?
             }
@@ -1009,7 +1018,16 @@ impl Host {
                 // would refuse the patterns the tool exists to accept.
                 // `git ls-files` lists what the repository has, which is inside
                 // the workspace by construction.
-                self.shell(&format!("git ls-files -- \"{pattern}\" {}", derived_excludes()))?
+                //
+                // `T-36`: only when the repository is this workspace. Anywhere
+                // else `git` answers about the wrong place — exit 128 in no
+                // repository, somebody else's index inside a larger one — so
+                // the filesystem walk answers instead.
+                if crate::git::Repo::at(&self.root).is_own_root() {
+                    self.shell(&format!("git ls-files -- \"{pattern}\" {}", derived_excludes()))?
+                } else {
+                    glob_walk(&self.root, pattern).join("\n")
+                }
             }
             Tool::Shell => {
                 let command = call.need("command")?;
@@ -1378,15 +1396,99 @@ impl Host {
 /// model is supposed to read. Only the append-only and regenerated files are
 /// hidden, and only from search: `read` still opens them by name, because an
 /// operator asking the chat surface about its own history should get an answer.
+const DERIVED: &[&str] = &[
+    ".harness/journal.jsonl",
+    ".harness/state.md",
+    ".harness/gates",
+    ".harness/artifacts",
+];
+
 fn derived_excludes() -> String {
-    [
-        ":(exclude).harness/journal.jsonl",
-        ":(exclude).harness/state.md",
-        ":(exclude).harness/gates",
-        ":(exclude).harness/artifacts",
-    ]
-    .map(|spec| format!("\"{spec}\""))
-    .join(" ")
+    DERIVED
+        .iter()
+        .map(|path| format!("\":(exclude){path}\""))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// `glob` without a repository to ask (`T-36`).
+///
+/// `git ls-files` was the whole implementation, and it answers for the
+/// repository, not the workspace: in a workspace that is no repository it
+/// fails with `fatal: not a git repository … [exit 128]`, and in a workspace
+/// inside somebody else's checkout it answers from *their* index — the same
+/// wrong repository `T-33` and `G-20` refuse elsewhere. Measured on
+/// Harness-Bench, the exit-128 case poisoned the first tool result of 5 of the
+/// 13 runs that ended with the model abandoning the tool protocol; a first
+/// impression that the tools are broken is exactly the wrong first impression.
+///
+/// So the walk is the fallback: the filesystem is the one source that is
+/// always about this workspace. `.git` is skipped as structure, and the same
+/// derived files `derived_excludes` hides from the repository path are hidden
+/// here, so the two paths answer alike.
+fn glob_walk(root: &Path, pattern: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(rel) = path.strip_prefix(root) else { continue };
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            if DERIVED.iter().any(|d| rel == *d || rel.starts_with(&format!("{d}/"))) {
+                continue;
+            }
+            if path.is_dir() {
+                if entry.file_name() == ".git" {
+                    continue;
+                }
+                stack.push(path);
+            } else if glob_matches(pattern, &rel) {
+                found.push(rel);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// Whether a pattern matches a `/`-separated relative path, the way a git
+/// pathspec would (`T-36`).
+///
+/// Git's default pathspec matching is fnmatch *without* `FNM_PATHNAME`: `*`
+/// crosses `/`, so `*.rs` finds a file at any depth and `**` needs no special
+/// case. A pattern that names a directory matches everything under it, which
+/// is the other half of pathspec behaviour models lean on — `glob(pattern:
+/// src)` is a listing, not a miss.
+fn glob_matches(pattern: &str, path: &str) -> bool {
+    fn wild(pattern: &[u8], path: &[u8]) -> bool {
+        // Iterative wildcard match with backtracking over the last `*`.
+        let (mut p, mut s) = (0usize, 0usize);
+        let (mut star, mut mark) = (usize::MAX, 0usize);
+        while s < path.len() {
+            if p < pattern.len() && (pattern[p] == b'?' || pattern[p] == path[s]) {
+                p += 1;
+                s += 1;
+            } else if p < pattern.len() && pattern[p] == b'*' {
+                star = p;
+                mark = s;
+                p += 1;
+            } else if star != usize::MAX {
+                p = star + 1;
+                mark += 1;
+                s = mark;
+            } else {
+                return false;
+            }
+        }
+        while p < pattern.len() && pattern[p] == b'*' {
+            p += 1;
+        }
+        p == pattern.len()
+    }
+    let pattern = pattern.trim_end_matches('/');
+    wild(pattern.as_bytes(), path.as_bytes())
+        || wild(format!("{pattern}/*").as_bytes(), path.as_bytes())
 }
 
 /// The media type of an image this harness can hand to a model (`M-38`).
@@ -2367,6 +2469,83 @@ struct Held {
                 assert!(!text.contains("outside the workspace"), "{pattern}: {text}");
             }
         }
+    }
+
+    /// `T-36`: a workspace that is no repository still has files, and `glob`
+    /// lists them. `git ls-files` was the whole implementation, and here it
+    /// exits 128 — which poisoned the first tool result of 5 Harness-Bench
+    /// runs that then abandoned the tool protocol.
+    #[test]
+    fn glob_answers_in_a_workspace_that_is_no_repository() {
+        let (host, root) = host();
+        std::fs::create_dir_all(root.join("src/deep")).expect("mkdir");
+        std::fs::write(root.join("src/main.rs"), "fn main() {}\n").expect("write");
+        std::fs::write(root.join("src/deep/lib.rs"), "\n").expect("write");
+        std::fs::write(root.join("README.md"), "\n").expect("write");
+
+        let all = host.run(&Call::new(Tool::Glob).arg("pattern", "*.rs")).expect("glob");
+        assert_eq!(all.text, "src/deep/lib.rs\nsrc/main.rs", "sorted, slashed: {}", all.text);
+
+        // A directory names everything under it, the way a pathspec does.
+        let dir = host.run(&Call::new(Tool::Glob).arg("pattern", "src")).expect("glob");
+        assert!(dir.text.contains("src/main.rs") && dir.text.contains("src/deep/lib.rs"), "{}", dir.text);
+
+        let none = host.run(&Call::new(Tool::Glob).arg("pattern", "*.py")).expect("glob");
+        assert_eq!(none.text, "", "no match is an empty answer, not an error");
+    }
+
+    /// The walk hides what `derived_excludes` hides, so the two paths of
+    /// `glob` answer alike — and never lists `.git` internals.
+    #[test]
+    fn the_walk_hides_derived_files_and_git_structure() {
+        let (host, root) = host();
+        std::fs::create_dir_all(root.join(".harness/artifacts")).expect("mkdir");
+        std::fs::create_dir_all(root.join(".git")).expect("mkdir");
+        std::fs::write(root.join(".harness/journal.jsonl"), "{}\n").expect("write");
+        std::fs::write(root.join(".harness/artifacts/board.html"), "\n").expect("write");
+        std::fs::write(root.join(".harness/binding.md"), "\n").expect("write");
+        std::fs::write(root.join(".git/config"), "\n").expect("write");
+
+        let out = host.run(&Call::new(Tool::Glob).arg("pattern", "**")).expect("glob");
+        assert!(!out.text.contains("journal.jsonl"), "{}", out.text);
+        assert!(!out.text.contains("board.html"), "{}", out.text);
+        assert!(!out.text.contains(".git/"), "{}", out.text);
+        // The binding is an input the model is supposed to read.
+        assert!(out.text.contains(".harness/binding.md"), "{}", out.text);
+    }
+
+    /// `T-36`: pathspec semantics, not filepath-glob semantics. `*` crosses
+    /// `/` because git's default fnmatch does, and models write `*.rs`
+    /// expecting depth.
+    #[test]
+    fn glob_patterns_match_the_way_a_pathspec_does() {
+        for (pattern, path, expected) in [
+            ("*.rs", "src/deep/lib.rs", true),
+            ("src/*.rs", "src/main.rs", true),
+            ("src/*.rs", "src/deep/lib.rs", true), // `*` crosses `/`
+            ("src/**/*.rs", "src/deep/lib.rs", true),
+            ("src", "src/main.rs", true), // a directory lists itself
+            ("src/", "src/main.rs", true),
+            ("main.?s", "main.rs", true),
+            ("*.py", "src/main.rs", false),
+            ("deep", "src/deep/lib.rs", false), // no leading-anywhere match
+            ("src/main.rs", "src/main.rs", true),
+        ] {
+            assert_eq!(glob_matches(pattern, path), expected, "{pattern} vs {path}");
+        }
+    }
+
+    /// `T-36`, the `grep` half: `git grep` without `--no-index` exits 128
+    /// where there is no repository.
+    #[test]
+    fn grep_answers_in_a_workspace_that_is_no_repository() {
+        let (host, root) = host();
+        std::fs::write(root.join("notes.txt"), "the needle is here\n").expect("write");
+
+        let out = host
+            .run(&Call::new(Tool::Grep).arg("pattern", "needle").arg("path", "."))
+            .expect("grep finds it without a repository");
+        assert!(out.text.contains("needle is here"), "{}", out.text);
     }
 
     /// Grep inside the workspace keeps working, including where there is a space.
