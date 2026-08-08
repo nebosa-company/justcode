@@ -224,15 +224,19 @@ project's `main`**, unattended and unapproved, before it existed.
 
 ## Priority
 
-| | Change | Evidence | Size |
-|---|---|---|---|
-| 1 | ~~Read a Sonnet three-turn transcript against an Opus one~~ **done** | verdict: protocol rejected as injection, 13 vs 0 | — |
-| 2a | Empty parse goes loud on the prompted rung (`ladder.rs:329`) | 13 refusals accepted as answers | small |
-| 2b | Carry-on instruction out of the user turn (`agent.rs:795`) | 14/14 break on the first results turn | small |
-| 2c | Fix `glob` outside a git repository (`tool.rs:1005`) | poisoned 5 of 14 first results, 3× trip rate | small |
-| 3 | `fetch` auto for an allowlisted host (`T-34`) | 9 of 9 refused, 5 tasks | small |
-| 4 | A vision-capable rubric key | 2 tasks scored on a tenth of themselves | environment |
-| 5 | ~~Declare `effort` on subprocess links~~ **done** | `M-34` was already built; the benchmark config now declares `medium` | — |
+The *Do with* column says which model and reasoning effort to hand each item
+to, chosen by task shape: specified, mechanical work goes to Fable at low
+effort, and the one change whose failure mode is subtle goes to Opus at high.
+
+| | Change | Evidence | Size | Do with |
+|---|---|---|---|---|
+| 1 | ~~Read a Sonnet three-turn transcript against an Opus one~~ **done** | verdict: protocol rejected as injection, 13 vs 0 | — | was Opus, xhigh |
+| 2a | Empty parse goes loud on the prompted rung (`ladder.rs:329`) | 13 refusals accepted as answers | small | Fable, medium — the condition is already specified above |
+| 2b | Carry-on instruction out of the user turn (`agent.rs:795`) | 14/14 break on the first results turn | small | **Opus, high** — reworks the words every model sees on every turn, and the trigger elements are confounded; a careless rewrite re-creates the injection shape it removes |
+| 2c | Fix `glob` outside a git repository (`tool.rs:1005`) | poisoned 5 of 14 first results, 3× trip rate | small | Fable, low — mechanical fallback |
+| 3 | `fetch` auto for an allowlisted host (`T-34`) | 9 of 9 refused, 5 tasks | small | Fable, medium — after the design decision recorded in `T-34` is made |
+| 4 | A vision-capable rubric key | 2 tasks scored on a tenth of themselves | environment | a person — key or quota, not code |
+| 5 | ~~Declare `effort` on subprocess links~~ **done** | `M-34` was already built; the benchmark config now declares `medium` | — | — |
 
 Nothing above is a correctness defect in Perpetum's parser — the one thing item
 1 was expected to indict. 2a–2c are loop and tool defects the diagnosis
