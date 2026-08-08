@@ -978,7 +978,12 @@ You wrote text framed as tool output. Only this harness                         
             // The loop does not wait here (`L-19`). The call does not run, the
             // request goes on the record, and the step carries on with
             // whatever else it can do.
-            if let crate::approval::Policy::Approve { reason } = crate::tool::classify(call) {
+            //
+            // `T-34`: the host's classification, not the bare `classify`. The
+            // two must agree — a fetch the host would run `Auto` because its
+            // host is on the egress allowlist must not be enqueued here for an
+            // approval nobody is waiting to give.
+            if let crate::approval::Policy::Approve { reason } = self.host.policy_here(call) {
                 // `T-15`: already approved, this cycle, for this exact action.
                 //
                 // Without this the queue was write-only. A person could grant a

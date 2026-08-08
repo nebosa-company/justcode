@@ -908,10 +908,48 @@ impl Host {
         Ok(joined)
     }
 
+    /// What a call is classified as *here* (`T-34`).
+    ///
+    /// [`classify`] answers from the call alone, which is what keeps it a
+    /// pure function and `C-1`'s claim testable. This adds the one thing the
+    /// call cannot carry: what the operator already declared about this
+    /// workspace.
+    ///
+    /// A `fetch` of a host on `S-4`'s egress allowlist is `Auto`. The approval
+    /// was a third gate on a question two rules had already settled — `S-4`
+    /// decides which machines may be reached, and applies to an approved fetch
+    /// too; `S-1` decides what returning content may do, which is nothing.
+    /// Against `L-19`, which says the loop does not wait, the third gate did
+    /// not mean "ask a person", it meant "never": measured across three
+    /// Harness-Bench rounds, **9 steps reached for `fetch` and all 9 were
+    /// refused**. Whether a URL task succeeded came down to whether the model
+    /// thought to route around its own harness with `curl` — and the run that
+    /// declined to, on the grounds that a person was deciding, scored zero for
+    /// its manners.
+    ///
+    /// A host that is *not* on the allowlist still needs a person. That is the
+    /// case where the operator has said nothing, and asking is the honest
+    /// answer to a question the harness cannot decide.
+    ///
+    /// Named `policy_here` rather than `policy` because `reachable.rs` matches
+    /// bare function names, and a second `policy` would mark `capture.rs`'s as
+    /// reached without anything having called it — a debt list that shrinks on
+    /// a coincidence is worse than one that does not shrink.
+    pub fn policy_here(&self, call: &Call) -> Policy {
+        let policy = classify(call);
+        if call.tool != Tool::Fetch || !matches!(policy, Policy::Approve { .. }) {
+            return policy;
+        }
+        match call.get("url") {
+            Some(url) if self.egress.check(url).is_ok() => Policy::Auto,
+            _ => policy,
+        }
+    }
+
     /// Classify, then run. There is no method that skips the first half.
     pub fn run(&self, call: &Call) -> Result<Output> {
         crate::verbose::say("tool", &call.signature());
-        match classify(call) {
+        match self.policy_here(call) {
             Policy::Never { reason } => Err(Error::refused(call.signature(), reason)),
             Policy::Approve { reason } => Err(Error::refused(
                 call.signature(),
@@ -1166,11 +1204,12 @@ impl Host {
             }
 
             Tool::Fetch => {
-                // Reached only through `run_approved`: `classify` puts fetch on
-                // the Approve list, and `run` refuses it before it ever gets
-                // here. An approval is not enough on its own — the egress
-                // allowlist applies too, because approving *a* fetch is not
-                // approving *any* host (`S-4`).
+                // Two ways in: an operator's approval, or `T-34` — the host is
+                // already on the egress allowlist, so `Host::policy_here` called it
+                // `Auto`. The check below is what makes both safe, and it is
+                // not redundant with either. Approving *a* fetch is not
+                // approving *any* host (`S-4`), and `Host::policy_here` reads the
+                // `url` argument while this reads the one actually fetched.
                 let url = call.need("url")?;
                 self.egress.check(url).map_err(|refusal| {
                     Error::refused(refusal.host, format!("{} (`S-4`)", refusal.why))
@@ -2011,6 +2050,48 @@ Then I will patch scan.rs.";
         let outcome = host.run_approved(&call, "the operator");
         let err = format!("{}", outcome.expect_err("nothing is listening"));
         assert!(!err.contains("S-4"), "it got past the allowlist: {err}");
+    }
+
+    /// `T-34`: a fetch of an allowlisted host needs no approval, because the
+    /// approval was a third gate on a question `S-4` and `S-1` had settled —
+    /// and against `L-19` a third gate means never, not later. Nine of nine
+    /// measured fetches were refused.
+    #[test]
+    fn a_fetch_of_an_allowlisted_host_needs_no_approval() {
+        let dir = tmpdir("tool-fetch-auto");
+        let host = Host::new(&dir)
+            .with_egress(crate::security::Egress::new(vec!["127.0.0.1".into()]));
+
+        let allowed = Call::new(Tool::Fetch).arg("url", "http://127.0.0.1:9/nothing");
+        assert!(
+            matches!(host.policy_here(&allowed), Policy::Auto),
+            "the operator already said this host may be reached"
+        );
+        // Straight through `run`, with nobody asked. It then fails on the
+        // network, which is the transport's business: what matters is that it
+        // is not refused for want of an approval.
+        let err = format!("{}", host.run(&allowed).expect_err("nothing is listening"));
+        assert!(!err.contains("needs approval"), "{err}");
+        assert!(!err.contains("S-4"), "{err}");
+
+        // Everything else the operator has said nothing about still asks. That
+        // is the case the harness genuinely cannot decide.
+        let elsewhere = Call::new(Tool::Fetch).arg("url", "https://example.com/x");
+        assert!(matches!(host.policy_here(&elsewhere), Policy::Approve { .. }));
+        let err = format!("{}", host.run(&elsewhere).expect_err("off the allowlist"));
+        assert!(err.contains("needs approval"), "{err}");
+
+        // A host with no allowlist at all reaches nothing, unchanged.
+        let bare = Host::new(&dir);
+        assert!(matches!(bare.policy_here(&allowed), Policy::Approve { .. }));
+    }
+
+    /// The bare classifier is unchanged, so `C-1`'s claim still holds and
+    /// nothing that reads a call without a workspace silently loosens.
+    #[test]
+    fn the_pure_classifier_still_says_fetch_needs_a_person() {
+        let call = Call::new(Tool::Fetch).arg("url", "http://127.0.0.1:9/nothing");
+        assert!(matches!(classify(&call), Policy::Approve { .. }));
     }
     use crate::testutil::tmpdir;
 
