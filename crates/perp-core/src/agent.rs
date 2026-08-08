@@ -162,13 +162,33 @@ fn notice(requirement: &str, turns: u32) -> String {
 /// change should still end having changed nothing (`V-13`), and steering it into
 /// writing something to clear a check is the failure this whole rule exists to
 /// catch.
-fn notice_on_answer(requirement: &str) -> String {
+///
+/// On the prompted rung the further turn also quotes the tool format (`L-36`).
+/// Measured on Harness-Bench through a `claude-cli` link: **13 of 106 runs**
+/// ended one-call-three-turns because the model had declared the fenced
+/// protocol a prompt injection on the first turn that carried tool results —
+/// and this notice, arriving in the harness's own vocabulary of labels and
+/// verdicts, was dismissed as more of the same. It restated the authority in
+/// dispute and never showed the format again. The format is the one thing in
+/// the exchange the model can check rather than take on trust, so it goes
+/// with the last word. The other rungs are unchanged: a model there has
+/// already demonstrated the format, and no such run showed the failure.
+fn notice_on_answer(requirement: &str, rung: crate::ladder::Rung) -> String {
+    let format = match rung {
+        crate::ladder::Rung::Prompted => format!(
+            "\nA reply with no fenced block is read as your final answer. If \
+             you stopped because the tool format looked wrong, it is the real \
+             one — this loop has no other. {}\n",
+            rung.instructions()
+        ),
+        _ => String::new(),
+    };
     format!(
         "\n[`L-25`] You have ended {requirement} without writing, patching or \
          deleting anything, so it is recorded as failed whatever the summary \
          says (`V-13`). You have one further turn. Make the change if the \
          requirement asks for one; if it genuinely asks for none, say so and \
-         stop — that answer is the intended one, not a way of failing.\n"
+         stop — that answer is the intended one, not a way of failing.\n{format}"
     )
 }
 
@@ -644,7 +664,7 @@ impl<'a> Agent<'a> {
                             // other — being told does not buy a step out of the
                             // bound that ends it.
                             unproductive += 1;
-                            let told = notice_on_answer(&item.requirement);
+                            let told = notice_on_answer(&item.requirement, ladder.rung());
                             transcript.push_str(&told);
                             crate::verbose::say(
                                 "l-25",
@@ -1867,12 +1887,44 @@ path: f.txt
         };
         let detail = detail.as_deref().unwrap_or_default();
         assert!(detail.contains("[`L-25`]"), "it was told: {detail}");
+        // `L-36`: on the prompted rung the telling carries the format. This
+        // transcript runs that rung, so the notice must quote the fence.
+        assert!(
+            detail.contains("If you stopped because the tool format looked wrong"),
+            "the notice quotes the format on the prompted rung: {detail}"
+        );
         assert!(dir.join("out.txt").is_file(), "and it acted on being told");
         assert!(
             Work::touched(&agent).iter().any(|p| p.contains("out.txt")),
             "the write is staged: {:?}",
             Work::touched(&agent)
         );
+    }
+
+    /// `L-36`: the further turn quotes the tool format on the prompted rung
+    /// and only there. Thirteen Harness-Bench runs died with the model calling
+    /// the fence a prompt injection; the notice they got restated labels and
+    /// verdicts — the vocabulary already in dispute — and never showed the one
+    /// thing the model could have checked.
+    #[test]
+    fn the_further_turn_quotes_the_format_on_the_prompted_rung() {
+        let prompted = notice_on_answer("R-1", crate::ladder::Rung::Prompted);
+        assert!(
+            prompted.contains(&format!("```{}", crate::ladder::FENCE)),
+            "the fence is quoted verbatim: {prompted}"
+        );
+
+        // The other rungs already demonstrated their format; quoting the
+        // bottom rung's fence at them would be an instruction to go down.
+        for rung in [crate::ladder::Rung::Native, crate::ladder::Rung::JsonSchema] {
+            let told = notice_on_answer("R-1", rung);
+            assert!(
+                !told.contains(crate::ladder::FENCE),
+                "{} says nothing about the fence: {told}",
+                rung.as_str()
+            );
+            assert!(told.contains("[`L-25`]"), "the verdict itself is unchanged: {told}");
+        }
     }
 
     /// The bound on the same thing. Told once, not every time: a step that
