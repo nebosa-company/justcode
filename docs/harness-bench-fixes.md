@@ -360,6 +360,45 @@ a pattern. A signature in the journal would have said otherwise, and did.
 
 ---
 
+## Measurement caveats
+
+Things that are true about how these numbers were produced, recorded so a later
+run is not compared against them in ignorance.
+
+### Reasoning effort is undeclared on both `claude-cli` backends
+
+A three-way run — `deepseek-v4-flash` over an API link, and Opus and Sonnet over
+`claude-cli` links — was made with harness entries that declare **no `effort`**:
+
+```
+link.claude.kind = claude-cli
+link.claude.model = opus
+```
+
+`cli_invocation` passes `--effort` only when a link declares one, so both Claude
+backends ran at whatever the CLI defaults to. `M-34` exists precisely to stop
+this, and its own test says why:
+
+> Nothing passed `--effort`, so every call ran at whatever the CLI defaulted to
+> that week — and two runs a month apart were not comparable without anyone
+> being able to see why.
+
+**The asymmetry is the part that matters.** DeepSeek's reasoning level is fixed
+by the API and does not float; the two Claude backends' does. So a three-way
+comparison holds one leg still and lets two drift, and a re-run can move for a
+reason nothing in the results records.
+
+The numbers stand as a snapshot. They are not reproducible in the sense `M-34`
+means, and should not be quoted as a stable ranking of the three backends.
+
+Not fixed here, deliberately: setting `effort` would have invalidated a run that
+was already hours in. The adapter already supports it — any scalar link key in
+the harness config reaches `links.md` — so the fix is one line of configuration
+whenever a comparable run is wanted, plus whatever surface the panel grows for
+it. `perp` needs nothing new; `M-34` is already built.
+
+---
+
 ## Priority
 
 | | Fix | Tasks affected | Size | State |
