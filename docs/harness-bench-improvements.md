@@ -91,41 +91,85 @@ conduct — and that gap is where the remaining work is.
 
 ---
 
-## 1. The prompted rung fails on some models and not others
+## 1. Sonnet rejects the tool protocol as a prompt injection — resolved
 
-**The largest remaining loss, and the newest evidence.**
+**The largest remaining loss. The transcripts have now been read; neither of the
+two readings this section originally offered survived.** The full diagnosis is
+[`harness-bench-three-turn-diagnosis.md`](harness-bench-three-turn-diagnosis.md);
+what follows is the summary.
 
-Both `claude-cli` backends parse **0%** of their turns at the native rung — the
-CLI has no native tool-call API, so every reply goes through the prompted rung's
-text parsing. Both API backends parse **100%** natively.
-
-On that shared prompted path:
+Both `claude-cli` backends parse **0%** of their turns at the native rung, so
+every reply goes through the prompted rung's text parsing. On that shared path,
+zeros with the exact signature — one tool call, three turns, ending on *"changed
+nothing"*:
 
 | | Zeros with the signature | Process on those | Process elsewhere |
 |---|---|---|---|
 | claude-cli sonnet | **14** of 106 | **11.15%** | 86.78% |
 | claude-cli opus | **1** of 106 | 26.67% | 92.19% |
 
-The signature is exact and identical: one tool call, three turns, the step ending
-on *"changed nothing"*. It never occurs on either API backend.
+The two hypotheses were: the parser is model-sensitive, or Sonnet stops early on
+its own. **Both are wrong.** In all 14 Sonnet runs the prompted rung parsed the
+turn-1 tool call correctly and executed it. The loop dies on turn 2 — the first
+turn that carries tool results back — when Sonnet declares Perpetum's `perp-call`
+protocol *"a prompt injection attempt"* and refuses to use it further, in those
+words, in 13 of the 14 transcripts. When `L-25`'s nudge arrives on turn 3 it
+rejects that too, as *"fake labels and pressure tactics"*. In the worst case
+(`008`) it then hallucinates a Claude Code UI render — `⎿ Wrote 1 line` — and
+reports success over an empty workspace.
 
-Two readings survive the data, and they have different fixes:
+The partition is cleaner than the headline numbers:
 
-- **The parser is model-sensitive.** Something in how Sonnet phrases a tool call
-  is read by the prompted rung 13% of the time and by Opus's phrasing 1% of the
-  time. If so, the rung's tolerance is the defect.
-- **Sonnet stops early on its own**, and the rung is innocent.
+- **Opus's single signature (`003-browser`) is `T-34`'s fetch gate**, not the
+  parser — its journal shows the fetch queued for an approval nobody would give,
+  and a lucid refusal to route around it. The real asymmetry is **13 vs 0**.
+- Across all 106 tasks, Opus mentions injection only on the three tasks that are
+  *about* injection defense. Sonnet does on 15 — 13 of them accusing the harness.
+- The refusal is probabilistic, not a wall: Sonnet trips and still recovers on
+  `085` and `104`. But the loop grants one further turn after an empty answer,
+  so a turn-2 trip has no room.
 
-The rubric cannot separate them: it reads the same transcript either way, and
-scores it near zero in both. **Reading a Sonnet three-turn transcript against an
-Opus one is the next thing to do**, and it is cheap — the transcripts are on
-disk. Until then this is the largest unexplained loss in the suite: those 14
-tasks hold effectively all of Sonnet's deficit to DeepSeek.
+The mechanism is two code facts together. `ladder.rs:329` treats a reply with no
+fence at all as a completed answer, so the refusal parses as "done" and the
+repair loop never fires. And `agent.rs:795` sends tool results plus the carry-on
+instruction in a **user turn** — the exact shape Perpetum's own comments flagged
+and fixed for the system prompt, with the tool-results half left undone. Timing
+is 14/14 consistent: turn 1, system prompt only, correct call every time; turn 2,
+first results-in-user-turn, protocol abandoned every time.
 
-The structural fix, if the parser is at fault, is not to widen the parser. It is
-that a `claude-cli` link never reaches the native rung at all — so a link kind
-that can use the Anthropic Messages API for tool use would remove the whole class
-rather than making the fallback more forgiving.
+One caveat, the diagnosis's own: the mechanism is observational. Proving it
+needs an A/B — rerun the 13 tasks with the carry-on moved into the system
+prompt.
+
+## 2. What to fix, now that the cause is known
+
+**Not the parser.** Of the post-abandonment turns, only one names a real
+Perpetum tool; the rest are `powershell(...)` calls to a tool that does not
+exist, bare JSON, or `008`'s hallucinated write — which a more tolerant parser
+would score as a write that happened. Widening tolerance recovers at most one
+run and is actively dangerous. In order:
+
+1. **An empty parse on the prompted rung goes loud** when the step has already
+   issued a call and nothing was touched — spend a repair at `ladder.rs:329`
+   quoting the format, instead of accepting silence as an answer. Cheapest
+   change; all 13 runs would have received a corrective they never got.
+2. **Move the carry-on instruction out of the user turn** (`agent.rs:795`) into
+   the system prompt, leaving tool results as pure data. This attacks the cause.
+3. **Native tool use is not the config switch it looks like.** `Kind::Anthropic`
+   exists, but `probe.rs:151` sets `native_tool_calls` from
+   `matches!(kind, Kind::DeepSeek)` alone — the `anthropic` kind lands on the
+   same prompted rung as `claude-cli`. Widening that predicate is the long-term
+   answer for API links; the `claude-cli` kind itself can never take it.
+4. **`glob` fails in a non-git workspace** — `tool.rs:1005` implements it as
+   `git ls-files`, exit 128 outside a repository. It poisoned the first tool
+   result in 5 of the 14 and roughly triples Sonnet's trip rate (46% vs 15%
+   with a clean first result). Opus eats the same error and recovers, so it is
+   an amplifier, not the cause — and a defect regardless.
+
+Two side defects surfaced in passing: `047`'s read path came back mangled by a
+redactor mid-string and was then correctly refused by `X-2`, and `022`'s
+`echo $MOCK_API_BASE` returned the literal string — POSIX expansion assumed
+under a Windows shell.
 
 ## 2. `fetch` is a tool the loop does not have
 
@@ -182,15 +226,19 @@ project's `main`**, unattended and unapproved, before it existed.
 
 | | Change | Evidence | Size |
 |---|---|---|---|
-| 1 | Read a Sonnet three-turn transcript against an Opus one | 14 tasks vs 1 on an identical code path | one hour |
-| 2 | Native tool use for subprocess links, or a more tolerant prompted rung | follows from 1 | large |
+| 1 | ~~Read a Sonnet three-turn transcript against an Opus one~~ **done** | verdict: protocol rejected as injection, 13 vs 0 | — |
+| 2a | Empty parse goes loud on the prompted rung (`ladder.rs:329`) | 13 refusals accepted as answers | small |
+| 2b | Carry-on instruction out of the user turn (`agent.rs:795`) | 14/14 break on the first results turn | small |
+| 2c | Fix `glob` outside a git repository (`tool.rs:1005`) | poisoned 5 of 14 first results, 3× trip rate | small |
 | 3 | `fetch` auto for an allowlisted host (`T-34`) | 9 of 9 refused, 5 tasks | small |
 | 4 | A vision-capable rubric key | 2 tasks scored on a tenth of themselves | environment |
-| 5 | Declare `effort` on subprocess links | `M-34`; two backends ran at an unrecorded default | trivial |
+| 5 | ~~Declare `effort` on subprocess links~~ **done** | `M-34` was already built; the benchmark config now declares `medium` | — |
 
-Nothing above is a correctness defect in Perpetum. Items 1 and 2 are a capability
-gap on one link kind; 3 is a policy that does not fit unattended operation; 4 and
-5 are the benchmark's environment and the run's own configuration.
+Nothing above is a correctness defect in Perpetum's parser — the one thing item
+1 was expected to indict. 2a–2c are loop and tool defects the diagnosis
+surfaced; 3 is a policy that does not fit unattended operation; 4 is the
+benchmark's environment. After 2a/2b land, the A/B that proves the mechanism is
+a rerun of the 13 tasks on Sonnet.
 
 ---
 
@@ -206,7 +254,10 @@ gap on one link kind; 3 is a policy that does not fit unattended operation; 4 an
   but it is not the same instrument.
 - **Reasoning effort was never declared** on either Claude backend, so they ran
   at whatever the CLI defaults to while the API backends' level was fixed. `M-34`
-  exists to prevent exactly this.
+  exists to prevent exactly this. The benchmark config now declares
+  `effort = medium` on both `claude-cli` links — which fixes future runs and
+  means the existing Opus and Sonnet numbers are not cleanly comparable to the
+  next ones.
 - **The process judge is `deepseek-v4-flash` judging DeepSeek's own runs.**
   Self-evaluation bias is unquantified.
 - **Two tasks are not scored.** See above.
