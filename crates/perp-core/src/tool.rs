@@ -1685,12 +1685,40 @@ pub fn parse_edits(raw: &str) -> Result<Vec<(String, String)>> {
 }
 
 pub fn patch(path: &Path, expect: &str, replace: &str) -> Result<String> {
-    let before = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-    let hits = before.matches(expect).count();
+    let raw = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
+    // The same treatment [`apply`] already has, and for the same reason — it
+    // was fixed there and never here, so the sibling tool kept the bug.
+    //
+    // `T-8` makes Windows the primary runtime and git checks out CRLF by
+    // default, while a model composes its `expect` from the lines `read` showed
+    // it. Every multi-line pre-image therefore failed against bytes that
+    // differed only in the invisible character.
+    //
+    // Measured on SWE-bench, over three unrelated repositories: **ten `patch`
+    // calls, ten refusals, a hundred per cent.** Every one reported `hits == 0`
+    // on a file whose text was exactly what the model had been shown. The work
+    // still landed, because models route around a tool that never works —
+    // whole-file `write`, `apply`, or an edit through `shell` — which is why
+    // this cost turns rather than outcomes and stayed invisible in the scores.
+    let crlf = raw.contains("\r\n");
+    let before = raw.replace("\r\n", "\n");
+    let expect = expect.replace("\r\n", "\n");
+    let replace = replace.replace("\r\n", "\n");
+
+    let hits = before.matches(expect.as_str()).count();
     if hits == 0 {
+        // States the failure and stops. The old wording asserted a cause — *it
+        // has changed since the loop last read it* — which was usually false
+        // and sent the model to re-read a file that was exactly as it left it.
+        // Measured on `pallets__flask-5014`: five consecutive turns re-reading
+        // and re-patching before it abandoned the tool. A refusal that names an
+        // unverified cause is worse than one that names none, because the model
+        // acts on the cause.
         return Err(Error::refused(
             format!("patch {}", path.display()),
-            "the text to replace is not in the file — it has changed since the loop last read it",
+            "the text to replace was not found in the file. Nothing was written — the file is \
+             as it was. Read the range you mean to change and copy the pre-image from what it \
+             returns; line endings and leading whitespace are matched exactly",
         ));
     }
     if hits > 1 {
@@ -1699,7 +1727,10 @@ pub fn patch(path: &Path, expect: &str, replace: &str) -> Result<String> {
             format!("the text to replace appears {hits} times; it must identify one place"),
         ));
     }
-    let after = before.replacen(expect, replace, 1);
+    let after = before.replacen(expect.as_str(), &replace, 1);
+    // Written back in the file's own ending: a file silently converted to LF is
+    // a diff on every line of it.
+    let after = if crlf { after.replace('\n', "\r\n") } else { after };
     crate::atomic::write_atomic(path, &after)?;
     Ok(format!(
         "patched {} — {} bytes replaced with {}",
@@ -2598,6 +2629,81 @@ struct Held {
         assert!(root.join("in.txt").exists(), "untouched");
     }
 
+    /// `T-2` against a CRLF file, which on Windows is nearly every file.
+    ///
+    /// The tool matched raw bytes, so a pre-image written with `\n` — which is
+    /// what a model composes from the lines `read` showed it — never matched a
+    /// file checked out with `core.autocrlf`. Measured on SWE-bench across
+    /// three unrelated repositories: ten `patch` calls, ten refusals.
+    ///
+    /// `apply` had this fix already. `patch` did not, and it is the one models
+    /// reach for first.
+    #[test]
+    fn a_patch_matches_a_crlf_file_and_leaves_it_crlf() {
+        let (host, root) = host();
+        let path = root.join("crlf.py");
+        std::fs::write(&path, "def one():\r\n    return 1\r\n\r\ndef two():\r\n    return 2\r\n")
+            .expect("write");
+
+        // A multi-line pre-image with LF endings, as a model would send it.
+        host.run(
+            &Call::new(Tool::Patch)
+                .arg("path", "crlf.py")
+                .arg("expect", "def one():\n    return 1")
+                .arg("replace", "def one():\n    return 11"),
+        )
+        .expect("a CRLF file is patchable with an LF pre-image");
+
+        let raw = std::fs::read(&path).expect("read");
+        let text = String::from_utf8(raw.clone()).expect("utf-8");
+        assert!(text.contains("return 11"), "the edit landed: {text:?}");
+        assert!(!text.contains('\u{0}'), "no NULs");
+        // Every line still ends CRLF: converting the file to LF would be a diff
+        // on every line of it.
+        assert_eq!(text.matches("\r\n").count(), text.matches('\n').count(), "{text:?}");
+        assert!(text.starts_with("def one():\r\n"), "{text:?}");
+    }
+
+    /// And an LF file stays LF — the normalisation must not convert anything.
+    #[test]
+    fn a_patch_leaves_an_lf_file_alone() {
+        let (host, root) = host();
+        let path = root.join("lf.py");
+        std::fs::write(&path, "a = 1\nb = 2\n").expect("write");
+
+        host.run(
+            &Call::new(Tool::Patch)
+                .arg("path", "lf.py")
+                .arg("expect", "a = 1")
+                .arg("replace", "a = 99"),
+        )
+        .expect("applies");
+
+        let text = std::fs::read_to_string(&path).expect("read");
+        assert_eq!(text, "a = 99\nb = 2\n", "no line ending was introduced");
+    }
+
+    /// The refusal states the failure and stops. It used to assert a cause —
+    /// *it has changed since the loop last read it* — which was usually false,
+    /// and sent the model to re-read a file that was exactly as it left it.
+    #[test]
+    fn a_missed_pre_image_does_not_blame_a_change_that_did_not_happen() {
+        let (host, root) = host();
+        std::fs::write(root.join("f.txt"), "hello\n").expect("write");
+
+        let err = host.run(
+            &Call::new(Tool::Patch)
+                .arg("path", "f.txt")
+                .arg("expect", "goodbye")
+                .arg("replace", "hi"),
+        )
+        .expect_err("must refuse");
+        let text = format!("{err}");
+        assert!(text.contains("was not found"), "{text}");
+        assert!(!text.contains("has changed since"), "it no longer claims a cause: {text}");
+        assert!(text.contains("line endings"), "it says what is matched exactly: {text}");
+    }
+
     #[test]
     fn a_patch_needs_its_pre_image() {
         // `T-2`: the file may have moved under the loop since it last looked.
@@ -2622,7 +2728,10 @@ struct Held {
                     .arg("replace", "again"),
             )
             .expect_err("the pre-image is gone");
-        assert!(format!("{err}").contains("changed since the loop last read it"), "{err}");
+        // The refusal names the failure, not a cause it cannot know. Here the
+        // file genuinely did move under the loop; on SWE-bench the same message
+        // fired ten times out of ten on files that had not changed at all.
+        assert!(format!("{err}").contains("was not found in the file"), "{err}");
     }
 
     #[test]
