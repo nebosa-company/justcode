@@ -302,7 +302,7 @@ impl<'a> Agent<'a> {
             links,
             health,
             mode: Mode::Any,
-            // `M-36`: whether a read may hand back an image is a fact about the
+            // `M-38`: whether a read may hand back an image is a fact about the
             // role's chain, not about the workspace, so the host is told rather
             // than left to guess. Recomputed by `as_role` — a verifier and a
             // coder need not be the same links.

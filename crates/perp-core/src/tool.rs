@@ -293,7 +293,7 @@ pub struct Output {
     /// For a file read: the lines shown and how many the file has, so a model
     /// that was cut off can ask for the rest by number (`T-6`).
     pub lines: Option<Shown>,
-    /// An image the read produced, for a link that can be shown one (`M-36`).
+    /// An image the read produced, for a link that can be shown one (`M-38`).
     ///
     /// Carried apart from `text` and never inside it. The transcript, the
     /// journal and the byte budget all treat this output as the one line of
@@ -391,7 +391,7 @@ impl Output {
         }
     }
 
-    /// An image read, for a link that can be shown one (`M-36`).
+    /// An image read, for a link that can be shown one (`M-38`).
     ///
     /// The text is what everything except the request assembly sees: the
     /// transcript, the journal and the byte budget get one line of prose, and
@@ -767,7 +767,7 @@ pub struct Host {
     /// the guarantee survived by luck rather than by rule.
     protected: Vec<PathBuf>,
     /// Whether anything this role can reach is able to look at an image
-    /// (`M-36`). False by default, which is what makes a read of a PNG a
+    /// (`M-38`). False by default, which is what makes a read of a PNG a
     /// refusal that says why rather than a UTF-8 error that does not.
     sees_images: bool,
 }
@@ -791,7 +791,7 @@ impl Host {
     }
 
     /// Declare that a link this role can reach is able to see an image
-    /// (`M-36`). Set from the role's chain, not from a single link: the
+    /// (`M-38`). Set from the role's chain, not from a single link: the
     /// conversation carries its images across a failover, so the answer has to
     /// hold for every link that might be asked next.
     pub fn seeing_images(mut self, sees: bool) -> Host {
@@ -941,14 +941,14 @@ impl Host {
                 // An image is read as an image or not at all. `read_to_string`
                 // on a PNG fails on invalid UTF-8, and the model that asked was
                 // right to ask — the failure was the harness having no way to
-                // answer (`M-36`).
+                // answer (`M-38`).
                 if let Some(media_type) = image_media_type(&path) {
                     if !self.sees_images {
                         return Err(Error::refused(
                             format!("read {}", path.display()),
                             format!(
                                 "`{}` is an image, and no link this role can reach declared \
-                                 `vision = true`. Nothing here can look at it (`M-36`)",
+                                 `vision = true`. Nothing here can look at it (`M-38`)",
                                 path.display()
                             ),
                         ));
@@ -1389,7 +1389,7 @@ fn derived_excludes() -> String {
     .join(" ")
 }
 
-/// The media type of an image this harness can hand to a model (`M-36`).
+/// The media type of an image this harness can hand to a model (`M-38`).
 ///
 /// A closed list, by extension. Sniffing the bytes would be more thorough and
 /// answer a question nobody asked: the wire formats accept these four, so a
@@ -2268,7 +2268,7 @@ struct Held {
         }
     }
 
-    /// `M-36`: a read of an image hands back the image, for a role whose links
+    /// `M-38`: a read of an image hands back the image, for a role whose links
     /// can see one — and the base64 stays out of the text everything else
     /// reads.
     #[test]
@@ -2301,7 +2301,7 @@ struct Held {
             .expect_err("nothing here can look at it");
         let text = format!("{err}");
         assert!(text.contains("is an image"), "{text}");
-        assert!(text.contains("M-36"), "it cites the rule: {text}");
+        assert!(text.contains("M-38"), "it cites the rule: {text}");
         assert!(!text.contains("UTF-8") && !text.contains("utf-8"), "not a decoding error: {text}");
     }
 

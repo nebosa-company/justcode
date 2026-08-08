@@ -36,7 +36,7 @@ pub enum Protocol {
     Responses,
 }
 
-/// An image on its way to a model that can see one (`M-36`).
+/// An image on its way to a model that can see one (`M-38`).
 ///
 /// Base64 rather than a path or a URL, because both of the wire formats here
 /// want the bytes inline and because a URL would be a second egress the
@@ -79,7 +79,7 @@ impl Message {
     }
 }
 
-/// Standard base64, for the one place bytes go on the wire (`M-36`).
+/// Standard base64, for the one place bytes go on the wire (`M-38`).
 ///
 /// Written out rather than taken as a dependency: the harness has no base64
 /// crate, adding one is an approval decision under this project's own rules,

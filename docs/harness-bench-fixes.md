@@ -22,7 +22,7 @@ that fix 1 was written from — 37 tasks at mean 0.465 — was substantially an
 artifact: the benchmark's sandboxes lived inside another project's checkout,
 whose `.gitignore` matched them, so `T-29` discarded every write from `touched`
 and `V-13` recorded "changed nothing" for steps that had written plenty. That is
-filed as `T-30` and fixed. Fix 1 remains a real gap in a real mechanism; its
+filed as `T-33` and fixed. Fix 1 remains a real gap in a real mechanism; its
 evidence was contaminated.
 
 ---
@@ -366,9 +366,9 @@ a pattern. A signature in the journal would have said otherwise, and did.
 |---|---|---|---|---|
 | 1 | Second attempt after a detected no-op | 31 | small | done, `L-35` |
 | 2 | Path normalisation and candidate narrowing in `X-13`/`X-2` | **2** | small | done, `X-15` |
-| 3 | Refuse git outside the workspace repository | 15 | small | done, `G-18` |
-| 4 | First-token deadline as a link key | 2 | trivial | done, `M-35` |
-| 5 | Image content in the model client | **1** | large | built, `M-36`; `008` still needs a vision model, `013` never belonged here |
+| 3 | Refuse git outside the workspace repository | 15 | small | done, `G-20` |
+| 4 | First-token deadline as a link key | 2 | trivial | done, `M-37` |
+| 5 | Image content in the model client | **1** | large | built, `M-38`; `008` still needs a vision model, `013` never belonged here |
 
 Row 2 read **11** until its refusals were resolved against their own workspace
 roots. That count was tasks which *recorded* a refusal, not tasks a refusal

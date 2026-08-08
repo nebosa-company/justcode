@@ -325,7 +325,7 @@ pub struct Link {
     /// a 101-task benchmark run, two batches were blocked because a cloud link
     /// took longer than twenty seconds to begin answering.
     pub first_token: Duration,
-    /// Whether this link's model can be shown an image (`M-36`).
+    /// Whether this link's model can be shown an image (`M-38`).
     ///
     /// Declared, never guessed. A model id says nothing reliable about vision —
     /// the same name gains and loses it across releases — and guessing wrong
@@ -608,7 +608,7 @@ impl Links {
 
     /// The links a role would try, in order (`M-3`).
     /// Whether every link this role might be answered by can see an image
-    /// (`M-36`).
+    /// (`M-38`).
     ///
     /// Every, not any. Images live in the conversation, and the conversation
     /// outlives a failover: a chain whose second link is text-only would be

@@ -658,7 +658,7 @@ impl Repo {
     }
 
     /// Whether this `Repo`'s root is the repository, rather than somewhere
-    /// inside a larger one (`G-18`).
+    /// inside a larger one (`G-20`).
     ///
     /// A second `git` call on a path that already spawns one. Worth it: the
     /// alternative is answering a question about the wrong repository quickly.
