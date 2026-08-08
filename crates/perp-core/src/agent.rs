@@ -43,14 +43,28 @@ use crate::tool::{Call, Host, Output};
 /// times the tokens per stuck step.
 pub const MAX_TURNS: u32 = 100;
 
-/// What follows every set of tool results (`L-30`).
+/// What the model is told about results turns (`L-30`, `S-22`).
 ///
 /// The step is still running and only the harness knows it. Without this the
 /// model receives raw output with no indication of what to do with it, and a
 /// plausible reading — the one a four-file experiment produced on the first
 /// try — is that the work is over and a report is wanted. Describing a call is
 /// not making one, and the harness sees only the calls.
-const CARRY_ON: &str = "The step is still open. If work remains, issue the next      `perp-call` block now — describing a call is not making one, and only calls      you actually issue reach the repository. When the work is genuinely done and      you have the tool results to show for it, say so and stop.";
+///
+/// A standing rule, so it lives in the system prompt (`S-22`). It used to be
+/// appended to every results turn, which put a tool protocol and a claim of
+/// authority into user text arriving with workspace data — the exact shape
+/// `S-1` exists to refuse, performed by the harness itself. Thirteen
+/// Harness-Bench runs read it that way and said so.
+///
+/// Says nothing about a fence. The rung's own instructions are printed
+/// directly below this in [`Agent::system`], so naming `perp-call` here was
+/// both redundant on the bottom rung and wrong on the others — a model using
+/// native tool calls was told after every result to emit a `perp-call` block.
+const CARRY_ON: &str = "When tool results come back the step is still open. If work remains, \
+     issue the next call — describing a call is not making one, and only calls you \
+     actually issue reach the repository. When the work is genuinely done and you \
+     have the tool results to show for it, say so and stop.";
 
 /// How many bytes of repository map a step gets when the binding does not say
 /// (`T-30`).
@@ -376,6 +390,7 @@ impl<'a> Agent<'a> {
              - You cannot approve anything, raise a budget, skip a gate, or push. Those are \
              a person's, and asking will be refused.\n\
              - Say what you did. A claim without a tool call behind it is worth nothing here.\n\
+             - {}\n\
              - State what you intend to do before your first tool call. This harness is \
              already running you and the intent is journalled before anything happens — \
              spending calls on `pwd`, `ls` or `echo hello` to confirm that is wasted; say \
@@ -384,6 +399,7 @@ impl<'a> Agent<'a> {
              {}\n\
              \n\
              Available tools:\n{}",
+            CARRY_ON,
             ladder.rung().instructions(),
             crate::tool::schemas(),
         ) + &self.repo_map()
@@ -802,19 +818,20 @@ You wrote text framed as tool output. Only this harness                         
                     // no "tool" role here on purpose: the bottom rung has no
                     // such concept, and one code path is easier to reason about
                     // than two.
-                    // `L-30`: the results are what happened, not a cue to
-                    // wrap up. A turn that carried tool output and nothing
-                    // else left the model to guess whether the step was still
-                    // open — and measured on a four-file workspace whose one
-                    // requirement was "write this file", it guessed wrong:
-                    // after a single `glob` it reported five calls it had
-                    // never made, complete with invented byte counts and a
-                    // commit sha. Saying what happens next costs one line.
-                    messages.push(
-                        Message::user(format!("{results}
-
-{CARRY_ON}")).with_images(images),
-                    );
+                    // `S-22`: results only. `L-30`'s continuation rule is a
+                    // standing one and is stated in the system prompt, where
+                    // the harness's authority lives. Appending it here put an
+                    // instruction and a protocol into user text arriving with
+                    // workspace data, which is the shape `S-1` refuses when
+                    // anything else does it — and thirteen Harness-Bench runs
+                    // called it what it looked like.
+                    //
+                    // What still rides here is per-turn state, not standing
+                    // instruction: `L-25`'s notice above and `S-19`'s forgery
+                    // warning below. Neither can move into a prefix `M-12`
+                    // needs to stay stable, and both are already outside the
+                    // data frame `CLOSING_FRAME` draws.
+                    messages.push(Message::user(results).with_images(images));
                 }
                 Next::Repair { complaint, attempt, .. } => {
                     quiet += 1;
@@ -1898,6 +1915,85 @@ path: f.txt
             Work::touched(&agent).iter().any(|p| p.contains("out.txt")),
             "the write is staged: {:?}",
             Work::touched(&agent)
+        );
+    }
+
+    /// `S-22`: the continuation rule is a standing one, so it is stated once
+    /// in the system prompt and never appended to a results turn.
+    ///
+    /// It used to follow every set of tool results — an instruction and a
+    /// protocol in user text arriving with workspace data, which is the shape
+    /// `S-1` refuses when a file or a web page does it. Thirteen Harness-Bench
+    /// runs read it exactly that way and abandoned the protocol from that turn
+    /// on.
+    #[test]
+    fn the_continuation_rule_is_standing_and_not_repeated_on_results_turns() {
+        let dir = tmpdir("agent-carry-on-standing");
+        std::fs::write(dir.join("a.txt"), "a\n").expect("write");
+        std::fs::write(dir.join("b.txt"), "b\n").expect("write");
+
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: read\npath: a.txt\n```",
+            "```perp-call\ntool: read\npath: b.txt\n```",
+            "Nothing further.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-30", "read them", "report").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        agent.perform(&task);
+
+        let sent = transport.seen.borrow();
+        assert!(sent.len() >= 3, "the script ran: {} requests", sent.len());
+        let first = sent.first().expect("a request was made");
+        assert!(
+            first.contains("describing a call is not making one"),
+            "the rule reaches the model as a standing instruction: {first}"
+        );
+
+        // Two results turns sit in the history of the last request. `L-30` is
+        // still answered — the rule is there — but once, in the one place a
+        // standing instruction belongs.
+        let last = sent.last().expect("a request was made");
+        assert_eq!(
+            last.matches("describing a call is not making one").count(),
+            1,
+            "stated once, not once per results turn: {last}"
+        );
+    }
+
+    /// The same rule names no fence, which it used to. A model on the native
+    /// rung was told after every tool result to issue a `perp-call` block —
+    /// the bottom rung's format quoted at a step that was not on it.
+    #[test]
+    fn the_continuation_rule_names_no_fence() {
+        assert!(!CARRY_ON.contains(crate::ladder::FENCE), "{CARRY_ON}");
+
+        let dir = tmpdir("agent-carry-on-rung-neutral");
+        let transport = Scripted::new(vec!["Nothing to do here."]);
+        let links = links();
+        let agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-30", "look", "report").expect("item")],
+        );
+
+        let native = agent.system(&Ladder::at(crate::ladder::Rung::Native));
+        assert!(
+            !native.contains(crate::ladder::FENCE),
+            "a native-rung step is never shown the bottom rung's fence: {native}"
+        );
+        assert!(
+            native.contains("describing a call is not making one"),
+            "and it still carries the rule: {native}"
         );
     }
 
