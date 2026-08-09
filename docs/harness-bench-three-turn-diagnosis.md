@@ -189,6 +189,7 @@ The mitigations (`--system-prompt-file`, `--tools ""`, `--safe-mode`) fixed the 
 **Two side defects surfaced, worth their own entries:**
 
 - **047-code-review-risk (Sonnet)**: the read path came back as `…oc-bench-v2-047-code-review-ri[redacted]\workspace/in/review/diff.patch` and was then refused by X-2 as resolving outside the workspace. A redactor mangled a path mid-string and the X-2 refusal was the downstream consequence. Not seen elsewhere.
+  **This turned out to be 047's whole cause, not a side defect** — see the postscript. Filing it as secondary was the one call in this document that was wrong.
 - **022-local-rest-api (Sonnet)**: `shell(command=echo $MOCK_API_BASE)` returned the literal string `$MOCK_API_BASE`. POSIX-style expansion assumed under a Windows shell.
 
 ---
@@ -201,3 +202,76 @@ The mitigations (`--system-prompt-file`, `--tools ""`, `--safe-mode`) fixed the 
 - **Why Sonnet recovers on 085/104 and not on these 13.** Both directions are observed; I found no feature separating them beyond the degraded-first-result amplifier, which is 3× and not decisive.
 - **Scores are from your brief, not from disk.** `D:/harness-bench-work/` contains only `sandbox/` — no results or scores file. I verified failure *shape* from journals and *output presence* from workspaces, but did not independently reproduce any rubric number.
 - **`usage-proxy/responses/*.json` are not independent evidence.** Every one carries `"reconstructed_from": "perpetum journal transcript"`, and the reconstruction is lossy — it splices the harness's `L-25` notice into the assistant's content. I used the journals only.
+
+---
+
+## Postscript: what the A/B found, 2026-08-09
+
+The four fixes this diagnosis recommended were built (`L-36`, `S-22`, `T-36`,
+and `T-34`'s decision), `perp.exe` was rebuilt, and all 14 tasks were rerun on
+`perpetum-sonnet`. **The three-turn signature is gone from all 14.** Eleven
+went from `0.00` to a real score; the three remaining zeros or near-zeros each
+have a cause outside this document's scope.
+
+| | before | after | |
+|---|---|---|---|
+| `003-browser` | 0.00 | **1.00** | ran at all for the first time |
+| `006-access-bilibili` | 0.00 | **1.00** | first `fetch` this harness ever completed unattended |
+| `010-office-docs` | 0.00 | **1.00** | |
+| `018-provider-failover-audit` | 0.00 | **0.92** | |
+| `022-local-rest-api-summary` | 0.00 | **0.87** | |
+| `011-code-debug` | 0.00 | **0.86** | |
+| `035-conflicting-source-resolution` | 0.00 | **0.84** | |
+| `033-offline-knowledge-qa` | 0.00 | **0.77** | |
+| `096-offline-knowledge-qa-insufficient-evidence` | 0.00 | **0.65** | |
+| `047-code-review-risk-report` | 0.00 | **0.64** | see below |
+| `021-batch-rename-transform` | 0.00 | **0.53** | |
+| `078-local-api-cursor-retry-ledger` | — | 0.04 | ran at all for the first time |
+| `038-research-brief-synthesis` | 0.00 | 0.00 | stopped short after a repair |
+| `008-image-recognize` | 0.00 | 0.00 | no vision link configured (`M-38`) |
+
+### Three things the A/B corrected in this document
+
+**1. `047` was not a side defect. It was the cause, and the injection dynamic
+was downstream of it.**
+
+Section 4 filed the mangled path as one of "two side defects, worth their own
+entries". It was the whole of `047`. `redact` searched each credential prefix
+with a bare `find`, so `sk-` matched inside `ri|sk-report` and consumed
+everything after it. The chain from there ran: path mangled → `X-2` correctly
+refuses a path that no longer resolves in the workspace → step reads nothing →
+answers in prose → `L-25` fires → `L-36`'s notice quotes the fence → the model
+declares that an injection too. **Every link after the first was working as
+designed.** Fixed as `S-24`; `047` now scores 0.64 in ten turns with no
+injection claim anywhere in its journal.
+
+The first report of this A/B said `L-36`'s corrective "gave the model something
+to distrust". That was wrong. `L-36` never got a fair test on `047` — it was
+firing on a step already broken upstream, and with the real cause gone it never
+fires at all.
+
+**2. `T-34` was inert on delivery and this could not have been seen from the
+transcripts.** `Host::policy_here` calls a fetch `Auto` when its host is on the
+egress allowlist — and no production path ever populated that list.
+`Egress::from_entries` had no caller in the crate and `Host::with_egress` had
+none either, which `S-18` had recorded and left. So the requirement was
+implemented, tested and merged while being unreachable, and the rerun would
+have read *"`T-34` did not help"* when the truth was *"`T-34` never ran"*.
+Fixed as `S-23`. `006`'s journal now shows a `fetch` completing with no
+approval request — the first in four rounds, against 9 of 9 refused before.
+
+**3. Three tasks had never run at all.** `003`, `006` and `078` failed in setup
+on a missing public-URL tunnel, which is the round-1 environment gap the
+improvement report already names. One environment variable
+(`HARNESSBENCH_PUBLIC_URL_TEMPLATE={local_url}`) fixed it: the mock server is
+on loopback and Perpetum is on the same machine, so the local URL was always
+the right one to hand the model.
+
+### What the A/B does not settle
+
+The mechanism `S-22` was built on remains inferred rather than isolated. Eleven
+tasks recovered after four fixes landed together, and nothing here separates
+their contributions — `T-36` alone would have cleaned up the five poisoned
+first results, and `S-24` alone accounts for `047`. A per-fix ablation was not
+run. What is measured is the aggregate: the signature that cost Sonnet fourteen
+tasks does not occur any more.

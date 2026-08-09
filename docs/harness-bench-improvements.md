@@ -91,12 +91,17 @@ conduct — and that gap is where the remaining work is.
 
 ---
 
-## 1. Sonnet rejects the tool protocol as a prompt injection — resolved
+## 1. Sonnet rejects the tool protocol as a prompt injection — resolved, and fixed
 
-**The largest remaining loss. The transcripts have now been read; neither of the
-two readings this section originally offered survived.** The full diagnosis is
+**The largest remaining loss. The transcripts were read, the fixes were built,
+and the 14 tasks were rerun: the signature is gone from all 14, and eleven went
+from `0.00` to a real score.** The full diagnosis and the A/B that followed it
+are in
 [`harness-bench-three-turn-diagnosis.md`](harness-bench-three-turn-diagnosis.md);
 what follows is the summary.
+
+Neither of the two readings this section originally offered survived. Nor,
+it turned out, did the diagnosis's own account of `047` — see §2.
 
 Both `claude-cli` backends parse **0%** of their turns at the native rung, so
 every reply goes through the prompted rung's text parsing. On that shared path,
@@ -137,43 +142,58 @@ and fixed for the system prompt, with the tool-results half left undone. Timing
 is 14/14 consistent: turn 1, system prompt only, correct call every time; turn 2,
 first results-in-user-turn, protocol abandoned every time.
 
-One caveat, the diagnosis's own: the mechanism is observational. Proving it
-needs an A/B — rerun the 13 tasks with the carry-on moved into the system
-prompt.
+The diagnosis flagged this mechanism as observational and asked for an A/B.
+The A/B has now run, and the caveat survives in a narrower form: the four fixes
+landed together and nothing separates their contributions. What is measured is
+that the signature is gone.
 
-## 2. What to fix, now that the cause is known
+## 2. What was fixed, and what the rerun showed
 
-**Not the parser.** Of the post-abandonment turns, only one names a real
-Perpetum tool; the rest are `powershell(...)` calls to a tool that does not
-exist, bare JSON, or `008`'s hallucinated write — which a more tolerant parser
-would score as a write that happened. Widening tolerance recovers at most one
-run and is actively dangerous. In order:
+All of the below are built, tested and committed; `perp.exe` is rebuilt. The
+rerun of all 14 tasks on `perpetum-sonnet` is the evidence, task by task, in
+the diagnosis document's postscript.
 
-1. **An empty parse on the prompted rung goes loud** when the step has already
-   issued a call and nothing was touched — spend a repair at `ladder.rs:329`
-   quoting the format, instead of accepting silence as an answer. Cheapest
-   change; all 13 runs would have received a corrective they never got.
-2. **Move the carry-on instruction out of the user turn** (`agent.rs:795`) into
-   the system prompt, leaving tool results as pure data. This attacks the cause.
-3. **Native tool use is not the config switch it looks like.** `Kind::Anthropic`
-   exists, but `probe.rs:151` sets `native_tool_calls` from
-   `matches!(kind, Kind::DeepSeek)` alone — the `anthropic` kind lands on the
-   same prompted rung as `claude-cli`. Widening that predicate is the long-term
-   answer for API links; the `claude-cli` kind itself can never take it.
-4. **`glob` fails in a non-git workspace** — `tool.rs:1005` implements it as
-   `git ls-files`, exit 128 outside a repository. It poisoned the first tool
-   result in 5 of the 14 and roughly triples Sonnet's trip rate (46% vs 15%
-   with a clean first result). Opus eats the same error and recovers, so it is
-   an amplifier, not the cause — and a defect regardless.
+1. **`L-36` — an empty parse on the prompted rung goes loud.** The one further
+   turn `L-25` already grants now states that a fenceless reply is read as
+   final and quotes the rung's own instructions, on the prompted rung only.
+   The parser itself is untouched, deliberately: of the post-abandonment turns
+   only one named a real Perpetum tool, and `008`'s hallucinated write is
+   something a more tolerant parser would have scored as a write that happened.
+2. **`S-22` — the carry-on instruction moved out of the user turn** into the
+   system prompt, leaving tool results as data. A latent bug fell out of it:
+   the text hardcoded `perp-call`, so a model on the *native* rung was told
+   after every result to emit a bottom-rung fenced block.
+3. **`T-36` — `glob` and `grep` ask git only when the workspace is the
+   repository.** `git ls-files` exits 128 outside a repository, which poisoned
+   the first tool result in 5 of the 14. `grep` had the identical defect one
+   arm above and got the same fix.
+4. **`S-24` — a credential prefix is a key only where a token starts.**
+   `redact` matched `sk-` inside `ri|sk-report` and ate the rest of the path.
+   **This was the whole of `047`**, which the diagnosis had filed as a side
+   defect; the injection refusal there was downstream of a path the model never
+   wrote. `047` now scores 0.64. The same bug mangles `ta|sk-runner` and
+   `di|sk-cache`, so it was never only a benchmark problem.
+5. **`S-23` — the list `fetch` may reach is read from the binding.** Found
+   while preparing the rerun, and the reason `T-34` had never once fired: no
+   production path populated `Host::egress`, so every fetch in four rounds was
+   refused as *"the allowlist is empty"*. `Egress::from_entries` had no caller
+   and `Host::with_egress` had none either — which `S-18` had already recorded
+   and left. `T-34` was implemented, tested and merged while unreachable.
 
-Two side defects surfaced in passing: `047`'s read path came back mangled by a
-redactor mid-string and was then correctly refused by `X-2`, and `022`'s
-`echo $MOCK_API_BASE` returned the literal string — POSIX expansion assumed
-under a Windows shell.
+**Still open, and unchanged by the rerun.** `probe.rs:151` sets
+`native_tool_calls` from `matches!(kind, Kind::DeepSeek)` alone, so the
+`anthropic` kind lands on the same prompted rung as `claude-cli`. Native tool
+use for API links is still the long-term answer and is still not the config
+switch it looks like; the `claude-cli` kind can never take it.
 
-## 2. `fetch` is a tool the loop does not have
+One defect from the diagnosis is still open and unfixed: `022`'s
+`echo $MOCK_API_BASE` returned the literal string, POSIX expansion assumed
+under a Windows shell. It did not stop the task — `022` scores 0.87 — so it is
+a papercut rather than a loss.
 
-Filed as `T-34`, not implemented.
+## 3. `fetch` was a tool the loop did not have — fixed
+
+Filed as `T-34`, decided, implemented, and then found to be inert until `S-23`.
 
 `Tool::Fetch` is classified `Approve`, and `L-19` says the loop does not wait —
 so unattended the call never runs and the request joins a queue nobody reads.
@@ -190,7 +210,21 @@ anyway, and `S-1` decides what returning content may do, which is nothing. Makin
 `fetch` `Auto` for a host already on the egress allowlist costs nothing the other
 two rules do not already cover.
 
-## 3. Vision has plumbing and nothing to carry
+**Decided that way** — `Auto` for an allowlisted host, rather than a second
+binding key naming hosts pre-approved for the cycle. A second list would refine
+*reachable* against *fetchable-unattended*, a distinction nothing measured has
+needed, and would answer a gate with another gate.
+
+**Then it did nothing, and that is the part worth remembering.** `S-23` found
+that no production path ever populated `Host::egress`, so the condition
+`T-34` turns on could never hold. It was implemented, tested, reviewed and
+merged while structurally unreachable — and the test that "proved" it built its
+`Host` with `with_egress` by hand, exercising the mechanism and never the
+wiring. With `S-23` in place, `006-access-bilibili`'s journal shows a `fetch`
+completing with **no approval request**: the first in four rounds, against 9 of
+9 refused before.
+
+## 4. Vision has plumbing and nothing to carry
 
 `M-38` built image content blocks on both wire formats and a `vision` link key.
 No configured link declares it, and the models under test cannot see, so
@@ -201,7 +235,7 @@ because `008` is one of the two tasks whose semantic grading does not run. Fixin
 the rubric key comes first; there is no point pointing a vision model at a task
 that cannot score it.
 
-## 4. `L-35`'s second attempt is worth keeping and was oversold
+## 5. `L-35`'s second attempt is worth keeping and was oversold
 
 A step that stops having written nothing is now told once and given one further
 turn. The mechanism is right and the gap was real — `L-25`'s notice rides back
@@ -212,7 +246,7 @@ But its measured motivation was `T-33`'s contamination. In the clean round the
 no-op cause accounts for **2 tasks**, not 37. Keep it; do not expect it to move a
 score.
 
-## 5. What is already done
+## 6. What is already done
 
 `X-15` (path spelling on Windows), `G-20` (git refused outside the workspace
 repository), `M-37` (first-token deadline as a link key), `T-33` (gitignore
@@ -231,18 +265,24 @@ effort, and the one change whose failure mode is subtle goes to Opus at high.
 | | Change | Evidence | Size | Do with |
 |---|---|---|---|---|
 | 1 | ~~Read a Sonnet three-turn transcript against an Opus one~~ **done** | verdict: protocol rejected as injection, 13 vs 0 | — | was Opus, xhigh |
-| 2a | Empty parse goes loud on the prompted rung (`ladder.rs:329`) | 13 refusals accepted as answers | small | Fable, medium — the condition is already specified above |
-| 2b | Carry-on instruction out of the user turn (`agent.rs:795`) | 14/14 break on the first results turn | small | **Opus, high** — reworks the words every model sees on every turn, and the trigger elements are confounded; a careless rewrite re-creates the injection shape it removes |
-| 2c | Fix `glob` outside a git repository (`tool.rs:1005`) | poisoned 5 of 14 first results, 3× trip rate | small | Fable, low — mechanical fallback |
-| 3 | `fetch` auto for an allowlisted host (`T-34`) | 9 of 9 refused, 5 tasks | small | Fable, medium — after the design decision recorded in `T-34` is made |
+| 2a | ~~Empty parse goes loud on the prompted rung~~ **done, `L-36`** | 13 refusals accepted as answers | — | was Fable, medium |
+| 2b | ~~Carry-on instruction out of the user turn~~ **done, `S-22`** | 14/14 break on the first results turn | — | was Opus, high |
+| 2c | ~~Fix `glob` outside a git repository~~ **done, `T-36`** | poisoned 5 of 14 first results, 3× trip rate | — | was Fable, low |
+| 2d | ~~A credential prefix is a key only where a token starts~~ **done, `S-24`** | the whole of `047`, and `ta\|sk-runner` everywhere else | — | found during the A/B |
+| 3 | ~~`fetch` auto for an allowlisted host~~ **done, `T-34` + `S-23`** | 9 of 9 refused; `T-34` alone was inert | — | was Fable, medium |
 | 4 | A vision-capable rubric key | 2 tasks scored on a tenth of themselves | environment | a person — key or quota, not code |
 | 5 | ~~Declare `effort` on subprocess links~~ **done** | `M-34` was already built; the benchmark config now declares `medium` | — | — |
+| 6 | Native tool use for API links (`probe.rs:151`) | `anthropic` kind lands on the prompted rung with `claude-cli` | large | **Opus, high** — a new rung path under the id discipline |
 
-Nothing above is a correctness defect in Perpetum's parser — the one thing item
-1 was expected to indict. 2a–2c are loop and tool defects the diagnosis
-surfaced; 3 is a policy that does not fit unattended operation; 4 is the
-benchmark's environment. After 2a/2b land, the A/B that proves the mechanism is
-a rerun of the 13 tasks on Sonnet.
+**Nothing here was a correctness defect in the parser** — the one thing item 1
+was expected to indict, and the reason reading transcripts before writing code
+was worth the hour. 2a–2d are loop, tool and filter defects; 3 was a policy
+that did not fit unattended operation, plus wiring that had never existed.
+
+Only two items remain. Item 4 is the benchmark's environment and needs a
+person. Item 6 is the one piece of real engineering left, and the rerun
+did not make it more urgent: with the signature gone, the prompted rung is
+no longer costing Sonnet fourteen tasks.
 
 ---
 
@@ -265,8 +305,19 @@ a rerun of the 13 tasks on Sonnet.
 - **The process judge is `deepseek-v4-flash` judging DeepSeek's own runs.**
   Self-evaluation bias is unquantified.
 - **Two tasks are not scored.** See above.
+- **The A/B does not apportion credit.** Five fixes landed before the rerun and
+  nothing separates their contributions. `T-36` alone would have cleaned up the
+  five poisoned first results and `S-24` alone accounts for `047`, so `S-22`'s
+  mechanism — the one the whole diagnosis turns on — remains inferred rather
+  than isolated. A per-fix ablation was not run.
+- **The rerun is 14 tasks, not 106.** It says the signature is gone from the
+  tasks that had it. It does not say what the suite now scores, and given the
+  variance above, only a full round would.
 
-The honest summary of four rounds: Perpetum's conduct is strong and its security
-boundary held completely; its losses are concentrated in one link kind and one
-parsing rung; and most of what the first round appeared to find was the benchmark
-measuring its own setup.
+The honest summary of four rounds and one A/B: Perpetum's conduct is strong and
+its security boundary held completely; its largest measured loss is now fixed
+and the signature that cost Sonnet fourteen tasks does not occur any more; and
+the recurring lesson across all of it is that **most of what looked like a
+finding was the instrument** — the benchmark measuring its own setup in round 1,
+a requirement that had never once executed in `T-34`, and a diagnosis that named
+`047`'s real cause and filed it as a footnote.
