@@ -1020,15 +1020,13 @@ impl Driver<'_> {
         // prefixes. This is the client that carries a batch's prompts — repo
         // text, file contents, gate output — to whichever link answers, so it
         // is the one that most needs them.
-        let redact = {
-            let entries: Vec<(String, String)> = engine
-                .session()
-                .binding()
-                .entries()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect();
-            crate::security::patterns_from_entries(&entries)
-        };
+        let entries: Vec<(String, String)> = engine
+            .session()
+            .binding()
+            .entries()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        let redact = crate::security::patterns_from_entries(&entries);
         // `T-30`: the binding may size the repo map, or turn it off with `0`.
         // Read here as well as on the `run` path — `with_map_budget` was called
         // in exactly one place, `cmd_run`, so every batch that went through a
@@ -1053,7 +1051,11 @@ impl Driver<'_> {
                 ),
             self.links,
             self.health,
-            crate::agent::host_for(&self.root),
+            // `S-23`: the hosts `fetch` may reach, from the binding. Built
+            // through `host_for` before this, which leaves the list empty —
+            // so every fetch was refused as "the allowlist is empty" and
+            // `egress.allow` was a key nothing read.
+            crate::agent::host_for_binding(&self.root, &entries),
             items,
         )
         .picked_over(passed_over)

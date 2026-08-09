@@ -36,24 +36,78 @@ pub enum Protocol {
     Responses,
 }
 
+/// An image on its way to a model that can see one (`M-38`).
+///
+/// Base64 rather than a path or a URL, because both of the wire formats here
+/// want the bytes inline and because a URL would be a second egress the
+/// allowlist never saw (`S-4`). It stays out of the journal for the reason
+/// `capture.rs` already gives: a PNG in a JSONL record is a megabyte of base64
+/// in a file meant to be read with `tail`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Image {
+    /// `image/png`, `image/jpeg` — what both APIs call the media type.
+    pub media_type: String,
+    pub base64: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message {
     pub role: String,
     pub content: String,
+    /// Images carried alongside the text, for a link that declared it can see
+    /// them. Empty is the ordinary case and serialises exactly as before, so a
+    /// text-only conversation produces byte-identical bodies (`M-12`).
+    pub images: Vec<Image>,
 }
 
 impl Message {
     pub fn user(content: impl Into<String>) -> Message {
-        Message { role: "user".into(), content: content.into() }
+        Message { role: "user".into(), content: content.into(), images: Vec::new() }
     }
 
     pub fn system(content: impl Into<String>) -> Message {
-        Message { role: "system".into(), content: content.into() }
+        Message { role: "system".into(), content: content.into(), images: Vec::new() }
     }
 
     pub fn assistant(content: impl Into<String>) -> Message {
-        Message { role: "assistant".into(), content: content.into() }
+        Message { role: "assistant".into(), content: content.into(), images: Vec::new() }
     }
+
+    pub fn with_images(mut self, images: Vec<Image>) -> Message {
+        self.images = images;
+        self
+    }
+}
+
+/// Standard base64, for the one place bytes go on the wire (`M-38`).
+///
+/// Written out rather than taken as a dependency: the harness has no base64
+/// crate, adding one is an approval decision under this project's own rules,
+/// and the alphabet has not changed since 1987.
+pub fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    // Indexed rather than using the slice-splitting iterator, and that is not a
+    // style preference: `reachable.rs` decides what is called by scanning
+    // source text for the name, so borrowing that method's name here — in code
+    // *or in a comment* — makes a same-named private function elsewhere look
+    // reachable when it is not. Deleting its allowlist line to satisfy a false
+    // positive would spend a real invariant on a cosmetic one.
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    let mut at = 0;
+    while at < bytes.len() {
+        let left = bytes.len() - at;
+        let b1 = bytes[at];
+        let b2 = if left > 1 { bytes[at + 1] } else { 0 };
+        let b3 = if left > 2 { bytes[at + 2] } else { 0 };
+        let n = (u32::from(b1) << 16) | (u32::from(b2) << 8) | u32::from(b3);
+        out.push(ALPHABET[(n >> 18) as usize & 63] as char);
+        out.push(ALPHABET[(n >> 12) as usize & 63] as char);
+        out.push(if left > 1 { ALPHABET[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if left > 2 { ALPHABET[n as usize & 63] as char } else { '=' });
+        at += 3;
+    }
+    out
 }
 
 #[derive(Debug, Clone)]
@@ -85,9 +139,38 @@ impl ChatRequest {
             .messages
             .iter()
             .map(|message| {
+                // A string where there are no images, an array of parts where
+                // there are. Both are valid `content`; keeping the string form
+                // for the ordinary case means a text-only conversation
+                // serialises exactly as it did before images existed, which is
+                // what `M-12`'s stable prefix depends on.
+                let content = if message.images.is_empty() {
+                    Value::str(message.content.clone())
+                } else {
+                    let mut parts = vec![Value::Obj(vec![
+                        ("type".into(), Value::str("text")),
+                        ("text".into(), Value::str(message.content.clone())),
+                    ])];
+                    for image in &message.images {
+                        parts.push(Value::Obj(vec![
+                            ("type".into(), Value::str("image_url")),
+                            (
+                                "image_url".into(),
+                                Value::Obj(vec![(
+                                    "url".into(),
+                                    Value::str(format!(
+                                        "data:{};base64,{}",
+                                        image.media_type, image.base64
+                                    )),
+                                )]),
+                            ),
+                        ]));
+                    }
+                    Value::Arr(parts)
+                };
                 Value::Obj(vec![
                     ("role".into(), Value::str(message.role.clone())),
-                    ("content".into(), Value::str(message.content.clone())),
+                    ("content".into(), content),
                 ])
             })
             .collect();
@@ -630,7 +713,7 @@ impl<'a> Client<'a> {
         crate::stream::read(
             &crate::stream::streaming_args(args),
             stdin.as_deref(),
-            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            link.first_token,
             interrupt,
             on_event,
         )
@@ -679,7 +762,7 @@ impl<'a> Client<'a> {
             &args[1..],
             Some(&stdin),
             crate::stream::parse_cli_line,
-            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            link.first_token,
             interrupt,
             on_event,
         )
@@ -950,7 +1033,7 @@ impl<'a> Client<'a> {
         let http = Self::authorise(link, Request::post_json(url, body));
         let response = self.transport.send_deadlined(
             &http,
-            std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            link.first_token,
         )?;
         let reply = Self::interpret(link, &response)?;
         Ok((reply, response.body))
@@ -1654,6 +1737,35 @@ mod tests {
             .verify_model(&links, links.get("here").expect("here"))
             .expect_err("must refuse");
         assert!(format!("{err}").contains("Available: something-else"), "{err}");
+    }
+
+    /// `M-36`: the wire shape for an image, and — the part that matters for
+    /// `M-12` — that a text-only conversation is byte-identical to what it was
+    /// before images existed.
+    #[test]
+    fn images_ride_as_content_parts_and_text_only_bodies_do_not_move() {
+        let plain = ChatRequest::new(vec![Message::user("hello")]).to_json("small");
+        assert!(plain.contains(r#""content":"hello""#), "a string, as before: {plain}");
+
+        let image = Image { media_type: "image/png".into(), base64: "AAEC".into() };
+        let with = ChatRequest::new(vec![Message::user("what is this?").with_images(vec![image])])
+            .to_json("small");
+        assert!(with.contains(r#""type":"text""#), "{with}");
+        assert!(with.contains(r#""type":"image_url""#), "{with}");
+        assert!(with.contains("data:image/png;base64,AAEC"), "{with}");
+    }
+
+    /// Base64 against the cases that catch an off-by-one: the two padded
+    /// lengths, and a byte over 127 that a signed shift would mangle.
+    #[test]
+    fn base64_pads_the_way_the_standard_says() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foob"), "Zm9vYg==");
+        assert_eq!(base64(&[0xff, 0xfe, 0xfd]), "//79");
+        assert_eq!(base64(&[0x89, 0x50, 0x4e, 0x47]), "iVBORw==");
     }
 
     /// A `claude` stand-in for tests: no Anthropic account, no real CLI, just

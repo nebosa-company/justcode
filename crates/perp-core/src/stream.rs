@@ -253,11 +253,20 @@ pub fn parse_cli_line(line: &str) -> Option<Event> {
     }
 }
 
-/// How long a link may say nothing before it is failed over (`M-23`).
+/// The default for how long a link may say nothing before it is failed over
+/// (`M-23`).
 ///
 /// Twenty seconds: longer than a cold model's first token on a slow local rig,
 /// far shorter than the whole-request timeout, and short enough that a wedged
 /// server costs one failover rather than a stalled batch.
+///
+/// **A default, not the value.** `link.<name>.first_token_seconds` overrides it
+/// per link, because time to first token is a fact about a provider under load
+/// and `M-14` says the harness must not compile those in. The reasoning above
+/// is sound for the rigs it was written against and was still wrong somewhere
+/// else: measured over a 101-task benchmark run, two batches were blocked
+/// because a cloud link took longer than twenty seconds to begin answering, and
+/// there was no line anyone could write to say so.
 pub const FIRST_TOKEN_SECONDS: u64 = 20;
 
 /// What a stream produced.

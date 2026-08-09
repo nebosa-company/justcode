@@ -124,19 +124,32 @@ pub fn redact(text: &str, extra: &[Pattern]) -> Redacted {
     let mut hits: Vec<String> = Vec::new();
 
     for (name, prefix) in ALWAYS {
-        while let Some(at) = out.find(prefix) {
+        let mut from = 0usize;
+        while let Some(offset) = out[from..].find(prefix) {
+            let at = from + offset;
             let end = out[at..]
                 .char_indices()
                 .find(|(_, c)| !is_token_char(*c))
                 .map_or(out.len(), |(offset, _)| at + offset);
+            // `S-24`: a key begins a token, it does not appear inside a word.
+            // `sk-` matched anywhere took `ri|sk-report`, `ta|sk-runner` and
+            // `di|sk-cache` with it — and everything after, to the next
+            // separator — so a path became one the workspace could not
+            // resolve and the step was refused for a name it never wrote.
+            let starts_a_token =
+                !out[..at].chars().next_back().is_some_and(|c| c.is_ascii_alphanumeric());
             // A bare prefix with nothing after it is prose, not a key.
-            if end - at <= prefix.len() {
-                break;
+            if !starts_a_token || end - at <= prefix.len() {
+                // Past this occurrence, not out of the loop: a real key later
+                // in the same text is still a key.
+                from = at + prefix.len();
+                continue;
             }
             out.replace_range(at..end, MASK);
             if !hits.contains(&(*name).to_string()) {
                 hits.push((*name).to_string());
             }
+            from = at + MASK.len();
         }
     }
 
@@ -505,6 +518,8 @@ mod tests {
             privacy,
             auth_env: None,
             concurrency: 1,
+            first_token: std::time::Duration::from_secs(crate::stream::FIRST_TOKEN_SECONDS),
+            sees_images: false,
         }
     }
 
@@ -570,6 +585,57 @@ mod tests {
     fn prose_that_merely_mentions_a_prefix_is_left_alone() {
         let text = "keys start with sk- and that is how you spot them";
         assert!(!redact(text, &[]).was_redacted(), "{}", redact(text, &[]).text);
+    }
+
+    /// `S-24`: a key begins a token. `sk-` matched anywhere inside a word, and
+    /// then ate to the next separator — so ordinary English words ending in
+    /// `sk` before a hyphen lost their tails, and a path lost the rest of
+    /// itself.
+    ///
+    /// Measured on Harness-Bench: `047-code-review-risk-report`'s workspace
+    /// path came back as `…code-review-ri[redacted]\workspace/in/…`, was
+    /// refused by `X-2` as resolving outside the workspace, and the step ended
+    /// having read nothing. `ri|sk-report`, and everything after it.
+    #[test]
+    fn a_word_that_merely_contains_a_prefix_keeps_its_tail() {
+        for text in [
+            "oc-bench-v2-047-code-review-risk-report-sonnet-20260809",
+            "014-task-decomposition",
+            "src/task-runner/disk-cache.rs",
+            "the risk-register and the desk-check",
+        ] {
+            let out = redact(text, &[]);
+            assert_eq!(out.text, text, "nothing here is a key");
+            assert!(!out.was_redacted(), "{}: {:?}", text, out.hits);
+        }
+    }
+
+    /// And the thing it exists for still goes. A key that starts a token is
+    /// redacted wherever the token starts — after a space, an `=`, a quote or
+    /// a path separator — and one appearing *after* a false positive is not
+    /// missed, which the old loop's `break` would have done.
+    #[test]
+    fn a_key_that_starts_a_token_is_still_redacted() {
+        for text in [
+            "sk-abcdef0123456789",
+            "Authorization: Bearer sk-abcdef0123456789",
+            "OPENAI_API_KEY=sk-abcdef0123456789",
+            "\"sk-abcdef0123456789\"",
+            "the risk-report used sk-abcdef0123456789 to authenticate",
+        ] {
+            let out = redact(text, &[]);
+            assert!(out.was_redacted(), "{text}");
+            assert!(!out.text.contains("sk-abcdef"), "{}", out.text);
+        }
+        // The false positive above must not have consumed the real key.
+        let both = redact("risk-report and sk-abcdef0123456789", &[]);
+        assert!(both.text.starts_with("risk-report and "), "{}", both.text);
+        assert!(!both.text.contains("abcdef"), "{}", both.text);
+
+        // A PEM header does not begin with an alphanumeric, so the boundary
+        // rule must not lock it out.
+        let pem = redact("-----BEGINRSAPRIVATEKEY", &[]);
+        assert!(pem.was_redacted(), "{}", pem.text);
     }
 
     #[test]

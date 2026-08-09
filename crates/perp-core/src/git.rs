@@ -631,9 +631,52 @@ impl Repo {
     /// counting it as productive lets a step report success having delivered
     /// nothing. `check-ignore` exits 0 when the path *is* ignored.
     pub fn ignores(&self, path: &str) -> bool {
+        // Only this workspace's own `.gitignore` has an opinion worth taking.
+        // `git` walks up until it finds a repository, so a workspace sitting
+        // inside somebody else's checkout is answered by *their* ignore rules —
+        // and `T-29` then discards writes as "not work" on the strength of a
+        // file that has never heard of this workspace.
+        //
+        // Measured, and it invalidated a whole benchmark run: sandboxes were
+        // created under a project whose `.gitignore` held `data_try*/`, so every
+        // path a step wrote came back ignored, `touched` stayed empty, and
+        // `V-13` recorded `read and reported, but changed nothing` for steps
+        // that had written plenty. One task scored full marks from the oracle
+        // while being told it had changed nothing, and spent fourteen turns
+        // where four sufficed. 59 of 133 runs carried the signature.
+        //
+        // `false` when the question cannot be asked honestly. That is the safe
+        // direction here: counting a write that git would have ignored costs a
+        // little noise in `touched`, and discarding one it would have kept
+        // costs the step.
+        if !self.is_own_root() {
+            return false;
+        }
         self.run_unchecked(&["check-ignore", "-q", "--", path])
             .map(|run| run.is_success())
             .unwrap_or(false)
+    }
+
+    /// Whether this `Repo`'s root is the repository, rather than somewhere
+    /// inside a larger one (`G-20`).
+    ///
+    /// A second `git` call on a path that already spawns one. Worth it: the
+    /// alternative is answering a question about the wrong repository quickly.
+    pub fn is_own_root(&self) -> bool {
+        let Ok(run) = self.run_unchecked(&["rev-parse", "--show-toplevel"]) else {
+            return false;
+        };
+        if !run.is_success() {
+            // Not a repository at all. Nothing here is ignored by anything.
+            return false;
+        }
+        let Some(top) = run.stdout_tail.lines().map(str::trim).find(|line| !line.is_empty()) else {
+            return false;
+        };
+        let top = PathBuf::from(top);
+        let top = top.canonicalize().unwrap_or(top);
+        let root = self.root.canonicalize().unwrap_or_else(|_| self.root.clone());
+        top == root
     }
 
     /// Does the working tree contain it right now?
@@ -1210,6 +1253,60 @@ mod tests {
         // On a batch branch the same commit is fine.
         repo.create_branch("perp/c1/b4").expect("branch");
         repo.commit(&CommitMessage::new("Commit onto the batch branch")).expect("commit");
+    }
+
+    /// `T-29` asks its own repository or nobody. The case this comes from: a
+    /// benchmark created workspaces under a project whose `.gitignore` held
+    /// `data_try*/`, so every path a step wrote came back ignored, `touched`
+    /// stayed empty, and `V-13` recorded "changed nothing" for steps that had
+    /// written plenty.
+    #[test]
+    fn a_foreign_gitignore_does_not_decide_what_this_workspace_wrote() {
+        let outer = repo("git-foreign-ignore");
+        std::fs::write(outer.root().join(".gitignore"), "work/\n").expect("ignore file");
+
+        // Inside that repository, and ignored by it — the exact shape.
+        let inner = outer.root().join("work");
+        std::fs::create_dir_all(&inner).expect("mkdir");
+        std::fs::write(inner.join("out.txt"), "the step's output\n").expect("write");
+
+        // The enclosing repository does ignore it, and is right to.
+        assert!(outer.ignores("work/out.txt"), "the outer repo's own rule applies to it");
+
+        // A workspace rooted at `work` is not that repository, so its rules are
+        // not this workspace's to obey.
+        let workspace = Repo::at(&inner);
+        assert!(!workspace.is_own_root(), "the workspace is inside a larger repo");
+        assert!(
+            !workspace.ignores("out.txt"),
+            "a foreign .gitignore must not discard this workspace's writes"
+        );
+    }
+
+    /// And the rule still works where it should: a repository's own ignore file
+    /// is obeyed, which is what `T-29` is for.
+    #[test]
+    fn a_repositorys_own_gitignore_is_still_obeyed() {
+        let repo = repo("git-own-ignore");
+        std::fs::write(repo.root().join(".gitignore"), "target/\n").expect("ignore file");
+        std::fs::create_dir_all(repo.root().join("target")).expect("mkdir");
+        std::fs::write(repo.root().join("target/build.log"), "noise\n").expect("write");
+        std::fs::write(repo.root().join("src.rs"), "fn main() {}\n").expect("write");
+
+        assert!(repo.is_own_root(), "the fixture is its own repository");
+        assert!(repo.ignores("target/build.log"), "a build artefact is not work");
+        assert!(!repo.ignores("src.rs"), "and a source file is");
+    }
+
+    /// A workspace that is no repository at all ignores nothing — the case the
+    /// benchmark moved to once the contamination was found.
+    #[test]
+    fn a_workspace_with_no_repository_ignores_nothing() {
+        let loose = tmpdir("git-no-repo");
+        std::fs::write(loose.join("out.txt"), "output\n").expect("write");
+        let repo = Repo::at(&loose);
+        assert!(!repo.is_own_root());
+        assert!(!repo.ignores("out.txt"), "nothing can have ignored it");
     }
 
     #[test]

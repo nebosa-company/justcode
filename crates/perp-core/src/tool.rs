@@ -293,6 +293,12 @@ pub struct Output {
     /// For a file read: the lines shown and how many the file has, so a model
     /// that was cut off can ask for the rest by number (`T-6`).
     pub lines: Option<Shown>,
+    /// An image the read produced, for a link that can be shown one (`M-38`).
+    ///
+    /// Carried apart from `text` and never inside it. The transcript, the
+    /// journal and the byte budget all treat this output as the one line of
+    /// prose it looks like; only the request assembly knows there are bytes.
+    pub image: Option<crate::client::Image>,
 }
 
 /// Which lines of a file a read actually returned.
@@ -307,7 +313,7 @@ impl Output {
     fn of(tool: Tool, text: String, budget: usize) -> Output {
         let full_bytes = text.len();
         if full_bytes <= budget {
-            return Output { tool, text, truncated: false, full_bytes, budget, lines: None };
+            return Output { tool, text, truncated: false, full_bytes, budget, lines: None, image: None };
         }
         // Keep the tail: a failing command says why at the end.
         let start = text.len() - budget;
@@ -323,6 +329,7 @@ impl Output {
             full_bytes,
             budget,
             lines: None,
+            image: None,
         }
     }
 
@@ -354,6 +361,7 @@ impl Output {
                 full_bytes: 0,
                 budget,
                 lines: Some(Shown { first, last: first.saturating_sub(1), total }),
+                image: None,
             };
         }
 
@@ -379,6 +387,30 @@ impl Output {
             full_bytes,
             budget,
             lines: Some(Shown { first, last: shown_last, total }),
+            image: None,
+        }
+    }
+
+    /// An image read, for a link that can be shown one (`M-38`).
+    ///
+    /// The text is what everything except the request assembly sees: the
+    /// transcript, the journal and the byte budget get one line of prose, and
+    /// the megabyte of base64 goes only where it is needed. `capture.rs` already
+    /// settled this for screenshots — a PNG in a JSONL record is a megabyte of
+    /// base64 in a file meant to be read with `tail`.
+    fn of_image(path: &Path, media_type: &str, bytes: usize, image: crate::client::Image) -> Output {
+        let text = format!(
+            "{} — {media_type}, {bytes} bytes, attached to this message",
+            path.display()
+        );
+        Output {
+            tool: Tool::Read,
+            full_bytes: text.len(),
+            text,
+            truncated: false,
+            budget: 0,
+            lines: None,
+            image: Some(image),
         }
     }
 
@@ -734,6 +766,10 @@ pub struct Host {
     /// Cycle 8 aimed two patches at it. They failed on a pre-image mismatch, so
     /// the guarantee survived by luck rather than by rule.
     protected: Vec<PathBuf>,
+    /// Whether anything this role can reach is able to look at an image
+    /// (`M-38`). False by default, which is what makes a read of a PNG a
+    /// refusal that says why rather than a UTF-8 error that does not.
+    sees_images: bool,
 }
 
 impl Host {
@@ -750,7 +786,22 @@ impl Host {
             timeout: Duration::from_secs(120),
             egress: crate::security::Egress::default(),
             protected: Vec::new(),
+            sees_images: false,
         }
+    }
+
+    /// Declare that a link this role can reach is able to see an image
+    /// (`M-38`). Set from the role's chain, not from a single link: the
+    /// conversation carries its images across a failover, so the answer has to
+    /// hold for every link that might be asked next.
+    pub fn seeing_images(mut self, sees: bool) -> Host {
+        self.sees_images = sees;
+        self
+    }
+
+    /// The same, in place, for a caller that holds the host by reference.
+    pub fn set_seeing_images(&mut self, sees: bool) {
+        self.sees_images = sees;
     }
 
     /// Refuse every writing tool on these paths, and on anything under them
@@ -823,7 +874,22 @@ impl Host {
     /// canonicalisable at any depth. The root itself always exists, so the
     /// walk terminates.
     fn resolve(&self, relative: &str) -> Result<PathBuf> {
-        let joined = self.root.join(relative);
+        // A model that believes it is in a POSIX shell writes `/d/repos/x` for
+        // `D:\repos\x`. Windows `join` reads a leading slash as rooted on the
+        // current drive, so the two spellings of one place land in different
+        // ones and the workspace's own path is refused as leaving it.
+        //
+        // Rare, and measured rather than assumed: across 59 `X-13`/`X-2`
+        // refusals in a Harness-Bench run, **two** were this. The other 57 were
+        // correct — ancestors, `..`, `/`, and tokens like `/s` that are not
+        // paths at all. Worth fixing because refusing a path for being spelled
+        // differently is wrong however seldom it happens, not because it was
+        // costing much.
+        //
+        // The original spelling is what the refusal quotes: the model needs to
+        // see the token it wrote, not the harness's rewrite of it.
+        let rewritten = cfg!(windows).then(|| msys_drive_path(relative)).flatten();
+        let joined = self.root.join(rewritten.as_deref().unwrap_or(relative));
         let root = self.root.canonicalize().unwrap_or_else(|_| self.root.clone());
         let mut probe = joined.clone();
         while !probe.exists() {
@@ -842,10 +908,48 @@ impl Host {
         Ok(joined)
     }
 
+    /// What a call is classified as *here* (`T-34`).
+    ///
+    /// [`classify`] answers from the call alone, which is what keeps it a
+    /// pure function and `C-1`'s claim testable. This adds the one thing the
+    /// call cannot carry: what the operator already declared about this
+    /// workspace.
+    ///
+    /// A `fetch` of a host on `S-4`'s egress allowlist is `Auto`. The approval
+    /// was a third gate on a question two rules had already settled — `S-4`
+    /// decides which machines may be reached, and applies to an approved fetch
+    /// too; `S-1` decides what returning content may do, which is nothing.
+    /// Against `L-19`, which says the loop does not wait, the third gate did
+    /// not mean "ask a person", it meant "never": measured across three
+    /// Harness-Bench rounds, **9 steps reached for `fetch` and all 9 were
+    /// refused**. Whether a URL task succeeded came down to whether the model
+    /// thought to route around its own harness with `curl` — and the run that
+    /// declined to, on the grounds that a person was deciding, scored zero for
+    /// its manners.
+    ///
+    /// A host that is *not* on the allowlist still needs a person. That is the
+    /// case where the operator has said nothing, and asking is the honest
+    /// answer to a question the harness cannot decide.
+    ///
+    /// Named `policy_here` rather than `policy` because `reachable.rs` matches
+    /// bare function names, and a second `policy` would mark `capture.rs`'s as
+    /// reached without anything having called it — a debt list that shrinks on
+    /// a coincidence is worse than one that does not shrink.
+    pub fn policy_here(&self, call: &Call) -> Policy {
+        let policy = classify(call);
+        if call.tool != Tool::Fetch || !matches!(policy, Policy::Approve { .. }) {
+            return policy;
+        }
+        match call.get("url") {
+            Some(url) if self.egress.check(url).is_ok() => Policy::Auto,
+            _ => policy,
+        }
+    }
+
     /// Classify, then run. There is no method that skips the first half.
     pub fn run(&self, call: &Call) -> Result<Output> {
         crate::verbose::say("tool", &call.signature());
-        match classify(call) {
+        match self.policy_here(call) {
             Policy::Never { reason } => Err(Error::refused(call.signature(), reason)),
             Policy::Approve { reason } => Err(Error::refused(
                 call.signature(),
@@ -872,6 +976,28 @@ impl Host {
         let text = match call.tool {
             Tool::Read => {
                 let path = self.resolve(call.need("path")?)?;
+                // An image is read as an image or not at all. `read_to_string`
+                // on a PNG fails on invalid UTF-8, and the model that asked was
+                // right to ask — the failure was the harness having no way to
+                // answer (`M-38`).
+                if let Some(media_type) = image_media_type(&path) {
+                    if !self.sees_images {
+                        return Err(Error::refused(
+                            format!("read {}", path.display()),
+                            format!(
+                                "`{}` is an image, and no link this role can reach declared \
+                                 `vision = true`. Nothing here can look at it (`M-38`)",
+                                path.display()
+                            ),
+                        ));
+                    }
+                    let bytes = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
+                    let image = crate::client::Image {
+                        media_type: media_type.to_string(),
+                        base64: crate::client::base64(&bytes),
+                    };
+                    return Ok(Output::of_image(&path, media_type, bytes.len(), image));
+                }
                 let text = std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
                 let line = |name: &str| call.get(name).and_then(|raw| raw.trim().parse().ok());
                 return Ok(Output::of_file(&text, line("from"), line("to"), self.budget));
@@ -909,8 +1035,17 @@ impl Host {
                 self.resolve(where_)?;
                 // Quoted: a directory with a space in it is one argument, and
                 // `split_command` is what decides that.
+                //
+                // `T-36`, same split as `glob` one arm below: `git grep`
+                // answers for the repository, and only when the repository is
+                // this workspace is that the right place to ask. `--no-index`
+                // searches the working tree as plain files, which is always
+                // about this workspace. Exit 1 from either form is "no
+                // matches", which is an answer and not an error.
+                let no_index =
+                    if crate::git::Repo::at(&self.root).is_own_root() { "" } else { "--no-index " };
                 self.shell(&format!(
-                    "git grep -n -- \"{pattern}\" \"{where_}\" {}",
+                    "git grep {no_index}-n -- \"{pattern}\" \"{where_}\" {}",
                     derived_excludes()
                 ))?
             }
@@ -921,16 +1056,33 @@ impl Host {
                 // would refuse the patterns the tool exists to accept.
                 // `git ls-files` lists what the repository has, which is inside
                 // the workspace by construction.
-                self.shell(&format!("git ls-files -- \"{pattern}\" {}", derived_excludes()))?
+                //
+                // `T-36`: only when the repository is this workspace. Anywhere
+                // else `git` answers about the wrong place — exit 128 in no
+                // repository, somebody else's index inside a larger one — so
+                // the filesystem walk answers instead.
+                if crate::git::Repo::at(&self.root).is_own_root() {
+                    self.shell(&format!("git ls-files -- \"{pattern}\" {}", derived_excludes()))?
+                } else {
+                    glob_walk(&self.root, pattern).join("\n")
+                }
             }
             Tool::Shell => {
                 let command = call.need("command")?;
                 self.confined(command)?;
+                // `shell git commit` is a git call wearing a shell, and the
+                // repository it lands in is decided the same way. Measured:
+                // a model refused at `git(args=…)` reached for
+                // `shell(command=git -C <path> …)` in the same run.
+                if invokes_git(command) {
+                    self.own_repository(command)?;
+                }
                 self.shell_within(command, self.asked_timeout(call))?
             }
             Tool::Git => {
                 let args = call.need("args")?;
                 self.confined(args)?;
+                self.own_repository(args)?;
                 self.shell(&format!("git {args}"))?
             }
             Tool::Gate => {
@@ -1052,11 +1204,12 @@ impl Host {
             }
 
             Tool::Fetch => {
-                // Reached only through `run_approved`: `classify` puts fetch on
-                // the Approve list, and `run` refuses it before it ever gets
-                // here. An approval is not enough on its own — the egress
-                // allowlist applies too, because approving *a* fetch is not
-                // approving *any* host (`S-4`).
+                // Two ways in: an operator's approval, or `T-34` — the host is
+                // already on the egress allowlist, so `Host::policy_here` called it
+                // `Auto`. The check below is what makes both safe, and it is
+                // not redundant with either. Approving *a* fetch is not
+                // approving *any* host (`S-4`), and `Host::policy_here` reads the
+                // `url` argument while this reads the one actually fetched.
                 let url = call.need("url")?;
                 self.egress.check(url).map_err(|refusal| {
                     Error::refused(refusal.host, format!("{} (`S-4`)", refusal.why))
@@ -1130,6 +1283,62 @@ impl Host {
             }
         }
         Ok(())
+    }
+
+    /// Refuse git when the repository is not the workspace (`X-13`, `G-1`).
+    ///
+    /// `git` walks *up* from the working directory until it finds a `.git`, so
+    /// a workspace sitting inside somebody else's checkout has that checkout as
+    /// its repository. Every classification upstream of this holds — `G-3`
+    /// staging, `G-4` hooks, `G-5` push — and all of them are answering about
+    /// the wrong repository. `T-22` reasons that a local commit is the loop's
+    /// own business, which is true exactly while the repository *is* the loop's.
+    ///
+    /// Found by running this harness over a benchmark whose sandboxes lived
+    /// under another project's checkout: **fourteen commits** landed on that
+    /// project's `main`, unattended and unapproved, each carrying a bench task's
+    /// output files. The thirteen runs that journalled `checkpoint commit
+    /// failed` were the ones where a `.gitignore` happened to refuse the `git
+    /// add` — the failures were luck, not a boundary, and the successes were
+    /// invisible until somebody read the other repository's log.
+    ///
+    /// Refuses reads too. A `git status` against the wrong repository answers
+    /// with thousands of unrelated files, and a model that believes that answer
+    /// is worse off than one told no.
+    ///
+    /// Equality, not ancestry: a workspace that is a subdirectory of its own
+    /// repository is refused here as well, and deliberately. That may be a
+    /// legitimate layout — a package inside a monorepo — and the answer is for
+    /// a person to say so, not for the harness to assume it from a path
+    /// relationship it cannot tell apart from this one.
+    fn own_repository(&self, args: &str) -> Result<()> {
+        let spec = Spec::new("git rev-parse --show-toplevel", &self.root, Duration::from_secs(30))
+            .with_env(Env::declared());
+        let Ok(run) = process::run(&spec) else { return Ok(()) };
+        if !run.is_success() {
+            // Not a repository at all. Git will say so itself, in its own
+            // words, and saying it twice helps nobody.
+            return Ok(());
+        }
+        let Some(top) = run.stdout_tail.lines().map(str::trim).find(|l| !l.is_empty()) else {
+            return Ok(());
+        };
+        let repo = PathBuf::from(top);
+        let repo = repo.canonicalize().unwrap_or(repo);
+        let root = self.root.canonicalize().unwrap_or_else(|_| self.root.clone());
+        if repo == root {
+            return Ok(());
+        }
+        Err(Error::refused(
+            format!("git {args}"),
+            format!(
+                "the repository here is `{}`, which is not the workspace `{}`. A commit, a \
+                 branch or a stage would land in somebody else's checkout, so git is refused \
+                 until the workspace is its own repository (`G-1`)",
+                repo.display(),
+                root.display()
+            ),
+        ))
     }
 
     fn shell(&self, command: &str) -> Result<String> {
@@ -1226,15 +1435,158 @@ impl Host {
 /// model is supposed to read. Only the append-only and regenerated files are
 /// hidden, and only from search: `read` still opens them by name, because an
 /// operator asking the chat surface about its own history should get an answer.
+const DERIVED: &[&str] = &[
+    ".harness/journal.jsonl",
+    ".harness/state.md",
+    ".harness/gates",
+    ".harness/artifacts",
+];
+
 fn derived_excludes() -> String {
-    [
-        ":(exclude).harness/journal.jsonl",
-        ":(exclude).harness/state.md",
-        ":(exclude).harness/gates",
-        ":(exclude).harness/artifacts",
-    ]
-    .map(|spec| format!("\"{spec}\""))
-    .join(" ")
+    DERIVED
+        .iter()
+        .map(|path| format!("\":(exclude){path}\""))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// `glob` without a repository to ask (`T-36`).
+///
+/// `git ls-files` was the whole implementation, and it answers for the
+/// repository, not the workspace: in a workspace that is no repository it
+/// fails with `fatal: not a git repository … [exit 128]`, and in a workspace
+/// inside somebody else's checkout it answers from *their* index — the same
+/// wrong repository `T-33` and `G-20` refuse elsewhere. Measured on
+/// Harness-Bench, the exit-128 case poisoned the first tool result of 5 of the
+/// 13 runs that ended with the model abandoning the tool protocol; a first
+/// impression that the tools are broken is exactly the wrong first impression.
+///
+/// So the walk is the fallback: the filesystem is the one source that is
+/// always about this workspace. `.git` is skipped as structure, and the same
+/// derived files `derived_excludes` hides from the repository path are hidden
+/// here, so the two paths answer alike.
+fn glob_walk(root: &Path, pattern: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(rel) = path.strip_prefix(root) else { continue };
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            if DERIVED.iter().any(|d| rel == *d || rel.starts_with(&format!("{d}/"))) {
+                continue;
+            }
+            if path.is_dir() {
+                if entry.file_name() == ".git" {
+                    continue;
+                }
+                stack.push(path);
+            } else if glob_matches(pattern, &rel) {
+                found.push(rel);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// Whether a pattern matches a `/`-separated relative path, the way a git
+/// pathspec would (`T-36`).
+///
+/// Git's default pathspec matching is fnmatch *without* `FNM_PATHNAME`: `*`
+/// crosses `/`, so `*.rs` finds a file at any depth and `**` needs no special
+/// case. A pattern that names a directory matches everything under it, which
+/// is the other half of pathspec behaviour models lean on — `glob(pattern:
+/// src)` is a listing, not a miss.
+fn glob_matches(pattern: &str, path: &str) -> bool {
+    fn wild(pattern: &[u8], path: &[u8]) -> bool {
+        // Iterative wildcard match with backtracking over the last `*`.
+        let (mut p, mut s) = (0usize, 0usize);
+        let (mut star, mut mark) = (usize::MAX, 0usize);
+        while s < path.len() {
+            if p < pattern.len() && (pattern[p] == b'?' || pattern[p] == path[s]) {
+                p += 1;
+                s += 1;
+            } else if p < pattern.len() && pattern[p] == b'*' {
+                star = p;
+                mark = s;
+                p += 1;
+            } else if star != usize::MAX {
+                p = star + 1;
+                mark += 1;
+                s = mark;
+            } else {
+                return false;
+            }
+        }
+        while p < pattern.len() && pattern[p] == b'*' {
+            p += 1;
+        }
+        p == pattern.len()
+    }
+    let pattern = pattern.trim_end_matches('/');
+    wild(pattern.as_bytes(), path.as_bytes())
+        || wild(format!("{pattern}/*").as_bytes(), path.as_bytes())
+}
+
+/// The media type of an image this harness can hand to a model (`M-38`).
+///
+/// A closed list, by extension. Sniffing the bytes would be more thorough and
+/// answer a question nobody asked: the wire formats accept these four, so a
+/// file that is not one of them has nowhere to go regardless of what it is.
+fn image_media_type(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
+}
+
+/// Whether a shell command line runs `git`.
+///
+/// The program only — `grep git README` is not a git call, and neither is a
+/// commit message that says the word. Leading `VAR=value` assignments are
+/// stepped over because that is how a shell reads them, and `/usr/bin/git` and
+/// `git.exe` are the same program by another spelling.
+fn invokes_git(command: &str) -> bool {
+    let Ok(tokens) = process::split_command(command) else { return false };
+    let program = tokens
+        .iter()
+        .find(|token| !token.contains('=') || token.starts_with('-'))
+        .map(String::as_str)
+        .unwrap_or_default();
+    let base = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    base.eq_ignore_ascii_case("git") || base.eq_ignore_ascii_case("git.exe")
+}
+
+/// `/d/repos/x` read as `D:\repos\x` — the MSYS spelling of a Windows path.
+///
+/// Windows only, and the caller enforces that: on a real POSIX system `/d/repos`
+/// is an ordinary absolute path and rewriting it would be the bug this fixes,
+/// pointed the other way.
+///
+/// A single-letter first segment is the whole signal, which is what keeps
+/// `/tmp/x` and `/etc` out of it. `/d` with nothing after it is the drive root.
+/// Nothing here decides whether the result is inside the workspace — it is
+/// still resolved and compared exactly as any other path is, so a normalised
+/// token pointing somewhere else is refused exactly as before.
+fn msys_drive_path(token: &str) -> Option<String> {
+    let rest = token.strip_prefix('/')?;
+    let mut chars = rest.chars();
+    let drive = chars.next().filter(char::is_ascii_alphabetic)?;
+    match chars.next() {
+        None => Some(format!("{}:\\", drive.to_ascii_uppercase())),
+        Some('/') => Some(format!(
+            "{}:\\{}",
+            drive.to_ascii_uppercase(),
+            rest[2..].replace('/', "\\")
+        )),
+        _ => None,
+    }
 }
 
 /// Whether a token is worth resolving as a path (`X-13`).
@@ -1243,6 +1595,18 @@ fn derived_excludes() -> String {
 /// lands inside the root. Only tokens that could name somewhere else are
 /// resolved.
 fn looks_like_path(token: &str) -> bool {
+    // A format string is not a path and cannot become one. `curl -w
+    // '\nHTTP:%{http_code}\n'` was refused for reaching outside the workspace,
+    // which it does not do and could not: the token names no file.
+    //
+    // Only brace-form specifiers, and deliberately not the backslash escapes in
+    // the same string. `\n` and `\t` are indistinguishable from the start of
+    // `new/` and `tests/` in a Windows path, so a rule that read them as escapes
+    // would let real paths through — and `X-13` erring toward refusal is the
+    // trade this whole check is built on.
+    if token.contains("%{") || token.contains("%(") {
+        return false;
+    }
     token.contains('/')
         || token.contains('\\')
         || token == ".."
@@ -1462,12 +1826,40 @@ pub fn parse_edits(raw: &str) -> Result<Vec<(String, String)>> {
 }
 
 pub fn patch(path: &Path, expect: &str, replace: &str) -> Result<String> {
-    let before = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-    let hits = before.matches(expect).count();
+    let raw = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
+    // The same treatment [`apply`] already has, and for the same reason — it
+    // was fixed there and never here, so the sibling tool kept the bug.
+    //
+    // `T-8` makes Windows the primary runtime and git checks out CRLF by
+    // default, while a model composes its `expect` from the lines `read` showed
+    // it. Every multi-line pre-image therefore failed against bytes that
+    // differed only in the invisible character.
+    //
+    // Measured on SWE-bench, over three unrelated repositories: **ten `patch`
+    // calls, ten refusals, a hundred per cent.** Every one reported `hits == 0`
+    // on a file whose text was exactly what the model had been shown. The work
+    // still landed, because models route around a tool that never works —
+    // whole-file `write`, `apply`, or an edit through `shell` — which is why
+    // this cost turns rather than outcomes and stayed invisible in the scores.
+    let crlf = raw.contains("\r\n");
+    let before = raw.replace("\r\n", "\n");
+    let expect = expect.replace("\r\n", "\n");
+    let replace = replace.replace("\r\n", "\n");
+
+    let hits = before.matches(expect.as_str()).count();
     if hits == 0 {
+        // States the failure and stops. The old wording asserted a cause — *it
+        // has changed since the loop last read it* — which was usually false
+        // and sent the model to re-read a file that was exactly as it left it.
+        // Measured on `pallets__flask-5014`: five consecutive turns re-reading
+        // and re-patching before it abandoned the tool. A refusal that names an
+        // unverified cause is worse than one that names none, because the model
+        // acts on the cause.
         return Err(Error::refused(
             format!("patch {}", path.display()),
-            "the text to replace is not in the file — it has changed since the loop last read it",
+            "the text to replace was not found in the file. Nothing was written — the file is \
+             as it was. Read the range you mean to change and copy the pre-image from what it \
+             returns; line endings and leading whitespace are matched exactly",
         ));
     }
     if hits > 1 {
@@ -1476,7 +1868,10 @@ pub fn patch(path: &Path, expect: &str, replace: &str) -> Result<String> {
             format!("the text to replace appears {hits} times; it must identify one place"),
         ));
     }
-    let after = before.replacen(expect, replace, 1);
+    let after = before.replacen(expect.as_str(), &replace, 1);
+    // Written back in the file's own ending: a file silently converted to LF is
+    // a diff on every line of it.
+    let after = if crlf { after.replace('\n', "\r\n") } else { after };
     crate::atomic::write_atomic(path, &after)?;
     Ok(format!(
         "patched {} — {} bytes replaced with {}",
@@ -1655,6 +2050,48 @@ Then I will patch scan.rs.";
         let outcome = host.run_approved(&call, "the operator");
         let err = format!("{}", outcome.expect_err("nothing is listening"));
         assert!(!err.contains("S-4"), "it got past the allowlist: {err}");
+    }
+
+    /// `T-34`: a fetch of an allowlisted host needs no approval, because the
+    /// approval was a third gate on a question `S-4` and `S-1` had settled —
+    /// and against `L-19` a third gate means never, not later. Nine of nine
+    /// measured fetches were refused.
+    #[test]
+    fn a_fetch_of_an_allowlisted_host_needs_no_approval() {
+        let dir = tmpdir("tool-fetch-auto");
+        let host = Host::new(&dir)
+            .with_egress(crate::security::Egress::new(vec!["127.0.0.1".into()]));
+
+        let allowed = Call::new(Tool::Fetch).arg("url", "http://127.0.0.1:9/nothing");
+        assert!(
+            matches!(host.policy_here(&allowed), Policy::Auto),
+            "the operator already said this host may be reached"
+        );
+        // Straight through `run`, with nobody asked. It then fails on the
+        // network, which is the transport's business: what matters is that it
+        // is not refused for want of an approval.
+        let err = format!("{}", host.run(&allowed).expect_err("nothing is listening"));
+        assert!(!err.contains("needs approval"), "{err}");
+        assert!(!err.contains("S-4"), "{err}");
+
+        // Everything else the operator has said nothing about still asks. That
+        // is the case the harness genuinely cannot decide.
+        let elsewhere = Call::new(Tool::Fetch).arg("url", "https://example.com/x");
+        assert!(matches!(host.policy_here(&elsewhere), Policy::Approve { .. }));
+        let err = format!("{}", host.run(&elsewhere).expect_err("off the allowlist"));
+        assert!(err.contains("needs approval"), "{err}");
+
+        // A host with no allowlist at all reaches nothing, unchanged.
+        let bare = Host::new(&dir);
+        assert!(matches!(bare.policy_here(&allowed), Policy::Approve { .. }));
+    }
+
+    /// The bare classifier is unchanged, so `C-1`'s claim still holds and
+    /// nothing that reads a call without a workspace silently loosens.
+    #[test]
+    fn the_pure_classifier_still_says_fetch_needs_a_person() {
+        let call = Call::new(Tool::Fetch).arg("url", "http://127.0.0.1:9/nothing");
+        assert!(matches!(classify(&call), Policy::Approve { .. }));
     }
     use crate::testutil::tmpdir;
 
@@ -1926,6 +2363,179 @@ struct Held {
         std::fs::remove_file(&outside).ok();
     }
 
+    /// The MSYS spelling reads as the Windows path it names, and nothing else
+    /// does. Pure, so it is checked on every platform even though only Windows
+    /// calls it.
+    #[test]
+    fn an_msys_path_is_read_as_its_drive() {
+        assert_eq!(msys_drive_path("/d/repos/x"), Some("D:\\repos\\x".into()));
+        assert_eq!(msys_drive_path("/c/Users/a b/f.txt"), Some("C:\\Users\\a b\\f.txt".into()));
+        // A drive on its own is that drive's root.
+        assert_eq!(msys_drive_path("/d"), Some("D:\\".into()));
+
+        // Everything that is not a drive letter stays exactly as it was — most
+        // importantly a genuine POSIX path, which this must never rewrite.
+        for untouched in ["/tmp/x", "/etc", "/", "src/main.rs", "..", "D:\\repos\\x", ""] {
+            assert_eq!(msys_drive_path(untouched), None, "{untouched}");
+        }
+    }
+
+    /// `X-13`, the case that was refused wrongly: the workspace's own path,
+    /// written the way a model in a POSIX shell writes it.
+    #[cfg(windows)]
+    #[test]
+    fn the_workspace_named_in_msys_spelling_is_not_outside_it() {
+        let (host, root) = host();
+        let native = root.to_string_lossy().to_string();
+        let (drive, rest) = native.split_once(':').expect("an absolute windows path");
+        let msys = format!("/{}{}", drive.to_ascii_lowercase(), rest.replace('\\', "/"));
+
+        // The test is worthless if the string is not actually the MSYS shape,
+        // and a construction that quietly produced something else would still
+        // resolve. So assert what was built before asserting what it does.
+        assert!(
+            msys.starts_with('/') && msys.as_bytes()[1].is_ascii_lowercase() && msys.as_bytes()[2] == b'/',
+            "not the MSYS spelling: {msys}"
+        );
+        assert_ne!(msys, native, "and not the native one either");
+
+        host.resolve(&msys).unwrap_or_else(|e| panic!("its own workspace: {msys} — {e}"));
+        host.confined(&format!("ls -la {msys}"))
+            .unwrap_or_else(|e| panic!("a command naming it: {msys} — {e}"));
+    }
+
+    /// And the boundary still holds against the same spelling pointed out of
+    /// the workspace — normalising a token decides nothing about where it goes.
+    #[cfg(windows)]
+    #[test]
+    fn an_msys_path_outside_the_workspace_is_still_refused() {
+        let (host, _root) = host();
+
+        for outside in ["/c/Windows/System32", "/c/", "/d/definitely-not-here"] {
+            let err = host.resolve(outside).expect_err("must refuse");
+            assert!(format!("{err}").contains("outside the workspace"), "{outside}: {err}");
+        }
+    }
+
+    /// A curl format string names no file. It was refused for reaching outside
+    /// the workspace, which it cannot do.
+    #[test]
+    fn a_format_string_is_not_treated_as_a_path() {
+        let (host, _root) = host();
+
+        assert!(!looks_like_path("\\nHTTP:%{http_code}\\n"), "a format string is not a path");
+        assert!(!looks_like_path("%(refname)"), "nor a git format");
+        host.confined("curl -s -w \\nHTTP:%{http_code}\\n http://127.0.0.1:8080/x")
+            .expect("a format string is not an escape from the workspace");
+
+        // The narrowing is exactly that shape and no wider: a real path in the
+        // same command line is still caught.
+        assert!(host.confined("cat /etc/hosts").is_err(), "a real path still escapes nothing");
+    }
+
+    /// `G-1`: git in a repository that is not the workspace is refused, and the
+    /// refusal names both paths so a person can see which checkout was about to
+    /// be written to.
+    ///
+    /// The case this comes from: a benchmark whose sandboxes lived under
+    /// another project's checkout, where fourteen commits landed on that
+    /// project's `main` unattended.
+    #[test]
+    fn git_in_someone_elses_repository_is_refused() {
+        let (host, root) = host();
+        // A repository *around* the workspace, which is the shape that did it.
+        let outer = root.parent().expect("a parent");
+        if !outer.join(".git").exists() {
+            let spec = Spec::new("git init", outer, Duration::from_secs(30)).with_env(Env::declared());
+            if !matches!(process::run(&spec), Ok(run) if run.is_success()) {
+                return; // no git on this machine; nothing to assert
+            }
+        }
+
+        let err = host
+            .run(&Call::new(Tool::Git).arg("args", "status --short"))
+            .expect_err("the repository is not the workspace");
+        let text = format!("{err}");
+        assert!(text.contains("not the workspace"), "{text}");
+        assert!(text.contains("G-1"), "it cites the rule: {text}");
+
+        // And the same call wearing a shell, which is how the refusal was
+        // worked around once it existed for `git(args=…)`.
+        let err = host
+            .run(&Call::new(Tool::Shell).arg("command", "git status --short"))
+            .expect_err("a git call is a git call");
+        assert!(format!("{err}").contains("not the workspace"), "{err}");
+
+        std::fs::remove_dir_all(outer.join(".git")).ok();
+    }
+
+    /// Only the program counts. A commit message that says `git`, or a grep for
+    /// it, is not a git call — and refusing those would be a new way to be
+    /// wrong about the same thing.
+    #[test]
+    fn only_a_git_program_counts_as_a_git_call() {
+        for yes in ["git status", "git -C x log", "GIT_DIR=x git status", "/usr/bin/git add f"] {
+            assert!(invokes_git(yes), "{yes}");
+        }
+        for no in ["grep git README.md", "echo 'git is a program'", "python git_helper.py", ""] {
+            assert!(!invokes_git(no), "{no}");
+        }
+    }
+
+    /// `M-38`: a read of an image hands back the image, for a role whose links
+    /// can see one — and the base64 stays out of the text everything else
+    /// reads.
+    #[test]
+    fn reading_an_image_attaches_it_rather_than_printing_it() {
+        let (host, root) = host();
+        let host = host.seeing_images(true);
+        // A one-pixel PNG is still a PNG; what matters is the bytes round-trip.
+        let bytes: Vec<u8> = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2, 3];
+        std::fs::write(root.join("shot.png"), &bytes).expect("write");
+
+        let out = host
+            .run(&Call::new(Tool::Read).arg("path", "shot.png"))
+            .expect("an image is readable");
+        let image = out.image.as_ref().expect("it carries the image");
+        assert_eq!(image.media_type, "image/png");
+        assert_eq!(image.base64, crate::client::base64(&bytes));
+        assert!(out.text.contains("image/png"), "the text says what it is: {}", out.text);
+        assert!(!out.text.contains(&image.base64), "and not what it holds: {}", out.text);
+    }
+
+    /// And a role that cannot see one is told so, rather than being handed a
+    /// UTF-8 error that says nothing about why.
+    #[test]
+    fn reading_an_image_without_a_link_that_can_see_it_says_so() {
+        let (host, root) = host();
+        std::fs::write(root.join("shot.png"), [0x89, b'P', b'N', b'G']).expect("write");
+
+        let err = host
+            .run(&Call::new(Tool::Read).arg("path", "shot.png"))
+            .expect_err("nothing here can look at it");
+        let text = format!("{err}");
+        assert!(text.contains("is an image"), "{text}");
+        assert!(text.contains("M-38"), "it cites the rule: {text}");
+        assert!(!text.contains("UTF-8") && !text.contains("utf-8"), "not a decoding error: {text}");
+    }
+
+    /// Only the four the wire formats accept, and text files stay text.
+    #[test]
+    fn only_the_image_types_a_model_can_be_shown_count() {
+        for (name, expected) in [
+            ("a.png", Some("image/png")),
+            ("a.JPG", Some("image/jpeg")),
+            ("a.jpeg", Some("image/jpeg")),
+            ("a.gif", Some("image/gif")),
+            ("a.webp", Some("image/webp")),
+            ("a.txt", None),
+            ("a.rs", None),
+            ("noext", None),
+        ] {
+            assert_eq!(image_media_type(Path::new(name)), expected, "{name}");
+        }
+    }
+
     /// A pattern is not a path, and `glob` would be useless if it were.
     #[test]
     fn glob_still_takes_the_patterns_it_exists_for() {
@@ -1940,6 +2550,83 @@ struct Held {
                 assert!(!text.contains("outside the workspace"), "{pattern}: {text}");
             }
         }
+    }
+
+    /// `T-36`: a workspace that is no repository still has files, and `glob`
+    /// lists them. `git ls-files` was the whole implementation, and here it
+    /// exits 128 — which poisoned the first tool result of 5 Harness-Bench
+    /// runs that then abandoned the tool protocol.
+    #[test]
+    fn glob_answers_in_a_workspace_that_is_no_repository() {
+        let (host, root) = host();
+        std::fs::create_dir_all(root.join("src/deep")).expect("mkdir");
+        std::fs::write(root.join("src/main.rs"), "fn main() {}\n").expect("write");
+        std::fs::write(root.join("src/deep/lib.rs"), "\n").expect("write");
+        std::fs::write(root.join("README.md"), "\n").expect("write");
+
+        let all = host.run(&Call::new(Tool::Glob).arg("pattern", "*.rs")).expect("glob");
+        assert_eq!(all.text, "src/deep/lib.rs\nsrc/main.rs", "sorted, slashed: {}", all.text);
+
+        // A directory names everything under it, the way a pathspec does.
+        let dir = host.run(&Call::new(Tool::Glob).arg("pattern", "src")).expect("glob");
+        assert!(dir.text.contains("src/main.rs") && dir.text.contains("src/deep/lib.rs"), "{}", dir.text);
+
+        let none = host.run(&Call::new(Tool::Glob).arg("pattern", "*.py")).expect("glob");
+        assert_eq!(none.text, "", "no match is an empty answer, not an error");
+    }
+
+    /// The walk hides what `derived_excludes` hides, so the two paths of
+    /// `glob` answer alike — and never lists `.git` internals.
+    #[test]
+    fn the_walk_hides_derived_files_and_git_structure() {
+        let (host, root) = host();
+        std::fs::create_dir_all(root.join(".harness/artifacts")).expect("mkdir");
+        std::fs::create_dir_all(root.join(".git")).expect("mkdir");
+        std::fs::write(root.join(".harness/journal.jsonl"), "{}\n").expect("write");
+        std::fs::write(root.join(".harness/artifacts/board.html"), "\n").expect("write");
+        std::fs::write(root.join(".harness/binding.md"), "\n").expect("write");
+        std::fs::write(root.join(".git/config"), "\n").expect("write");
+
+        let out = host.run(&Call::new(Tool::Glob).arg("pattern", "**")).expect("glob");
+        assert!(!out.text.contains("journal.jsonl"), "{}", out.text);
+        assert!(!out.text.contains("board.html"), "{}", out.text);
+        assert!(!out.text.contains(".git/"), "{}", out.text);
+        // The binding is an input the model is supposed to read.
+        assert!(out.text.contains(".harness/binding.md"), "{}", out.text);
+    }
+
+    /// `T-36`: pathspec semantics, not filepath-glob semantics. `*` crosses
+    /// `/` because git's default fnmatch does, and models write `*.rs`
+    /// expecting depth.
+    #[test]
+    fn glob_patterns_match_the_way_a_pathspec_does() {
+        for (pattern, path, expected) in [
+            ("*.rs", "src/deep/lib.rs", true),
+            ("src/*.rs", "src/main.rs", true),
+            ("src/*.rs", "src/deep/lib.rs", true), // `*` crosses `/`
+            ("src/**/*.rs", "src/deep/lib.rs", true),
+            ("src", "src/main.rs", true), // a directory lists itself
+            ("src/", "src/main.rs", true),
+            ("main.?s", "main.rs", true),
+            ("*.py", "src/main.rs", false),
+            ("deep", "src/deep/lib.rs", false), // no leading-anywhere match
+            ("src/main.rs", "src/main.rs", true),
+        ] {
+            assert_eq!(glob_matches(pattern, path), expected, "{pattern} vs {path}");
+        }
+    }
+
+    /// `T-36`, the `grep` half: `git grep` without `--no-index` exits 128
+    /// where there is no repository.
+    #[test]
+    fn grep_answers_in_a_workspace_that_is_no_repository() {
+        let (host, root) = host();
+        std::fs::write(root.join("notes.txt"), "the needle is here\n").expect("write");
+
+        let out = host
+            .run(&Call::new(Tool::Grep).arg("pattern", "needle").arg("path", "."))
+            .expect("grep finds it without a repository");
+        assert!(out.text.contains("needle is here"), "{}", out.text);
     }
 
     /// Grep inside the workspace keeps working, including where there is a space.
@@ -2202,6 +2889,81 @@ struct Held {
         assert!(root.join("in.txt").exists(), "untouched");
     }
 
+    /// `T-2` against a CRLF file, which on Windows is nearly every file.
+    ///
+    /// The tool matched raw bytes, so a pre-image written with `\n` — which is
+    /// what a model composes from the lines `read` showed it — never matched a
+    /// file checked out with `core.autocrlf`. Measured on SWE-bench across
+    /// three unrelated repositories: ten `patch` calls, ten refusals.
+    ///
+    /// `apply` had this fix already. `patch` did not, and it is the one models
+    /// reach for first.
+    #[test]
+    fn a_patch_matches_a_crlf_file_and_leaves_it_crlf() {
+        let (host, root) = host();
+        let path = root.join("crlf.py");
+        std::fs::write(&path, "def one():\r\n    return 1\r\n\r\ndef two():\r\n    return 2\r\n")
+            .expect("write");
+
+        // A multi-line pre-image with LF endings, as a model would send it.
+        host.run(
+            &Call::new(Tool::Patch)
+                .arg("path", "crlf.py")
+                .arg("expect", "def one():\n    return 1")
+                .arg("replace", "def one():\n    return 11"),
+        )
+        .expect("a CRLF file is patchable with an LF pre-image");
+
+        let raw = std::fs::read(&path).expect("read");
+        let text = String::from_utf8(raw.clone()).expect("utf-8");
+        assert!(text.contains("return 11"), "the edit landed: {text:?}");
+        assert!(!text.contains('\u{0}'), "no NULs");
+        // Every line still ends CRLF: converting the file to LF would be a diff
+        // on every line of it.
+        assert_eq!(text.matches("\r\n").count(), text.matches('\n').count(), "{text:?}");
+        assert!(text.starts_with("def one():\r\n"), "{text:?}");
+    }
+
+    /// And an LF file stays LF — the normalisation must not convert anything.
+    #[test]
+    fn a_patch_leaves_an_lf_file_alone() {
+        let (host, root) = host();
+        let path = root.join("lf.py");
+        std::fs::write(&path, "a = 1\nb = 2\n").expect("write");
+
+        host.run(
+            &Call::new(Tool::Patch)
+                .arg("path", "lf.py")
+                .arg("expect", "a = 1")
+                .arg("replace", "a = 99"),
+        )
+        .expect("applies");
+
+        let text = std::fs::read_to_string(&path).expect("read");
+        assert_eq!(text, "a = 99\nb = 2\n", "no line ending was introduced");
+    }
+
+    /// The refusal states the failure and stops. It used to assert a cause —
+    /// *it has changed since the loop last read it* — which was usually false,
+    /// and sent the model to re-read a file that was exactly as it left it.
+    #[test]
+    fn a_missed_pre_image_does_not_blame_a_change_that_did_not_happen() {
+        let (host, root) = host();
+        std::fs::write(root.join("f.txt"), "hello\n").expect("write");
+
+        let err = host.run(
+            &Call::new(Tool::Patch)
+                .arg("path", "f.txt")
+                .arg("expect", "goodbye")
+                .arg("replace", "hi"),
+        )
+        .expect_err("must refuse");
+        let text = format!("{err}");
+        assert!(text.contains("was not found"), "{text}");
+        assert!(!text.contains("has changed since"), "it no longer claims a cause: {text}");
+        assert!(text.contains("line endings"), "it says what is matched exactly: {text}");
+    }
+
     #[test]
     fn a_patch_needs_its_pre_image() {
         // `T-2`: the file may have moved under the loop since it last looked.
@@ -2226,7 +2988,10 @@ struct Held {
                     .arg("replace", "again"),
             )
             .expect_err("the pre-image is gone");
-        assert!(format!("{err}").contains("changed since the loop last read it"), "{err}");
+        // The refusal names the failure, not a cause it cannot know. Here the
+        // file genuinely did move under the loop; on SWE-bench the same message
+        // fired ten times out of ten on files that had not changed at all.
+        assert!(format!("{err}").contains("was not found in the file"), "{err}");
     }
 
     #[test]

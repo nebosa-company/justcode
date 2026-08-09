@@ -398,9 +398,11 @@ fn egress_for(links: &Links) -> perp_core::security::Egress {
 }
 
 fn redaction(binding: &Binding) -> Vec<perp_core::security::Pattern> {
-    let entries: Vec<(String, String)> =
-        binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect();
-    perp_core::security::patterns_from_entries(&entries)
+    perp_core::security::patterns_from_entries(&binding_entries(binding))
+}
+
+fn binding_entries(binding: &Binding) -> Vec<(String, String)> {
+    binding.entries().map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }
 
 fn cmd_init(args: &[&str]) -> Result<()> {
@@ -1271,7 +1273,11 @@ fn cmd_run(args: &[&str]) -> std::result::Result<(), String> {
                 .with_egress(egress_for(&links)),
             &links,
             &AssumeHealthy,
-            perp_core::agent::host_for(binding.root()),
+            // `S-23`: the hosts `fetch` may reach, from the binding's
+            // `egress.allow`. Not `egress_for(&links)` — that is the client's
+            // list and is built from the declared links, because a host
+            // allowed for fetching is not thereby a place to send a prompt.
+            perp_core::agent::host_for_binding(binding.root(), &binding_entries(&binding)),
             vec![item],
         );
         if mode == Mode::LocalOnly {

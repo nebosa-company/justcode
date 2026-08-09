@@ -56,9 +56,34 @@ pub fn request_body(request: &ChatRequest, model: &str) -> String {
             system.push(message.content.clone());
             continue;
         }
+        // Images first, then the text that refers to them: Anthropic's own
+        // guidance, and the order a person would put them in.
+        let content = if message.images.is_empty() {
+            Value::str(message.content.clone())
+        } else {
+            let mut parts = Vec::new();
+            for image in &message.images {
+                parts.push(Value::Obj(vec![
+                    ("type".into(), Value::str("image")),
+                    (
+                        "source".into(),
+                        Value::Obj(vec![
+                            ("type".into(), Value::str("base64")),
+                            ("media_type".into(), Value::str(image.media_type.clone())),
+                            ("data".into(), Value::str(image.base64.clone())),
+                        ]),
+                    ),
+                ]));
+            }
+            parts.push(Value::Obj(vec![
+                ("type".into(), Value::str("text")),
+                ("text".into(), Value::str(message.content.clone())),
+            ]));
+            Value::Arr(parts)
+        };
         messages.push(Value::Obj(vec![
             ("role".into(), Value::str(message.role.clone())),
-            ("content".into(), Value::str(message.content.clone())),
+            ("content".into(), content),
         ]));
     }
 
@@ -455,8 +480,8 @@ mod tests {
     fn request() -> ChatRequest {
         ChatRequest {
             messages: vec![
-                Message { role: "system".into(), content: "Be terse.".into() },
-                Message { role: "user".into(), content: "Add dedupe.".into() },
+                Message { role: "system".into(), content: "Be terse.".into(), images: Vec::new() },
+                Message { role: "user".into(), content: "Add dedupe.".into(), images: Vec::new() },
             ],
             max_tokens: None,
             stream: false,
@@ -497,7 +522,7 @@ mod tests {
     #[test]
     fn several_system_turns_are_joined_rather_than_dropped() {
         let mut many = request();
-        many.messages.insert(1, Message { role: "system".into(), content: "Cite ids.".into() });
+        many.messages.insert(1, Message { role: "system".into(), content: "Cite ids.".into(), images: Vec::new() });
         let parsed = json::parse(&request_body(&many, "m")).expect("valid json");
         let system = parsed.get("system").and_then(Value::as_str).expect("system");
         assert!(system.contains("Be terse."), "{system}");
@@ -653,7 +678,7 @@ mod tests {
         // The CLI takes one prompt. A model handed an unlabelled wall of text
         // cannot tell its own previous answers from the user's.
         let mut talk = request();
-        talk.messages.push(Message { role: "assistant".into(), content: "Done.".into() });
+        talk.messages.push(Message { role: "assistant".into(), content: "Done.".into(), images: Vec::new() });
         let prompt = cli_prompt(&talk);
         assert!(prompt.contains("Human: Add dedupe."), "{prompt}");
         assert!(prompt.contains("Assistant: Done."), "{prompt}");

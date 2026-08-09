@@ -43,14 +43,28 @@ use crate::tool::{Call, Host, Output};
 /// times the tokens per stuck step.
 pub const MAX_TURNS: u32 = 100;
 
-/// What follows every set of tool results (`L-30`).
+/// What the model is told about results turns (`L-30`, `S-22`).
 ///
 /// The step is still running and only the harness knows it. Without this the
 /// model receives raw output with no indication of what to do with it, and a
 /// plausible reading — the one a four-file experiment produced on the first
 /// try — is that the work is over and a report is wanted. Describing a call is
 /// not making one, and the harness sees only the calls.
-const CARRY_ON: &str = "The step is still open. If work remains, issue the next      `perp-call` block now — describing a call is not making one, and only calls      you actually issue reach the repository. When the work is genuinely done and      you have the tool results to show for it, say so and stop.";
+///
+/// A standing rule, so it lives in the system prompt (`S-22`). It used to be
+/// appended to every results turn, which put a tool protocol and a claim of
+/// authority into user text arriving with workspace data — the exact shape
+/// `S-1` exists to refuse, performed by the harness itself. Thirteen
+/// Harness-Bench runs read it that way and said so.
+///
+/// Says nothing about a fence. The rung's own instructions are printed
+/// directly below this in [`Agent::system`], so naming `perp-call` here was
+/// both redundant on the bottom rung and wrong on the others — a model using
+/// native tool calls was told after every result to emit a `perp-call` block.
+const CARRY_ON: &str = "When tool results come back the step is still open. If work remains, \
+     issue the next call — describing a call is not making one, and only calls you \
+     actually issue reach the repository. When the work is genuinely done and you \
+     have the tool results to show for it, say so and stop.";
 
 /// How many bytes of repository map a step gets when the binding does not say
 /// (`T-30`).
@@ -135,6 +149,60 @@ fn notice(requirement: &str, turns: u32) -> String {
         "\n[`L-25`] {turns} turns on {requirement}, and nothing has been written, \
          patched or deleted yet. A step that ends having changed nothing is \
          recorded as failed whatever its summary says (`V-13`).\n"
+    )
+}
+
+/// What a step that *stops* having changed nothing is told, once (`L-25`).
+///
+/// [`notice`] rides back with tool results, so it only reaches a step that is
+/// still calling tools — and `TELL_AFTER_TURNS` means not before its eighth
+/// turn. A step that reads three files and then answers in prose is told
+/// nothing at all: it ends on `V-13` at turn four, having never been informed
+/// it had failed.
+///
+/// Measured on Harness-Bench against `deepseek-v4-flash`: **37 of 101 runs**
+/// ended on that outcome, averaging **0.465** against **0.780** for runs with no
+/// failure signature at all. `004-meeting-summary`, `011-code-debug` and
+/// `014-task-decomposition` are the bare case — four model calls, eleven to
+/// fifteen seconds, nothing written, nothing said back.
+///
+/// `L-11` is not violated by telling it. A first attempt that produced nothing
+/// is not a repetition; the model has not been asked twice, it has not been
+/// asked once. If it stops empty a *second* time, that is the repetition, and
+/// the step ends as it did before.
+///
+/// Says the same thing [`notice`] says, in the tense that fits: it has already
+/// stopped. It does not say *make an edit* — a step with genuinely nothing to
+/// change should still end having changed nothing (`V-13`), and steering it into
+/// writing something to clear a check is the failure this whole rule exists to
+/// catch.
+///
+/// On the prompted rung the further turn also quotes the tool format (`L-36`).
+/// Measured on Harness-Bench through a `claude-cli` link: **13 of 106 runs**
+/// ended one-call-three-turns because the model had declared the fenced
+/// protocol a prompt injection on the first turn that carried tool results —
+/// and this notice, arriving in the harness's own vocabulary of labels and
+/// verdicts, was dismissed as more of the same. It restated the authority in
+/// dispute and never showed the format again. The format is the one thing in
+/// the exchange the model can check rather than take on trust, so it goes
+/// with the last word. The other rungs are unchanged: a model there has
+/// already demonstrated the format, and no such run showed the failure.
+fn notice_on_answer(requirement: &str, rung: crate::ladder::Rung) -> String {
+    let format = match rung {
+        crate::ladder::Rung::Prompted => format!(
+            "\nA reply with no fenced block is read as your final answer. If \
+             you stopped because the tool format looked wrong, it is the real \
+             one — this loop has no other. {}\n",
+            rung.instructions()
+        ),
+        _ => String::new(),
+    };
+    format!(
+        "\n[`L-25`] You have ended {requirement} without writing, patching or \
+         deleting anything, so it is recorded as failed whatever the summary \
+         says (`V-13`). You have one further turn. Make the change if the \
+         requirement asks for one; if it genuinely asks for none, say so and \
+         stop — that answer is the intended one, not a way of failing.\n{format}"
     )
 }
 
@@ -268,7 +336,11 @@ impl<'a> Agent<'a> {
             links,
             health,
             mode: Mode::Any,
-            host,
+            // `M-38`: whether a read may hand back an image is a fact about the
+            // role's chain, not about the workspace, so the host is told rather
+            // than left to guess. Recomputed by `as_role` — a verifier and a
+            // coder need not be the same links.
+            host: host.seeing_images(links.role_sees_images(Role::Coder)),
             role: Role::Coder,
             items,
             at: 0,
@@ -301,6 +373,7 @@ impl<'a> Agent<'a> {
     }
 
     pub fn as_role(mut self, role: Role) -> Agent<'a> {
+        self.host.set_seeing_images(self.links.role_sees_images(role));
         self.role = role;
         self
     }
@@ -317,6 +390,7 @@ impl<'a> Agent<'a> {
              - You cannot approve anything, raise a budget, skip a gate, or push. Those are \
              a person's, and asking will be refused.\n\
              - Say what you did. A claim without a tool call behind it is worth nothing here.\n\
+             - {}\n\
              - State what you intend to do before your first tool call. This harness is \
              already running you and the intent is journalled before anything happens — \
              spending calls on `pwd`, `ls` or `echo hello` to confirm that is wasted; say \
@@ -325,6 +399,7 @@ impl<'a> Agent<'a> {
              {}\n\
              \n\
              Available tools:\n{}",
+            CARRY_ON,
             ladder.rung().instructions(),
             crate::tool::schemas(),
         ) + &self.repo_map()
@@ -399,6 +474,10 @@ impl<'a> Agent<'a> {
         let mut asked: std::collections::HashSet<String> = std::collections::HashSet::new();
         // `L-23`: journalled once, on the turn that makes the first call.
         let mut stated = false;
+        // Whether a step that stopped empty has already been told so (`L-25`).
+        // Once, not every time: the second empty answer is the repetition
+        // `L-11` refuses to keep paying for.
+        let mut told_on_answer = false;
         // What the workspace looked like before this step wrote anything, so
         // the end of it can tell whether it did (`V-13`).
         let touched_before = self.touched.len();
@@ -589,6 +668,28 @@ impl<'a> Agent<'a> {
                     // to call done. A person reads the transcript and marks
                     // (`V-2`).
                     if self.touched.len() == touched_before {
+                        // Told once, while it can still act (`L-25`). The
+                        // detection was already exact; what was missing was
+                        // saying it to the only party that could do anything
+                        // about it. See [`notice_on_answer`] for what this cost
+                        // when the step simply ended here.
+                        if !told_on_answer {
+                            told_on_answer = true;
+                            // The turn learned nothing and changed nothing, so
+                            // it counts against `GIVE_UP_AFTER_TOLD` like any
+                            // other — being told does not buy a step out of the
+                            // bound that ends it.
+                            unproductive += 1;
+                            let told = notice_on_answer(&item.requirement, ladder.rung());
+                            transcript.push_str(&told);
+                            crate::verbose::say(
+                                "l-25",
+                                "the step stopped having changed nothing; telling it once",
+                            );
+                            messages.push(Message::assistant(content));
+                            messages.push(Message::user(told));
+                            continue;
+                        }
                         return Done::Failed {
                             summary: format!(
                                 "{}: read and reported, but changed nothing — \
@@ -644,7 +745,7 @@ impl<'a> Agent<'a> {
                     // mostly greps; guessing from the enum made every
                     // fourth-turn grep reset the quiet counter and made
                     // `L-11`'s watchdog unreachable.
-                    let (mut results, progressed) = self.run_calls(&calls);
+                    let (mut results, progressed, images) = self.run_calls(&calls);
 
                     // A watchdog that trips ends the step. `L-12` and `L-13`
                     // both say "is an error", and an error the loop carries on
@@ -717,17 +818,20 @@ You wrote text framed as tool output. Only this harness                         
                     // no "tool" role here on purpose: the bottom rung has no
                     // such concept, and one code path is easier to reason about
                     // than two.
-                    // `L-30`: the results are what happened, not a cue to
-                    // wrap up. A turn that carried tool output and nothing
-                    // else left the model to guess whether the step was still
-                    // open — and measured on a four-file workspace whose one
-                    // requirement was "write this file", it guessed wrong:
-                    // after a single `glob` it reported five calls it had
-                    // never made, complete with invented byte counts and a
-                    // commit sha. Saying what happens next costs one line.
-                    messages.push(Message::user(format!("{results}
-
-{CARRY_ON}")));
+                    // `S-22`: results only. `L-30`'s continuation rule is a
+                    // standing one and is stated in the system prompt, where
+                    // the harness's authority lives. Appending it here put an
+                    // instruction and a protocol into user text arriving with
+                    // workspace data, which is the shape `S-1` refuses when
+                    // anything else does it — and thirteen Harness-Bench runs
+                    // called it what it looked like.
+                    //
+                    // What still rides here is per-turn state, not standing
+                    // instruction: `L-25`'s notice above and `S-19`'s forgery
+                    // warning below. Neither can move into a prefix `M-12`
+                    // needs to stay stable, and both are already outside the
+                    // data frame `CLOSING_FRAME` draws.
+                    messages.push(Message::user(results).with_images(images));
                 }
                 Next::Repair { complaint, attempt, .. } => {
                     quiet += 1;
@@ -826,9 +930,13 @@ You wrote text framed as tool output. Only this harness                         
     /// deduplicated set kept for staging (`G-3`), so a second write to a path
     /// already in it — exactly what a careful model does when it verifies and
     /// re-writes — would not grow it and would wrongly read as a quiet turn.
-    fn run_calls(&mut self, calls: &[Call]) -> (String, bool) {
+    /// Returns what the model is shown, whether the workspace moved, and any
+    /// images a read produced (`M-36`) — carried apart from the text because
+    /// they go in a different part of the request and nowhere else.
+    fn run_calls(&mut self, calls: &[Call]) -> (String, bool, Vec<crate::client::Image>) {
         let mut out = String::new();
         let mut progressed = false;
+        let mut images: Vec<crate::client::Image> = Vec::new();
         for call in calls {
             // `T-22`: a local commit of what this step touched.
             //
@@ -858,7 +966,7 @@ You wrote text framed as tool output. Only this harness                         
                 self.watchdogs.call(&call.signature(), self.touched.len())
             {
                 self.tripped = Some(reason);
-                return (out, progressed);
+                return (out, progressed, images);
             }
 
             // `T-14`: a call that needs a person is enqueued, not merely
@@ -870,7 +978,12 @@ You wrote text framed as tool output. Only this harness                         
             // The loop does not wait here (`L-19`). The call does not run, the
             // request goes on the record, and the step carries on with
             // whatever else it can do.
-            if let crate::approval::Policy::Approve { reason } = crate::tool::classify(call) {
+            //
+            // `T-34`: the host's classification, not the bare `classify`. The
+            // two must agree — a fetch the host would run `Auto` because its
+            // host is on the egress allowlist must not be enqueued here for an
+            // approval nobody is waiting to give.
+            if let crate::approval::Policy::Approve { reason } = self.host.policy_here(call) {
                 // `T-15`: already approved, this cycle, for this exact action.
                 //
                 // Without this the queue was write-only. A person could grant a
@@ -969,6 +1082,9 @@ You wrote text framed as tool output. Only this harness                         
                         }
                     }
                     self.record_touched(call);
+                    if let Some(image) = output.image.clone() {
+                        images.push(image);
+                    }
                     output.render()
                 }
                 // A refusal is a result, not an error. The model needs to see
@@ -978,7 +1094,7 @@ You wrote text framed as tool output. Only this harness                         
             };
             out.push_str(&format!("\n{}\n{rendered}\n", call.signature()));
         }
-        (out, progressed)
+        (out, progressed, images)
     }
 
     /// Note a path a call actually changed, for staging (`G-3`) and for the
@@ -1220,8 +1336,34 @@ impl Work for Agent<'_> {
 /// Egress is empty deliberately. `fetch` is approval-gated *and* allowlisted
 /// (`S-4`), and an agent that could reach the internet by default would make
 /// the allowlist a formality.
+///
+/// Empty is also the safe default rather than the intended production one:
+/// [`host_for_binding`] is what a caller holding a binding uses, and `S-23` is
+/// why it exists.
 pub fn host_for(root: &std::path::Path) -> Host {
     Host::new(root).protecting(requirements_sources(root))
+}
+
+/// The same host, with the hosts `fetch` may reach read from the binding
+/// (`S-23`, `S-4`).
+///
+/// [`host_for`] leaves `Host::egress` empty, and every production path built
+/// its host through it — so `Egress::check` answered *the allowlist is empty,
+/// nothing may be reached* for every `fetch` this harness has ever run, and
+/// `egress.allow` was a binding key nothing read. `Egress::from_entries`
+/// parses it and had no caller in the crate; `Host::with_egress` had none
+/// either, which `S-18` recorded and did not fix.
+///
+/// This is the one list that is `fetch`'s. The *client's* allowlist is built
+/// from the declared links instead, deliberately — a host allowed for fetching
+/// is not thereby a place to send a prompt — so the two are separate on
+/// purpose and neither substitutes for the other.
+///
+/// It is what makes `T-34` reachable at all: `Host::policy_here` calls a fetch
+/// `Auto` when its host is already allowed here, and against an empty list
+/// that condition could never hold.
+pub fn host_for_binding(root: &std::path::Path, entries: &[(String, String)]) -> Host {
+    host_for(root).with_egress(crate::security::Egress::from_entries(entries))
 }
 
 /// What no writing tool may touch (`V-12`): the requirements source.
@@ -1435,7 +1577,10 @@ mod tests {
         std::fs::write(dir.join("f.txt"), "hello\n").expect("write");
 
         let call = Scripted::native("read", r#"{"path":"f.txt"}"#);
-        let transport = Scripted::new(vec![&call, "I read it."]);
+        // Two prose replies, not one: a step that stops having changed nothing
+        // is told so and given one further turn (`L-25`), so the outcome lands
+        // on the second. Same reason in the three tests below.
+        let transport = Scripted::new(vec![&call, "I read it.", "Nothing to change."]);
         let links = native_links();
         let mut agent = Agent::new(
             Client::new(&transport),
@@ -1693,6 +1838,7 @@ path: f.txt
         let transport = Scripted::new(vec![
             "```perp-call\ntool: shell\ncommand: kubectl apply -f prod.yaml\n```",
             "Understood — that is not something I can do.",
+            "There is nothing else I can do here.",
         ]);
         let links = links();
         let mut agent = Agent::new(
@@ -1712,8 +1858,10 @@ path: f.txt
         let Done::Failed { detail, .. } = &done else { panic!("{done:?}") };
         assert!(detail.contains("Never list") || detail.contains("refused"), "{detail}");
         // And the refusal reached the model, which is what the second reply
-        // proves — it only exists because the first turn came back.
-        assert_eq!(agent.turns.len(), 2);
+        // proves — it only exists because the first turn came back. Three, not
+        // two: the third is the further turn `L-25` grants a step that stopped
+        // having changed nothing.
+        assert_eq!(agent.turns.len(), 3);
     }
 
     /// `V-13`. The case cycle 8 actually produced, three times: a step that
@@ -1731,6 +1879,7 @@ path: f.txt
         let transport = Scripted::new(vec![
             "```perp-call\ntool: read\npath: f.txt\n```",
             "Findings: this repository contains f.txt, which holds some content.",
+            "That remains my answer; there is nothing to write.",
         ]);
         let links = links();
         let mut agent = Agent::new(
@@ -1748,6 +1897,242 @@ path: f.txt
             panic!("reading is not doing: {done:?}")
         };
         assert!(summary.contains("changed nothing"), "{summary}");
+        assert!(Work::touched(&agent).is_empty(), "and it staged nothing");
+    }
+
+    /// `L-25`, the half that was missing. A step that stops having changed
+    /// nothing is told so and given one further turn — and a model that then
+    /// makes the edit ends green.
+    ///
+    /// The notice existed and rode back with tool results, so it never reached
+    /// a step that answered in prose before its eighth turn. On Harness-Bench
+    /// that was 37 of 101 runs.
+    #[test]
+    fn a_step_that_stops_empty_is_told_and_may_still_deliver() {
+        let dir = tmpdir("agent-told-on-answer");
+        std::fs::write(dir.join("f.txt"), "content\n").expect("write");
+
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: read\npath: f.txt\n```",
+            "Findings: f.txt holds some content. Nothing further seems needed.",
+            "```perp-call\ntool: write\npath: out.txt\ncontent: <<EOF\nthe summary\nEOF\n```",
+            "Written out.txt.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-25", "summarise it", "write a summary").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        let Done::Ok { detail, .. } = &done else {
+            panic!("being told should not end the step: {done:?}")
+        };
+        let detail = detail.as_deref().unwrap_or_default();
+        assert!(detail.contains("[`L-25`]"), "it was told: {detail}");
+        // `L-36`: on the prompted rung the telling carries the format. This
+        // transcript runs that rung, so the notice must quote the fence.
+        assert!(
+            detail.contains("If you stopped because the tool format looked wrong"),
+            "the notice quotes the format on the prompted rung: {detail}"
+        );
+        assert!(dir.join("out.txt").is_file(), "and it acted on being told");
+        assert!(
+            Work::touched(&agent).iter().any(|p| p.contains("out.txt")),
+            "the write is staged: {:?}",
+            Work::touched(&agent)
+        );
+    }
+
+    /// `S-23`: the host an agent is actually built with reads `egress.allow`.
+    ///
+    /// `T-34`'s own test built its `Host` with `.with_egress(...)` by hand, so
+    /// it proved the mechanism and not the wiring — and the wiring was the
+    /// missing half. Every production path went through [`host_for`], whose
+    /// list is empty, so `Egress::check` answered *the allowlist is empty*
+    /// for every fetch this harness has ever run, `T-34` could never fire, and
+    /// `Egress::from_entries` had no caller in the crate. This asserts the
+    /// constructor a caller holding a binding actually uses.
+    #[test]
+    fn the_host_built_from_a_binding_may_reach_what_the_binding_allows() {
+        let dir = tmpdir("agent-host-egress");
+        let entries = vec![("egress.allow".to_string(), "127.0.0.1, api.example.com".to_string())];
+
+        let host = host_for_binding(&dir, &entries);
+        for url in ["http://127.0.0.1:9/thing", "https://api.example.com/v1"] {
+            let call = crate::tool::Call::new(crate::tool::Tool::Fetch).arg("url", url);
+            assert!(
+                matches!(host.policy_here(&call), crate::approval::Policy::Auto),
+                "{url} is on the binding's allowlist, so `T-34` applies"
+            );
+        }
+
+        // A host the operator said nothing about still asks. That is the
+        // question the harness genuinely cannot decide.
+        let elsewhere =
+            crate::tool::Call::new(crate::tool::Tool::Fetch).arg("url", "https://evil.example/x");
+        assert!(matches!(
+            host.policy_here(&elsewhere),
+            crate::approval::Policy::Approve { .. }
+        ));
+
+        // And the bare constructor is unchanged: empty is still the safe
+        // default for anything that does not hold a binding.
+        let bare = host_for(&dir);
+        let call = crate::tool::Call::new(crate::tool::Tool::Fetch).arg("url", "http://127.0.0.1:9/thing");
+        assert!(matches!(bare.policy_here(&call), crate::approval::Policy::Approve { .. }));
+    }
+
+    /// A binding that says nothing about egress reaches nothing, which is the
+    /// behaviour every run had before `S-23` and must remain the default.
+    #[test]
+    fn a_binding_with_no_egress_allow_reaches_nothing() {
+        let dir = tmpdir("agent-host-egress-silent");
+        let host = host_for_binding(&dir, &[("map.budget".to_string(), "0".to_string())]);
+        let call = crate::tool::Call::new(crate::tool::Tool::Fetch).arg("url", "http://127.0.0.1:9/x");
+        assert!(matches!(host.policy_here(&call), crate::approval::Policy::Approve { .. }));
+    }
+
+    /// `S-22`: the continuation rule is a standing one, so it is stated once
+    /// in the system prompt and never appended to a results turn.
+    ///
+    /// It used to follow every set of tool results — an instruction and a
+    /// protocol in user text arriving with workspace data, which is the shape
+    /// `S-1` refuses when a file or a web page does it. Thirteen Harness-Bench
+    /// runs read it exactly that way and abandoned the protocol from that turn
+    /// on.
+    #[test]
+    fn the_continuation_rule_is_standing_and_not_repeated_on_results_turns() {
+        let dir = tmpdir("agent-carry-on-standing");
+        std::fs::write(dir.join("a.txt"), "a\n").expect("write");
+        std::fs::write(dir.join("b.txt"), "b\n").expect("write");
+
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: read\npath: a.txt\n```",
+            "```perp-call\ntool: read\npath: b.txt\n```",
+            "Nothing further.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-30", "read them", "report").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        agent.perform(&task);
+
+        let sent = transport.seen.borrow();
+        assert!(sent.len() >= 3, "the script ran: {} requests", sent.len());
+        let first = sent.first().expect("a request was made");
+        assert!(
+            first.contains("describing a call is not making one"),
+            "the rule reaches the model as a standing instruction: {first}"
+        );
+
+        // Two results turns sit in the history of the last request. `L-30` is
+        // still answered — the rule is there — but once, in the one place a
+        // standing instruction belongs.
+        let last = sent.last().expect("a request was made");
+        assert_eq!(
+            last.matches("describing a call is not making one").count(),
+            1,
+            "stated once, not once per results turn: {last}"
+        );
+    }
+
+    /// The same rule names no fence, which it used to. A model on the native
+    /// rung was told after every tool result to issue a `perp-call` block —
+    /// the bottom rung's format quoted at a step that was not on it.
+    #[test]
+    fn the_continuation_rule_names_no_fence() {
+        assert!(!CARRY_ON.contains(crate::ladder::FENCE), "{CARRY_ON}");
+
+        let dir = tmpdir("agent-carry-on-rung-neutral");
+        let transport = Scripted::new(vec!["Nothing to do here."]);
+        let links = links();
+        let agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-30", "look", "report").expect("item")],
+        );
+
+        let native = agent.system(&Ladder::at(crate::ladder::Rung::Native));
+        assert!(
+            !native.contains(crate::ladder::FENCE),
+            "a native-rung step is never shown the bottom rung's fence: {native}"
+        );
+        assert!(
+            native.contains("describing a call is not making one"),
+            "and it still carries the rule: {native}"
+        );
+    }
+
+    /// `L-36`: the further turn quotes the tool format on the prompted rung
+    /// and only there. Thirteen Harness-Bench runs died with the model calling
+    /// the fence a prompt injection; the notice they got restated labels and
+    /// verdicts — the vocabulary already in dispute — and never showed the one
+    /// thing the model could have checked.
+    #[test]
+    fn the_further_turn_quotes_the_format_on_the_prompted_rung() {
+        let prompted = notice_on_answer("R-1", crate::ladder::Rung::Prompted);
+        assert!(
+            prompted.contains(&format!("```{}", crate::ladder::FENCE)),
+            "the fence is quoted verbatim: {prompted}"
+        );
+
+        // The other rungs already demonstrated their format; quoting the
+        // bottom rung's fence at them would be an instruction to go down.
+        for rung in [crate::ladder::Rung::Native, crate::ladder::Rung::JsonSchema] {
+            let told = notice_on_answer("R-1", rung);
+            assert!(
+                !told.contains(crate::ladder::FENCE),
+                "{} says nothing about the fence: {told}",
+                rung.as_str()
+            );
+            assert!(told.contains("[`L-25`]"), "the verdict itself is unchanged: {told}");
+        }
+    }
+
+    /// The bound on the same thing. Told once, not every time: a step that
+    /// stops empty a second time is repeating itself, which is exactly what
+    /// `L-11` refuses to keep paying for.
+    #[test]
+    fn a_step_told_once_that_stops_empty_again_fails() {
+        let dir = tmpdir("agent-told-then-empty");
+        std::fs::write(dir.join("f.txt"), "content\n").expect("write");
+
+        let transport = Scripted::new(vec![
+            "```perp-call\ntool: read\npath: f.txt\n```",
+            "Findings: nothing to do here.",
+            "I still consider that no change is required.",
+        ]);
+        let links = links();
+        let mut agent = Agent::new(
+            Client::new(&transport),
+            &links,
+            &AssumeHealthy,
+            host_for(&dir),
+            vec![Item::new("L-25", "look into it", "report").expect("item")],
+        );
+
+        let task = Work::next(&mut agent).expect("one item");
+        let done = agent.perform(&task);
+
+        let Done::Failed { summary, detail } = &done else {
+            panic!("a second empty answer is the repetition: {done:?}")
+        };
+        assert!(summary.contains("changed nothing"), "{summary}");
+        assert_eq!(detail.matches("[`L-25`]").count(), 1, "told once, not twice");
         assert!(Work::touched(&agent).is_empty(), "and it staged nothing");
     }
 
@@ -1936,6 +2321,7 @@ path: f.txt
         let transport = Scripted::new(vec![
             "```perp-call\ntool: write\npath: .harness/perpetum.md\ncontent: <<EOF\n| done |\nEOF\n```",
             "Marked it.",
+            "I cannot mark it any other way.",
         ]);
         let links = links();
         let mut agent = Agent::new(
