@@ -1336,8 +1336,34 @@ impl Work for Agent<'_> {
 /// Egress is empty deliberately. `fetch` is approval-gated *and* allowlisted
 /// (`S-4`), and an agent that could reach the internet by default would make
 /// the allowlist a formality.
+///
+/// Empty is also the safe default rather than the intended production one:
+/// [`host_for_binding`] is what a caller holding a binding uses, and `S-23` is
+/// why it exists.
 pub fn host_for(root: &std::path::Path) -> Host {
     Host::new(root).protecting(requirements_sources(root))
+}
+
+/// The same host, with the hosts `fetch` may reach read from the binding
+/// (`S-23`, `S-4`).
+///
+/// [`host_for`] leaves `Host::egress` empty, and every production path built
+/// its host through it — so `Egress::check` answered *the allowlist is empty,
+/// nothing may be reached* for every `fetch` this harness has ever run, and
+/// `egress.allow` was a binding key nothing read. `Egress::from_entries`
+/// parses it and had no caller in the crate; `Host::with_egress` had none
+/// either, which `S-18` recorded and did not fix.
+///
+/// This is the one list that is `fetch`'s. The *client's* allowlist is built
+/// from the declared links instead, deliberately — a host allowed for fetching
+/// is not thereby a place to send a prompt — so the two are separate on
+/// purpose and neither substitutes for the other.
+///
+/// It is what makes `T-34` reachable at all: `Host::policy_here` calls a fetch
+/// `Auto` when its host is already allowed here, and against an empty list
+/// that condition could never hold.
+pub fn host_for_binding(root: &std::path::Path, entries: &[(String, String)]) -> Host {
+    host_for(root).with_egress(crate::security::Egress::from_entries(entries))
 }
 
 /// What no writing tool may touch (`V-12`): the requirements source.
@@ -1921,6 +1947,55 @@ path: f.txt
             "the write is staged: {:?}",
             Work::touched(&agent)
         );
+    }
+
+    /// `S-23`: the host an agent is actually built with reads `egress.allow`.
+    ///
+    /// `T-34`'s own test built its `Host` with `.with_egress(...)` by hand, so
+    /// it proved the mechanism and not the wiring — and the wiring was the
+    /// missing half. Every production path went through [`host_for`], whose
+    /// list is empty, so `Egress::check` answered *the allowlist is empty*
+    /// for every fetch this harness has ever run, `T-34` could never fire, and
+    /// `Egress::from_entries` had no caller in the crate. This asserts the
+    /// constructor a caller holding a binding actually uses.
+    #[test]
+    fn the_host_built_from_a_binding_may_reach_what_the_binding_allows() {
+        let dir = tmpdir("agent-host-egress");
+        let entries = vec![("egress.allow".to_string(), "127.0.0.1, api.example.com".to_string())];
+
+        let host = host_for_binding(&dir, &entries);
+        for url in ["http://127.0.0.1:9/thing", "https://api.example.com/v1"] {
+            let call = crate::tool::Call::new(crate::tool::Tool::Fetch).arg("url", url);
+            assert!(
+                matches!(host.policy_here(&call), crate::approval::Policy::Auto),
+                "{url} is on the binding's allowlist, so `T-34` applies"
+            );
+        }
+
+        // A host the operator said nothing about still asks. That is the
+        // question the harness genuinely cannot decide.
+        let elsewhere =
+            crate::tool::Call::new(crate::tool::Tool::Fetch).arg("url", "https://evil.example/x");
+        assert!(matches!(
+            host.policy_here(&elsewhere),
+            crate::approval::Policy::Approve { .. }
+        ));
+
+        // And the bare constructor is unchanged: empty is still the safe
+        // default for anything that does not hold a binding.
+        let bare = host_for(&dir);
+        let call = crate::tool::Call::new(crate::tool::Tool::Fetch).arg("url", "http://127.0.0.1:9/thing");
+        assert!(matches!(bare.policy_here(&call), crate::approval::Policy::Approve { .. }));
+    }
+
+    /// A binding that says nothing about egress reaches nothing, which is the
+    /// behaviour every run had before `S-23` and must remain the default.
+    #[test]
+    fn a_binding_with_no_egress_allow_reaches_nothing() {
+        let dir = tmpdir("agent-host-egress-silent");
+        let host = host_for_binding(&dir, &[("map.budget".to_string(), "0".to_string())]);
+        let call = crate::tool::Call::new(crate::tool::Tool::Fetch).arg("url", "http://127.0.0.1:9/x");
+        assert!(matches!(host.policy_here(&call), crate::approval::Policy::Approve { .. }));
     }
 
     /// `S-22`: the continuation rule is a standing one, so it is stated once
