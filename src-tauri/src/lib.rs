@@ -479,6 +479,62 @@ fn reveal_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), Str
         .map_err(|e| format!("{e}"))
 }
 
+/// Where a release asset may come from. The front end picks the URL out of the
+/// GitHub API answer, so it is not trusted here just because it arrived over
+/// the bridge: anything not served from this project's own releases is
+/// refused, and the redirect ureq follows afterwards leaves that host.
+const RELEASE_PREFIX: &str = "https://github.com/nebosa-company/justcode/releases/download/";
+
+/// Where a downloaded asset is allowed to land: the temp folder, under the
+/// asset's own last path segment. An asset called `../../justcode.exe` would
+/// otherwise be written wherever the name pointed.
+fn update_target(file_name: &str) -> Result<PathBuf, String> {
+    let name = Path::new(file_name)
+        .file_name()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| format!("{file_name} is not a file name"))?;
+    Ok(std::env::temp_dir().join(name))
+}
+
+/// Downloads a release asset into the temp folder and returns where it landed.
+///
+/// The name is reduced to its last path segment before it is joined onto the
+/// temp directory: an asset called `../../justcode.exe` would otherwise write
+/// wherever it liked.
+#[tauri::command(async)]
+fn download_update(url: String, file_name: String) -> Result<String, String> {
+    if !url.starts_with(RELEASE_PREFIX) {
+        return Err(format!("{url} is not a JustCode release asset"));
+    }
+    let target = update_target(&file_name)?;
+
+    let response = ureq::get(&url).call().map_err(|e| format!("{e}"))?;
+    let mut file = fs::File::create(&target).map_err(|e| format!("{e}"))?;
+    std::io::copy(&mut response.into_reader(), &mut file).map_err(|e| format!("{e}"))?;
+    Ok(target.display().to_string())
+}
+
+/// Hands a downloaded installer to the system. Windows runs the setup, macOS
+/// mounts the .dmg, Linux opens the package in whatever installs packages
+/// there — none of which JustCode can do itself, and the Linux one needs a
+/// password this app has no business asking for.
+///
+/// Only a file this build could have downloaded is accepted, so this cannot be
+/// turned into "run any program on the disk".
+#[tauri::command(async)]
+fn install_update(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let file = PathBuf::from(&path);
+    if !file.is_file() {
+        return Err(format!("{} does not exist", file.display()));
+    }
+    if file.parent() != Some(std::env::temp_dir().as_path()) {
+        return Err(format!("{} is not a downloaded installer", file.display()));
+    }
+    app.opener()
+        .open_path(file.to_string_lossy(), None::<&str>)
+        .map_err(|e| format!("{e}"))
+}
+
 /// Runs a script in its own console window, from the folder it lives in, so its
 /// output stays on screen after it finishes. `kind` picks the interpreter; only
 /// the shells below are accepted.
@@ -2166,7 +2222,9 @@ pub fn run() {
             terminal_write,
             terminal_resize,
             terminal_close,
-            open_external_terminal
+            open_external_terminal,
+            download_update,
+            install_update
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -2341,6 +2399,45 @@ mod terminal_tests {
             "the path reached cmd's command line: {batch:?}"
         );
         assert!(batch.contains(&"/v:on".to_string()));
+    }
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::{download_update, update_target};
+
+    #[test]
+    fn a_download_lands_in_temp_under_its_own_name() {
+        let temp = std::env::temp_dir();
+        assert_eq!(
+            update_target("JustCode_0.2.6_x64-setup.exe").unwrap(),
+            temp.join("JustCode_0.2.6_x64-setup.exe")
+        );
+        // The name is the asset's, not a path it chose: a traversal reduces to
+        // its last segment rather than escaping the temp folder.
+        assert_eq!(
+            update_target("../../../Startup/justcode.exe").unwrap(),
+            temp.join("justcode.exe")
+        );
+        assert!(update_target("").is_err());
+        assert!(update_target("..").is_err());
+    }
+
+    #[test]
+    fn only_this_project_s_releases_are_fetched() {
+        // The guard runs before the request, so this needs no network. A URL
+        // that merely mentions the project is not one GitHub serves it from.
+        for url in [
+            "https://example.com/justcode.exe",
+            "http://github.com/nebosa-company/justcode/releases/download/v1/x.exe",
+            "https://github.com/someone-else/justcode/releases/download/v1/x.exe",
+            "https://evil.example/https://github.com/nebosa-company/justcode/releases/download/v1/x.exe",
+        ] {
+            assert!(
+                download_update(url.to_string(), "x.exe".into()).is_err(),
+                "{url} was accepted"
+            );
+        }
     }
 }
 

@@ -19,6 +19,7 @@ import { formatAccel, isLetter } from "../src/shortcuts.js";
 import { StringStream } from "@codemirror/language";
 import { neper } from "../src/neper.js";
 import { intelAsm } from "../src/intel-asm.js";
+import { isNewer, installerFor } from "../src/update.js";
 
 test("a file's language comes from its own extension, not its path", () => {
   assert.equal(languageIdFor("a.py"), "python");
@@ -298,6 +299,33 @@ test("an Option shortcut matches the key that was pressed, not the character it 
   assert.equal(isLetter({ key: "m", code: "Semicolon" }, "m"), true);
   // And a different key is still a different key.
   assert.equal(isLetter({ key: "x", code: "KeyX" }, "m"), false);
+});
+
+test("a version is compared as numbers, not as text", () => {
+  // The one that matters: 0.2.10 is newer than 0.2.9, which a string compare
+  // reads backwards and would leave everyone stuck on .9 forever.
+  assert.equal(isNewer("0.2.10", "0.2.9"), true);
+  assert.equal(isNewer("v0.3.0", "0.2.9"), true, "the tag's leading v is not part of the number");
+  assert.equal(isNewer("0.2.6", "0.2.6"), false);
+  assert.equal(isNewer("0.2.5", "0.2.6"), false);
+  assert.equal(isNewer("0.2.6-beta", "0.2.6"), false, "a suffix is not an upgrade");
+});
+
+test("each platform is offered the installer it can actually run", () => {
+  // Asset names as the release workflow publishes them.
+  const assets = [
+    { name: "JustCode_0.2.6_amd64.AppImage" },
+    { name: "JustCode_0.2.6_amd64.deb" },
+    { name: "JustCode_0.2.6_universal.dmg" },
+    { name: "JustCode_0.2.6_x64-setup.exe" },
+    { name: "JustCode_0.2.6_x64_en-US.msi" },
+  ];
+  const pick = (ua) => installerFor(assets, ua)?.name;
+  // Windows takes the NSIS setup over the .msi sitting next to it.
+  assert.equal(pick("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), "JustCode_0.2.6_x64-setup.exe");
+  assert.equal(pick("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)"), "JustCode_0.2.6_universal.dmg");
+  assert.equal(pick("Mozilla/5.0 (X11; Linux x86_64)"), "JustCode_0.2.6_amd64.AppImage");
+  assert.equal(pick("Mozilla/5.0 (PlayStation 5)"), undefined, "an unknown platform offers nothing");
 });
 
 // ----------------------------------------------------------------- intel asm

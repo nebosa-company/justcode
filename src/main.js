@@ -24,6 +24,7 @@ import {
 import { decideReload } from "./ondisk.js";
 import { findSymbols, supportsSymbols } from "./symbols.js";
 import { templateFor, hasTemplate } from "./templates.js";
+import { checkForNewVersion } from "./update.js";
 import { openSearchPanel, findNext, findPrevious } from "@codemirror/search";
 import { t, setLocale, currentLocale, onLocaleChange, DEFAULT_LOCALE } from "./i18n.js";
 import { EditorView } from "@codemirror/view";
@@ -2887,6 +2888,7 @@ function buildMenus() {
     items: [
       { label: t("help.center"), icon: "help", accel: "F1", run: showHelp },
       { separator: true },
+      { label: t("help.newVersion"), icon: "refresh", run: checkForUpdate },
       { label: t("help.about"), icon: "info", run: showAboutDialog },
     ],
   },
@@ -2927,14 +2929,22 @@ onLocaleChange(applyTranslations);
 createMenuBar(dom.menubar, buildMenus());
 
 /** Reads the version from Tauri, falling back when running in a browser. */
-async function showAboutDialog() {
-  let version = APP_VERSION;
+async function runningVersion() {
   try {
-    version = await getVersion();
+    return await getVersion();
   } catch {
     // Not running under Tauri — the bundled constant is right anyway.
+    return APP_VERSION;
   }
-  showAbout(version);
+}
+
+async function showAboutDialog() {
+  showAbout(await runningVersion());
+}
+
+/** Help ▸ New Version. The flow itself lives in update.js. */
+async function checkForUpdate() {
+  await checkForNewVersion(await runningVersion(), { flash: flashStatus, quit: closeWindow });
 }
 
 /**
