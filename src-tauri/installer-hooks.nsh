@@ -53,6 +53,9 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.asm\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+  WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.asm\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.asm\OpenWithProgids" "JustCode.asm" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.bash\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.bash\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.bash\OpenWithProgids" "JustCode.bash" ""
@@ -185,6 +188,9 @@
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.mysql\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.mysql\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.mysql\OpenWithProgids" "JustCode.mysql" ""
+  WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.nasm\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+  WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.nasm\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.nasm\OpenWithProgids" "JustCode.nasm" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.pas\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.pas\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pas\OpenWithProgids" "JustCode.pas" ""
@@ -224,6 +230,9 @@
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.rs\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.rs\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.rs\OpenWithProgids" "JustCode.rs" ""
+  WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.s\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+  WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.s\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.s\OpenWithProgids" "JustCode.s" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.sh\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.sh\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.sh\OpenWithProgids" "JustCode.sh" ""
@@ -288,6 +297,7 @@
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe" "FriendlyAppName" "JustCode"
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+  WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".asm" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".bash" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".bat" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".c" ""
@@ -332,6 +342,7 @@
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".mkd" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".mts" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".mysql" ""
+  WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".nasm" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".pas" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".pgsql" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".pp" ""
@@ -345,6 +356,7 @@
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".pyw" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".r" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".rs" ""
+  WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".s" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".sh" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".sql" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".sqlite" ""
@@ -368,6 +380,7 @@
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities" "ApplicationName" "JustCode"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities" "ApplicationDescription" "A small, fast code editor"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities" "ApplicationIcon" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
+  WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".asm" "JustCode.asm"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".bash" "JustCode.bash"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".bat" "JustCode.bat"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".c" "JustCode.c"
@@ -412,6 +425,7 @@
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".mkd" "JustCode.mkd"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".mts" "JustCode.mts"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".mysql" "JustCode.mysql"
+  WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".nasm" "JustCode.nasm"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".pas" "JustCode.pas"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".pgsql" "JustCode.pgsql"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".pp" "JustCode.pp"
@@ -425,6 +439,7 @@
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".pyw" "JustCode.pyw"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".r" "JustCode.r"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".rs" "JustCode.rs"
+  WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".s" "JustCode.s"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".sh" "JustCode.sh"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".sql" "JustCode.sql"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".sqlite" "JustCode.sqlite"
@@ -453,6 +468,7 @@
 
   Push $R0
   Push $R1
+  !insertmacro JC_PRESERVE_PRIOR_OWNER "asm"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "bash"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "bat"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "c"
@@ -497,6 +513,7 @@
   !insertmacro JC_PRESERVE_PRIOR_OWNER "mkd"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "mts"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "mysql"
+  !insertmacro JC_PRESERVE_PRIOR_OWNER "nasm"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "pas"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "pgsql"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "pp"
@@ -510,6 +527,7 @@
   !insertmacro JC_PRESERVE_PRIOR_OWNER "pyw"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "r"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "rs"
+  !insertmacro JC_PRESERVE_PRIOR_OWNER "s"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "sh"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "sql"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "sqlite"
@@ -542,6 +560,7 @@
 !macro NSIS_HOOK_POSTUNINSTALL
   Push $R0
   Push $R1
+  !insertmacro JC_UNREGISTER_EXT "asm"
   !insertmacro JC_UNREGISTER_EXT "bash"
   !insertmacro JC_UNREGISTER_EXT "bat"
   !insertmacro JC_UNREGISTER_EXT "c"
@@ -586,6 +605,7 @@
   !insertmacro JC_UNREGISTER_EXT "mkd"
   !insertmacro JC_UNREGISTER_EXT "mts"
   !insertmacro JC_UNREGISTER_EXT "mysql"
+  !insertmacro JC_UNREGISTER_EXT "nasm"
   !insertmacro JC_UNREGISTER_EXT "pas"
   !insertmacro JC_UNREGISTER_EXT "pgsql"
   !insertmacro JC_UNREGISTER_EXT "pp"
@@ -599,6 +619,7 @@
   !insertmacro JC_UNREGISTER_EXT "pyw"
   !insertmacro JC_UNREGISTER_EXT "r"
   !insertmacro JC_UNREGISTER_EXT "rs"
+  !insertmacro JC_UNREGISTER_EXT "s"
   !insertmacro JC_UNREGISTER_EXT "sh"
   !insertmacro JC_UNREGISTER_EXT "sql"
   !insertmacro JC_UNREGISTER_EXT "sqlite"

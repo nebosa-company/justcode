@@ -18,12 +18,14 @@ import { renderMarkdownDocument } from "../src/markdown.js";
 import { formatAccel, isLetter } from "../src/shortcuts.js";
 import { StringStream } from "@codemirror/language";
 import { neper } from "../src/neper.js";
+import { intelAsm } from "../src/intel-asm.js";
 
 test("a file's language comes from its own extension, not its path", () => {
   assert.equal(languageIdFor("a.py"), "python");
   assert.equal(languageIdFor("C:\\Users\\me\\a.py"), "python");
   assert.equal(languageIdFor("/home/me/a.py"), "python");
   assert.equal(languageIdFor("A.PY"), "python", "extensions are matched case-insensitively");
+  assert.equal(languageIdFor("boot.S"), "assembly", "preprocessed assembly is spelled .S");
 
   // The reason the source reduces to a basename first: a dot in a directory
   // name must not be read as the file's extension.
@@ -296,6 +298,64 @@ test("an Option shortcut matches the key that was pressed, not the character it 
   assert.equal(isLetter({ key: "m", code: "Semicolon" }, "m"), true);
   // And a different key is still a different key.
   assert.equal(isLetter({ key: "x", code: "KeyX" }, "m"), false);
+});
+
+// ----------------------------------------------------------------- intel asm
+
+/** Runs the Intel-syntax tokeniser over one line, dropping whitespace. */
+function asmTokens(line, state = intelAsm.startState()) {
+  const stream = new StringStream(line, 4, 4);
+  const out = [];
+  while (!stream.eol()) {
+    stream.start = stream.pos;
+    const tag = intelAsm.token(stream, state);
+    assert.notEqual(stream.pos, stream.start, `tokeniser made no progress at ${stream.pos}`);
+    if (tag) out.push([stream.current(), tag]);
+  }
+  return out;
+}
+
+test("the Intel mode gets the two things GNU as gets wrong here", () => {
+  // `;` is the comment, not `#`, and a register is bare rather than %-prefixed.
+  assert.deepEqual(asmTokens("    mov eax, 1 ; set it"), [
+    ["mov", "keyword"],
+    ["eax", "variableName.special"],
+    [",", "punctuation"],
+    ["1", "number"],
+    ["; set it", "comment"],
+  ]);
+});
+
+test("a radix suffix stays part of its number", () => {
+  // `1Fh` and `1010b` are whole numbers. Reading the letter separately would
+  // leave `1F` a number and `h` a name — and `0b1010` must not become `0` `b1010`.
+  // `1.5` is one token too, but `.686` is a directive: neither assembler allows
+  // a float to start with the point, so nothing legal is lost by that.
+  const numbers = ["1Fh", "1010b", "0x1F", "0b1010", "17q", "42", "1.5", "1.0e3"];
+  for (const literal of numbers) {
+    assert.deepEqual(asmTokens(literal), [[literal, "number"]], literal);
+  }
+});
+
+test("directives, size specifiers and labels are told apart from names", () => {
+  assert.deepEqual(asmTokens("main:  mov dword ptr [count], offset msg"), [
+    ["main:", "labelName"],
+    ["mov", "keyword"],
+    ["dword", "typeName"],
+    ["ptr", "modifier"],
+    ["[", "bracket"],
+    ["count", "variableName"],
+    ["]", "bracket"],
+    [",", "punctuation"],
+    ["offset", "modifier"],
+    ["msg", "variableName"],
+  ]);
+  assert.deepEqual(asmTokens(".686"), [[".686", "typeName"]], "a CPU directive is not a fraction");
+  assert.deepEqual(asmTokens("%define BUF 64"), [
+    ["%define", "meta"],
+    ["BUF", "variableName"],
+    ["64", "number"],
+  ]);
 });
 
 // --------------------------------------------------------------------- neper

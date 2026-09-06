@@ -143,6 +143,25 @@ const LANGUAGES = {
       return [rust(), treeLinter];
     },
   },
+  // Two assembly dialects, because they disagree on the things a mode has to
+  // get right: `;` versus `#` for comments, and operand order. `.s`/`.S` are
+  // GNU as by convention, `.asm`/`.nasm` are Intel-syntax NASM or MASM.
+  assembly: {
+    label: "Assembly (GNU as)",
+    extensions: ["s"],
+    load: async () => streamMode(import("@codemirror/legacy-modes/mode/gas"), "gas"),
+  },
+  intelasm: {
+    label: "Assembly (Intel)",
+    extensions: ["asm", "nasm"],
+    load: async () => {
+      const [{ StreamLanguage }, { intelAsm }] = await Promise.all([
+        import("@codemirror/language"),
+        import("./intel-asm.js"),
+      ]);
+      return [StreamLanguage.define(intelAsm)];
+    },
+  },
   // Neper's own tooling (`neper tokens`, `neper parse`) is the authority on its
   // syntax, but nothing of it ships as a CodeMirror grammar, so .e is
   // stream-tokenised here from docs/grammar.ebnf.
@@ -321,6 +340,9 @@ const EXTENSION_LABELS = {
   markdown: "Markdown",
   py: "Python script",
   rs: "Rust source",
+  asm: "Assembly source",
+  nasm: "NASM source",
+  s: "GNU as source",
   e: "Neper source",
   go: "Go source",
   dart: "Dart source",

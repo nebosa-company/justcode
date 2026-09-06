@@ -251,6 +251,29 @@ echo {name}
 endlocal
 `,
 
+  // GNU as (AT&T) syntax, which is the .s/.S dialect. Intel-syntax assembly
+  // (.asm/.nasm) has no template: it would have to pick NASM or MASM, and
+  // the two disagree from the first line.
+  // Assembles and links as-is on Linux x86-64:
+  //   as -o out.o file.s && ld -o out out.o
+  assembly: `        .section .rodata
+msg:    .ascii  "{name}\\n"
+        .set    msg_len, . - msg
+
+        .text
+        .globl  _start
+_start:
+        movq    $1, %rax            # write
+        movq    $1, %rdi            # stdout
+        leaq    msg(%rip), %rsi
+        movq    $msg_len, %rdx
+        syscall
+
+        movq    $60, %rax           # exit
+        xorq    %rdi, %rdi
+        syscall
+`,
+
   terraform: `terraform {
   required_version = ">= 1.5.0"
 }
@@ -309,8 +332,9 @@ function identifierFrom(stem) {
 }
 
 /** Keeps a name from breaking out of the string it is inserted into. */
+// GNU as strings escape the same two characters JSON strings do.
 function escapeFor(languageId, stem) {
-  if (languageId === "json") return stem.replace(/["\\]/g, "\\$&");
+  if (languageId === "json" || languageId === "assembly") return stem.replace(/["\\]/g, "\\$&");
   return stem;
 }
 
