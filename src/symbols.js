@@ -75,6 +75,42 @@ const RULES = {
       build: (m) => ({ name: m[2], detail: ` ${m[1]}`, kind: m[1] }),
     },
   ],
+  // Neper declarations start at column 0 (spec §3), so these anchor there
+  // rather than allowing indentation: a `fn` further in is a function *type*
+  // inside a signature, not a declaration. Case-sensitive, unlike the rules
+  // above — every keyword here is lower-case, and `Fn` would be a type name.
+  neper: [
+    {
+      // `[T: type]` comptime parameters sit between the name and the signature.
+      // The parameter list excludes `{` rather than `)` so that a `fn` type in
+      // a parameter — `f: fn(i32) -> i32` — keeps its own parentheses, while a
+      // one-line body cannot be swallowed: the greedy run stops at the brace
+      // and backtracks to the last `)` before it.
+      re: /^(?:extern[ \t]+)?fn[ \t]+(\w+)[ \t]*(\[[^\]\n]*\])?[ \t]*(\([^\n{]*\))(?:[ \t]*->[ \t]*([^\n{]+))?/gm,
+      build: (m) => ({
+        name: m[1],
+        detail: `${m[2] || ""}${m[3]}${m[4] ? ` -> ${m[4].trim()}` : ""}`,
+        kind: "function",
+      }),
+    },
+    {
+      // The composite keywords are listed before the catch-all so that
+      // `= struct {` reports `struct` and `= u8` reports the alias target.
+      re: /^type[ \t]+(\w+)[ \t]*(\[[^\]\n]*\])?[ \t]*=[ \t]*(union[ \t]+enum|struct|union|enum|[^\n{]+)/gm,
+      build: (m) => {
+        const rhs = m[3].trim().replace(/[ \t]+/g, " ");
+        const composite = /^(?:union enum|struct|union|enum)$/.test(rhs);
+        return { name: m[1], detail: `${m[2] || ""} = ${rhs}`, kind: composite ? rhs : "type" };
+      },
+    },
+    { re: /^error[ \t]+(\w+)/gm, build: (m) => ({ name: m[1], detail: "", kind: "error" }) },
+    {
+      // `const` always initialises; a top-level `var` need not, so the `=` is
+      // optional and the type annotation carries the detail on its own.
+      re: /^(const|var)[ \t]+(\w+)(?:[ \t]*:[ \t]*([^\n=]+?))?[ \t]*(?:=|$)/gm,
+      build: (m) => ({ name: m[2], detail: m[3] ? `: ${m[3].trim()}` : "", kind: m[1] }),
+    },
+  ],
   cpp: [
     {
       re: /^[ \t]*(?:[\w:<>*&~]+[ \t]+)+([\w:~]+)\s*(\([^;{)]*\))\s*(?:const\s*)?\{/gim,

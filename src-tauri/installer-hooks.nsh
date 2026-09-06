@@ -104,6 +104,9 @@
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.dproj\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.dproj\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.dproj\OpenWithProgids" "JustCode.dproj" ""
+  WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.e\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+  WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.e\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.e\OpenWithProgids" "JustCode.e" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.go\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
   WriteRegStr SHELL_CONTEXT "Software\Classes\JustCode.go\DefaultIcon" "" '"$INSTDIR\${MAINBINARYNAME}.exe",0'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.go\OpenWithProgids" "JustCode.go" ""
@@ -302,6 +305,7 @@
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".dpk" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".dpr" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".dproj" ""
+  WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".e" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".go" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".h" ""
   WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".hcl" ""
@@ -381,6 +385,7 @@
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".dpk" "JustCode.dpk"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".dpr" "JustCode.dpr"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".dproj" "JustCode.dproj"
+  WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".e" "JustCode.e"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".go" "JustCode.go"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".h" "JustCode.h"
   WriteRegStr SHELL_CONTEXT "Software\JustCode\Capabilities\FileAssociations" ".hcl" "JustCode.hcl"
@@ -465,6 +470,7 @@
   !insertmacro JC_PRESERVE_PRIOR_OWNER "dpk"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "dpr"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "dproj"
+  !insertmacro JC_PRESERVE_PRIOR_OWNER "e"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "go"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "h"
   !insertmacro JC_PRESERVE_PRIOR_OWNER "hcl"
@@ -553,6 +559,7 @@
   !insertmacro JC_UNREGISTER_EXT "dpk"
   !insertmacro JC_UNREGISTER_EXT "dpr"
   !insertmacro JC_UNREGISTER_EXT "dproj"
+  !insertmacro JC_UNREGISTER_EXT "e"
   !insertmacro JC_UNREGISTER_EXT "go"
   !insertmacro JC_UNREGISTER_EXT "h"
   !insertmacro JC_UNREGISTER_EXT "hcl"

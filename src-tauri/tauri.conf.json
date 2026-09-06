@@ -171,6 +171,14 @@
       },
       {
         "ext": [
+          "e"
+        ],
+        "name": "JustCode.e",
+        "description": "Neper source",
+        "role": "Editor"
+      },
+      {
+        "ext": [
           "go"
         ],
         "name": "JustCode.go",

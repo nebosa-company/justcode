@@ -143,6 +143,20 @@ const LANGUAGES = {
       return [rust(), treeLinter];
     },
   },
+  // Neper's own tooling (`neper tokens`, `neper parse`) is the authority on its
+  // syntax, but nothing of it ships as a CodeMirror grammar, so .e is
+  // stream-tokenised here from docs/grammar.ebnf.
+  neper: {
+    label: "Neper",
+    extensions: ["e"],
+    load: async () => {
+      const [{ StreamLanguage }, { neper }] = await Promise.all([
+        import("@codemirror/language"),
+        import("./neper.js"),
+      ]);
+      return [StreamLanguage.define(neper)];
+    },
+  },
   json: {
     label: "JSON",
     extensions: ["json", "jsonc", "webmanifest"],
@@ -307,6 +321,7 @@ const EXTENSION_LABELS = {
   markdown: "Markdown",
   py: "Python script",
   rs: "Rust source",
+  e: "Neper source",
   go: "Go source",
   dart: "Dart source",
   java: "Java source",

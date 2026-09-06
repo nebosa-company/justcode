@@ -16,6 +16,8 @@ import { blocks, spans } from "../src/replytext.js";
 import { decideReload } from "../src/ondisk.js";
 import { renderMarkdownDocument } from "../src/markdown.js";
 import { formatAccel, isLetter } from "../src/shortcuts.js";
+import { StringStream } from "@codemirror/language";
+import { neper } from "../src/neper.js";
 
 test("a file's language comes from its own extension, not its path", () => {
   assert.equal(languageIdFor("a.py"), "python");
@@ -294,4 +296,108 @@ test("an Option shortcut matches the key that was pressed, not the character it 
   assert.equal(isLetter({ key: "m", code: "Semicolon" }, "m"), true);
   // And a different key is still a different key.
   assert.equal(isLetter({ key: "x", code: "KeyX" }, "m"), false);
+});
+
+// --------------------------------------------------------------------- neper
+
+/**
+ * Runs the neper stream tokeniser over one line and returns `[text, tag]` for
+ * every token it produces, dropping whitespace. `state` carries across lines so
+ * a raw string can be followed through them.
+ */
+function neperTokens(line, state) {
+  const stream = new StringStream(line, 4, 4);
+  const out = [];
+  while (!stream.eol()) {
+    stream.start = stream.pos;
+    const tag = neper.token(stream, state);
+    assert.notEqual(stream.pos, stream.start, `tokeniser made no progress at ${stream.pos}`);
+    if (tag) out.push([stream.current(), tag]);
+  }
+  return out;
+}
+
+test("a range operator is not eaten by the number in front of it", () => {
+  // `0..8` is `0`, `..`, `8`. A float rule that accepted a trailing dot would
+  // take `0.` and leave a stray `.`, which is why FLOAT requires a digit after
+  // the point.
+  assert.deepEqual(neperTokens("for i in 0..8 {", neper.startState()), [
+    ["for", "controlKeyword"],
+    ["i", "variableName"],
+    ["in", "controlKeyword"],
+    ["0", "number"],
+    ["..", "operator"],
+    ["8", "number"],
+    ["{", "operator"],
+  ]);
+});
+
+test("a radix prefix stays part of its number", () => {
+  // The decimal branch would match the leading `0` and leave the rest as an
+  // identifier, so the prefixed forms are tried first.
+  for (const literal of ["0xFFu8", "0o755", "0b1010_1010", "1_000_000usize", "1.5e-3f32"]) {
+    assert.deepEqual(
+      neperTokens(literal, neper.startState()),
+      [[literal, "number"]],
+      `${literal} should lex as one number`,
+    );
+  }
+});
+
+test("casing decides what an unknown name is, because neper makes it decide", () => {
+  const tagOf = (source) => neperTokens(source, neper.startState())[0][1];
+  assert.equal(tagOf("Vec3"), "typeName", "PascalCase is a type");
+  assert.equal(tagOf("NotFound"), "typeName", "so is an error name");
+  assert.equal(tagOf("MAX_NODES"), "variableName.constant", "SCREAMING_SNAKE is a constant");
+  assert.equal(tagOf("node_count"), "variableName", "snake_case is a value");
+  assert.equal(tagOf("parse_expr("), "variableName.function", "…unless it is being called");
+  assert.equal(tagOf("T"), "typeName", "a lone capital is read as a comptime type parameter");
+});
+
+test("a raw string runs to a delimiter with the same number of hashes", () => {
+  const state = neper.startState();
+  // The `"` inside is not the end: only `"##` is.
+  assert.deepEqual(neperTokens('let s = r##"a "quoted" line', state), [
+    ["let", "definitionKeyword"],
+    ["s", "variableName"],
+    ["=", "operator"],
+    ['r##"a "quoted" line', "string"],
+  ]);
+  assert.equal(state.rawHashes, 2, "still open at end of line");
+  assert.deepEqual(neperTokens('and another"## ret', state), [
+    ['and another"##', "string"],
+    ["ret", "controlKeyword"],
+  ]);
+  assert.equal(state.rawHashes, -1, "closed");
+});
+
+test("neper declarations are found at column 0 and nowhere else", () => {
+  const source = [
+    "use e.mem",
+    "",
+    "type Vec3 = struct {",
+    "    x: f32,",
+    "}",
+    "",
+    "error NotFound",
+    "",
+    "const MAX_NODES: u32 = 1024",
+    "",
+    "fn apply[T: type](f: fn(T) -> T, v: T) -> T {",
+    "    ret f(v)",
+    "}",
+  ].join("\n");
+  const found = findSymbols(source, "neper");
+  assert.deepEqual(
+    found.map((s) => `${s.kind} ${s.name}${s.detail}`),
+    [
+      "struct Vec3 = struct",
+      "error NotFound",
+      "const MAX_NODES: u32",
+      // The parameter list keeps the inner parentheses of the `fn` type, and
+      // the indented `ret f(v)` is not mistaken for a declaration.
+      "function apply[T: type](f: fn(T) -> T, v: T) -> T",
+    ],
+    "in document order, with signatures intact",
+  );
 });

@@ -93,6 +93,17 @@ if __name__ == "__main__":
 }
 `,
 
+  // main has one signature (spec §13): the root arena and the arguments arrive
+  // as parameters, and `ok` is the success value of the `err` return.
+  neper: `use e.mem
+use e.io
+
+fn main(a: *mem.Arena, args: []str) -> err {
+    try io.print("{name}\\n")
+    ret ok
+}
+`,
+
   dart: `void main() {
   print('{name}');
 }
