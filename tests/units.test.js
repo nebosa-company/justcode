@@ -302,6 +302,42 @@ test("a shortcut with nothing to translate survives both platforms", () => {
   assert.equal(formatAccel("Shift+F4", true), "⇧F4");
 });
 
+test("both halves of a chord are translated, not just the first", () => {
+  // `Ctrl+K Ctrl+O` split on "+" puts "K Ctrl" in the middle, which is not a
+  // modifier, so the formatter used to give up and hand back the Windows
+  // spelling — leaving one item on the File menu saying "Ctrl" out loud on a
+  // Mac while every other item showed glyphs.
+  assert.equal(formatAccel("Ctrl+K Ctrl+O", true), "⌘K ⌘O");
+  assert.equal(formatAccel("Ctrl+K Ctrl+O", false), "Ctrl+K Ctrl+O");
+  // The chords that already worked must keep working: a modifier followed by a
+  // bare key, and the same with alternatives after it.
+  assert.equal(formatAccel("Ctrl+K ←", true), "⌘K ←");
+  assert.equal(formatAccel("Ctrl+K ↑ / ↓", true), "⌘K ↑ / ↓");
+  // A row of bare keys is not a chord and must come back untouched.
+  assert.equal(formatAccel("← → ↑ ↓", true), "← → ↑ ↓");
+});
+
+test("a shortcut whose key is the separator still translates", () => {
+  // `Ctrl++` splits into ["Ctrl", "", ""] because "+" is both the separator and
+  // the key, so the formatter bailed and Zoom In was the one item left in the
+  // View menu reading "Ctrl++" on a Mac while its neighbours showed glyphs.
+  assert.equal(formatAccel("Ctrl++", true), "⌘+");
+  assert.equal(formatAccel("Ctrl++", false), "Ctrl++");
+  assert.equal(formatAccel("Ctrl++ / Ctrl+-", true), "⌘+ / ⌘-");
+  // The ordinary case must not have moved.
+  assert.equal(formatAccel("Ctrl+-", true), "⌘-");
+  assert.equal(formatAccel("Ctrl+0", true), "⌘0");
+});
+
+test("a Mac is offered the delete key it actually has", () => {
+  // The key a Mac labels "delete" is the one Windows calls Backspace. `Delete`
+  // is forward-delete, which most Mac laptops cannot press without Fn — so a
+  // tree that named it would advertise a key half its users do not have.
+  assert.equal(formatAccel("Backspace", true), "⌫");
+  assert.equal(formatAccel("Delete", true), "⌦");
+  assert.equal(formatAccel("Del", false), "Del");
+});
+
 test("an Option shortcut matches the key that was pressed, not the character it typed", () => {
   // The bug this replaced: on a Mac ⌥M types `µ`, so `event.key === "m"` was
   // never true and six shortcuts in this app simply did not exist there.

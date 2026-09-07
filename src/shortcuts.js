@@ -69,8 +69,31 @@ export function formatAccel(spec, isMac) {
   }
   if (!isMac) return spec;
 
+  // A chord is two shortcuts in sequence — `Ctrl+K Ctrl+O` — and each half has
+  // to be translated on its own. Splitting the whole thing on "+" puts
+  // "K Ctrl" in the middle, which is not a modifier, so the function used to
+  // give up and hand back the Windows spelling verbatim: the one shortcut on
+  // the File menu that still said "Ctrl" out loud on a Mac.
+  //
+  // Safe for the reference list's other spaced entries because they are either
+  // alternatives, already split above, or bare keys that pass through
+  // unchanged. Prose never reaches here — help.js sends `sc.k.*` through t().
+  if (spec.includes(" ")) {
+    return spec
+      .split(" ")
+      .map((one) => formatAccel(one, isMac))
+      .join(" ");
+  }
+
   const parts = spec.split("+").map((part) => part.trim());
-  const key = parts.pop();
+  let key = parts.pop();
+  // `Ctrl++` splits into ["Ctrl", "", ""]: the separator has eaten the key. Put
+  // it back, or the zoom-in shortcut is the one item in the View menu still
+  // reading "Ctrl++" on a Mac while everything around it shows glyphs.
+  if (key === "" && parts.at(-1) === "") {
+    parts.pop();
+    key = "+";
+  }
   const held = new Set(parts.map((part) => part.toLowerCase()));
   // Nothing recognisable to translate — a bare `F5`, or prose.
   if (held.size === 0) return MAC_KEY[key] || key;

@@ -31,7 +31,7 @@ const SHORTCUTS = [
       ["Ctrl+Shift+E", "sc.toggleExplorer"],
       ["Ctrl+K Ctrl+O", "sc.openFolder"],
       ["F2", "sc.explorerRename"],
-      ["Del", "sc.explorerDelete"],
+      [perPlatform("Del", "Backspace"), "sc.explorerDelete"],
     ],
   },
   {

@@ -21,7 +21,7 @@ import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-ma
 import { t } from "./i18n.js";
 import { iconElement } from "./icons.js";
 import { showContextMenu } from "./menu.js";
-import { IS_MAC } from "./shortcuts.js";
+import { IS_MAC, perPlatform } from "./shortcuts.js";
 import {
   baseName,
   fileIconId,
@@ -899,7 +899,16 @@ export function contextMenu(event) {
     { separator: true },
     { label: t("explorer.rename"), icon: "comment", accel: "F2", enabled: one, run: beginRename },
     { label: t("explorer.duplicate"), icon: "copy", enabled: one, run: duplicate },
-    { label: t("explorer.delete"), icon: "deleteLine", accel: "Del", enabled: any, run: deleteSelection },
+    {
+      label: t("explorer.delete"),
+      icon: "deleteLine",
+      // A Mac's "delete" key is the one Windows calls Backspace; ⌦ is a
+      // separate key most Mac laptops do not have without Fn. Naming the
+      // Windows key on both would advertise a key half the users cannot press.
+      accel: perPlatform("Del", "Backspace"),
+      enabled: any,
+      run: deleteSelection,
+    },
     { separator: true },
     {
       label: t(revealKey),
@@ -979,7 +988,11 @@ export function handleKey(event) {
     case "F2":
       beginRename();
       return true;
+    // Both, on every platform. `Delete` is forward-delete, which a Mac laptop
+    // has no key for without Fn — so a tree that listened only for that had no
+    // reachable way to delete anything on the machine most of them are used on.
     case "Delete":
+    case "Backspace":
       deleteSelection();
       return true;
     default:
