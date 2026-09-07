@@ -3165,8 +3165,8 @@ mod harness_root_tests {
 #[cfg(test)]
 mod explorer_tests {
     use super::{
-        check_name, copy_entry, create_entry, git_root, ignore_chain, is_ignored, list_dir,
-        rename_entry, resolve_target,
+        check_name, copy_entry, create_entry, delete_entry, git_root, ignore_chain, is_ignored,
+        list_dir, rename_entry, resolve_target,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -3378,6 +3378,41 @@ mod explorer_tests {
             rows.iter().all(|row| !row.ignored),
             "with no .git above it, nothing is ignored"
         );
+    }
+
+    /// Delete has to reach the Recycle Bin, not just make the file disappear.
+    ///
+    /// Every other test here would pass just as well against `fs::remove_file`,
+    /// which is the one implementation this must never become: the whole reason
+    /// Delete is allowed to exist without a confirmation of its own is that the
+    /// OS keeps a copy. So this asserts the copy is really there, by name, and
+    /// then purges it rather than leaving litter in the bin.
+    #[cfg(windows)]
+    #[test]
+    fn a_deleted_file_lands_in_the_recycle_bin() {
+        let scratch = Scratch::new("trash");
+        // Unique, so the search below cannot match some older run's leftovers.
+        let name = format!(
+            "justcode-trash-probe-{}.txt",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let file = scratch.join(&name);
+        fs::write(&file, "recoverable").unwrap();
+
+        delete_entry(scratch.text(), vec![file.clone()]).expect("delete");
+        assert!(!Path::new(&file).exists(), "the file left its folder");
+
+        let found: Vec<_> = trash::os_limited::list()
+            .expect("read the bin")
+            .into_iter()
+            .filter(|item| item.name.to_string_lossy() == name)
+            .collect();
+        assert_eq!(found.len(), 1, "exactly one copy of it is in the Recycle Bin");
+
+        trash::os_limited::purge_all(found).expect("purge");
     }
 
     /// `matched_path_or_any_parents` panics by contract when handed a path
