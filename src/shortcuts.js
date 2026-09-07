@@ -112,6 +112,31 @@ export function formatAccel(spec, isMac) {
 export const COMMAND_KEY = IS_MAC ? "⌘" : "Ctrl";
 
 /**
+ * The modifier names inside a *sentence*, for the gesture rows the reference
+ * list carries as prose — "Alt+click to add a cursor", "Ctrl+Wheel to zoom".
+ *
+ * Those rows go through `t()` rather than `accel()`, because they are
+ * translated sentences and not shortcuts, so they were the last place in the
+ * app still naming Windows keys on a Mac while every row around them showed
+ * glyphs.
+ *
+ * A substitution over translated text rather than a placeholder in every
+ * string: all 35 translations already spell the modifier the same way the
+ * English does — `Alt+` and `Ctrl+`, or `Strg+` in German — so this reaches
+ * every one of them without re-translating a single sentence. A translation
+ * that phrases it some other way simply keeps its own wording, which is the
+ * behaviour there is today.
+ */
+export function proseAccel(text, isMac = IS_MAC) {
+  if (!isMac || typeof text !== "string") return text;
+  return text
+    .replace(/Ctrl\s*\+\s*/g, MAC_GLYPH.ctrl)
+    .replace(/Strg\s*\+\s*/g, MAC_GLYPH.ctrl)
+    .replace(/Alt\s*\+\s*/g, MAC_GLYPH.alt)
+    .replace(/Shift\s*\+\s*/g, MAC_GLYPH.shift);
+}
+
+/**
  * A shortcut that is a *different chord* on a Mac, not the same one drawn
  * differently.
  *

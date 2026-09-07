@@ -15,7 +15,7 @@ import { iconMarkup, PATHS } from "../src/icons.js";
 import { blocks, spans } from "../src/replytext.js";
 import { decideReload } from "../src/ondisk.js";
 import { renderMarkdownDocument } from "../src/markdown.js";
-import { formatAccel, isLetter } from "../src/shortcuts.js";
+import { formatAccel, isLetter, proseAccel } from "../src/shortcuts.js";
 import { StringStream } from "@codemirror/language";
 import { neper } from "../src/neper.js";
 import { intelAsm } from "../src/intel-asm.js";
@@ -27,6 +27,7 @@ import {
   pathKey,
   relativePath,
   sortEntries,
+  treeKeyAction,
   uniqueName,
   validateName,
   visibleRows,
@@ -542,6 +543,52 @@ test("a file's icon comes from the most specific rule that matches it", () => {
   assert.equal(fileIconId(map, "src", { isDir: true, expanded: true }), "folder-src-open");
   assert.equal(fileIconId(map, "whatever", { isDir: true }), "folder");
   assert.equal(fileIconId(map, "app.js", { light: true }), "javascript-light");
+});
+
+test("the gesture rows name the Mac's keys too, in every language", () => {
+  // These rows are translated sentences, so they go through t() rather than
+  // accel() -- which left them the last place in the app still saying "Ctrl" on
+  // a Mac while every row around them showed glyphs.
+  assert.equal(proseAccel("Alt+click", true), "⌥click");
+  assert.equal(proseAccel("Ctrl+Wheel", true), "⌘Wheel");
+  assert.equal(proseAccel("Ctrl+click a URL", true), "⌘click a URL");
+  // German says Strg, and the modifier is not always at the front: Japanese
+  // writes "URLをCtrl+クリック".
+  assert.equal(proseAccel("Strg+Mausrad", true), "⌘Mausrad");
+  assert.equal(proseAccel("URLをCtrl+クリック", true), "URLを⌘クリック");
+  // Windows and Linux keep their own words, including the German ones.
+  assert.equal(proseAccel("Alt+click", false), "Alt+click");
+  assert.equal(proseAccel("Strg+Mausrad", false), "Strg+Mausrad");
+  // A sentence naming no modifier is left exactly as its translator wrote it.
+  assert.equal(proseAccel("Double-click a tab", true), "Double-click a tab");
+});
+
+test("Enter opens on Windows and renames on a Mac, the way each platform expects", () => {
+  // A Mac laptop needs Fn for F2, so both Finder and VS Code answer with Enter
+  // to rename and the command key with Down to open. Tested through a function
+  // that takes the platform rather than reads it, because a Mac path only a Mac
+  // can run is one nobody tests — which is how the shortcuts got into the state
+  // they were in.
+  const win = (ev) => treeKeyAction({ ...ev, isMac: false });
+  const mac = (ev) => treeKeyAction({ ...ev, isMac: true });
+
+  assert.equal(win({ key: "Enter", isDir: false }), "open");
+  assert.equal(win({ key: "Enter", isDir: true }), "toggle");
+  assert.equal(mac({ key: "Enter", isDir: false }), "rename");
+  assert.equal(mac({ key: "Enter", isDir: true }), "rename", "a folder is renamed too, not toggled");
+
+  // Opening has to stay reachable from the keyboard on a Mac, or Enter taking
+  // over rename would simply remove it.
+  assert.equal(mac({ key: "ArrowDown", meta: true, isDir: false }), "open");
+  assert.equal(mac({ key: "ArrowDown", meta: true, isDir: true }), "toggle");
+  // Windows already has Enter for that, so the chord means nothing there.
+  assert.equal(win({ key: "ArrowDown", meta: true, isDir: false }), null);
+
+  // Plain arrows must fall through to navigation on both, or the tree stops
+  // moving.
+  assert.equal(win({ key: "ArrowDown", isDir: false }), null);
+  assert.equal(mac({ key: "ArrowDown", isDir: false }), null);
+  assert.equal(mac({ key: "F2", isDir: false }), null, "F2 is handled separately and still works");
 });
 
 test("a neper source file gets neper's own mark, not the blank default", () => {

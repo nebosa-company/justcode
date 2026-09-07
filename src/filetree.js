@@ -224,6 +224,36 @@ export function nextTypeAhead(rows, from, prefix) {
 }
 
 /**
+ * What a keypress means in the tree, where Enter is not the same on every
+ * platform.
+ *
+ * On Windows and Linux, Enter opens a file and toggles a folder, and F2
+ * renames. A Mac has no comfortable F2 — on a laptop it needs Fn — and both
+ * Finder and VS Code answer that the same way: Enter renames, and the selection
+ * is opened with the command key and Down. Following them is what makes the
+ * tree feel like the platform's rather than like a port; F2 keeps working
+ * everywhere for anyone who reaches for it.
+ *
+ * Here rather than inside the handler, taking `isMac` rather than reading it,
+ * for exactly the reason shortcuts.js gives about `formatAccel`: a Mac path
+ * that only a Mac can run is a Mac path nobody tests, and that is how the
+ * shortcuts got into the state they were in.
+ *
+ * @returns {"rename" | "open" | "toggle" | null}
+ */
+export function treeKeyAction({ key, meta = false, isMac = false, isDir = false }) {
+  if (key === "Enter") {
+    if (isMac) return "rename";
+    return isDir ? "toggle" : "open";
+  }
+  // The command key with Down, and only on a Mac: on Windows it would shadow
+  // nothing useful but would also mean nothing, since Enter is already free to
+  // open there.
+  if (isMac && meta && key === "ArrowDown") return isDir ? "toggle" : "open";
+  return null;
+}
+
+/**
  * Which Material Icon Theme icon a row gets.
  *
  * The order is the upstream theme's own: an exact file name beats an extension,

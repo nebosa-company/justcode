@@ -622,6 +622,7 @@ export const EN = {
   "sc.g.explorer": "Explorer",
   "sc.toggleExplorer": "Show or hide the Explorer",
   "sc.openFolder": "Open a folder",
+  "sc.explorerOpen": "Open the selected file",
   "sc.explorerRename": "Rename the selected file",
   "sc.explorerDelete": "Delete the selected files",
   "help.explorerTitle": "Explorer",

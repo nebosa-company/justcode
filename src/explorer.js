@@ -32,6 +32,7 @@ import {
   pathKey,
   relativePath,
   sortEntries,
+  treeKeyAction,
   uniqueName,
   validateName,
   visibleRows,
@@ -897,7 +898,15 @@ export function contextMenu(event) {
       run: () => clipboardWriteText(relativePath(rootPath, single()?.path ?? "")),
     },
     { separator: true },
-    { label: t("explorer.rename"), icon: "comment", accel: "F2", enabled: one, run: beginRename },
+    {
+      label: t("explorer.rename"),
+      icon: "comment",
+      // F2 works everywhere, but a Mac laptop needs Fn for it, so the menu
+      // names the key that platform actually reaches for.
+      accel: perPlatform("F2", "Enter"),
+      enabled: one,
+      run: beginRename,
+    },
     { label: t("explorer.duplicate"), icon: "copy", enabled: one, run: duplicate },
     {
       label: t("explorer.delete"),
@@ -947,6 +956,21 @@ export function handleKey(event) {
     focusRow(next.key);
   };
 
+  // Enter, and the Mac's ⌘↓, mean different things on different platforms.
+  // The decision itself lives in filetree.js so both halves can be tested.
+  const intent = treeKeyAction({
+    key: event.key,
+    meta: event.metaKey,
+    isMac: IS_MAC,
+    isDir: Boolean(row?.node?.isDir),
+  });
+  if (intent) {
+    if (intent === "rename") beginRename();
+    else if (intent === "toggle" && row) toggle(row);
+    else if (intent === "open" && row) hooks.openPath?.(row.node.path);
+    return true;
+  }
+
   switch (event.key) {
     case "ArrowDown":
       move(index + 1);
@@ -973,10 +997,6 @@ export function handleKey(event) {
       return true;
     case "End":
       move(rows.length - 1);
-      return true;
-    case "Enter":
-      if (row?.node?.isDir) toggle(row);
-      else if (row) hooks.openPath?.(row.node.path);
       return true;
     case " ":
       if (row) {

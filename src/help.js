@@ -1,6 +1,6 @@
 import { appLogoElement, iconElement, iconMarkup } from "./icons.js";
 import { LOCALES, t } from "./i18n.js";
-import { accel, IS_MAC, perPlatform } from "./shortcuts.js";
+import { accel, proseAccel, IS_MAC, perPlatform } from "./shortcuts.js";
 
 /**
  * Shortcut reference. The "native" groups are CodeMirror's own bindings, which
@@ -30,7 +30,10 @@ const SHORTCUTS = [
     items: [
       ["Ctrl+Shift+E", "sc.toggleExplorer"],
       ["Ctrl+K Ctrl+O", "sc.openFolder"],
-      ["F2", "sc.explorerRename"],
+      // Enter opens on Windows and Linux and renames on a Mac, where opening
+      // moves to the command key with Down — Finder's pairing, and VS Code's.
+      [perPlatform("Enter", "Ctrl+↓"), "sc.explorerOpen"],
+      [perPlatform("F2", "Enter"), "sc.explorerRename"],
       [perPlatform("Del", "Backspace"), "sc.explorerDelete"],
     ],
   },
@@ -976,7 +979,7 @@ function renderShortcutsInto(container) {
       const keyCell = document.createElement("td");
       keyCell.className = "shortcut-keys";
       // Literal key names print as written; a `sc.k.` entry is prose to translate.
-      keyCell.textContent = keys.startsWith("sc.k.") ? t(keys) : accel(keys);
+      keyCell.textContent = keys.startsWith("sc.k.") ? proseAccel(t(keys)) : accel(keys);
       const textCell = document.createElement("td");
       textCell.textContent = t(description);
       row.append(keyCell, textCell);
