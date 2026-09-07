@@ -358,7 +358,10 @@ back at the next launch.
 
 - **Material Icon Theme icons.** The full upstream set, vendored at build time
   from the `material-icon-theme` package (MIT) into `public/file-icons/`, so
-  the tree looks like the one people already know and needs no network.
+  the tree looks like the one people already know and needs no network. Icons
+  this project owns live in `assets/file-icons/` and are folded into the same
+  maps — `.e` files carry neper's own mark, since upstream has never heard of a
+  language this editor highlights.
 - **Hidden and ignored files are shown, greyed.** A dotfile, a Windows
   hidden/system file, and anything `git check-ignore` would match are all dimmed
   rather than dropped — nothing in the folder is invisible, and the tooltip says
@@ -444,6 +447,7 @@ src/icons.js          inline SVG icon set (currentColor, no network requests)
 src/explorer.js       the Open Folder tree: rendering, keyboard, drag, context menu
 src/filetree.js       its rules with no DOM: sorting, containment, names, icon lookup
 tools/vendor-file-icons.mjs  vendors the Material Icon Theme into public/file-icons
+assets/file-icons/    icons this project owns, folded in by that script
 src/linters.js        HTML tag balance, embedded-script and CSS/JS syntax linting
 src/styles.css        themed chrome around the editor
 src-tauri/src/lib.rs  file I/O, browser launch, Markdown preview, file-open args

@@ -544,6 +544,23 @@ test("a file's icon comes from the most specific rule that matches it", () => {
   assert.equal(fileIconId(map, "app.js", { light: true }), "javascript-light");
 });
 
+test("a neper source file gets neper's own mark, not the blank default", () => {
+  // The Material Icon Theme has never heard of neper, so without an icon of our
+  // own every .e file wore the default page while the language registry was
+  // busy highlighting it. This asserts against the *vendored* map rather than a
+  // synthetic one, so it also fails if a future material-icon-theme starts
+  // claiming .e for something else and quietly wins.
+  const dir = new URL("../public/file-icons/", import.meta.url);
+  const map = JSON.parse(readFileSync(new URL("map.json", dir), "utf8"));
+
+  assert.equal(fileIconId(map, "main.e"), "neper");
+  assert.equal(fileIconId(map, "MAIN.E"), "neper", "the extension is matched case-insensitively");
+  // The tile carries its own ground, which is the whole reason it was chosen
+  // over the bare mark, so it is used unchanged on a light background too.
+  assert.equal(fileIconId(map, "main.e", { light: true }), "neper");
+  assert.ok(readdirSync(dir).includes("neper.svg"), "and the drawing is on disk");
+});
+
 test("every icon the vendored map names was actually vendored", () => {
   // A missing SVG is a silent broken image in the tree, not an exception, so
   // nothing at runtime would ever report a half-finished vendoring. This is the

@@ -16,6 +16,12 @@
 // `latex.clone.svg` — and guessing the name drops them silently, which shows up
 // as a broken image in the tree rather than as an error anywhere.
 //
+// Icons this project owns rather than vendors live in `assets/file-icons/` and
+// are copied in alongside, with their extensions folded into the same maps. The
+// Material Icon Theme has no icon for a language it has never heard of, and a
+// file type the editor highlights should not be the one row in the tree
+// wearing the blank default.
+//
 // `folderNamesExpanded` is dropped: it is exactly `folderNames[k] + "-open"`
 // for all 4654 entries, verified, so deriving it halves the largest map.
 // `highContrast` is dropped because it is empty. `languageIds` is dropped
@@ -40,7 +46,17 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pkgDir = path.join(root, "node_modules", "material-icon-theme");
 const outDir = path.join(root, "public", "file-icons");
+const ownDir = path.join(root, "assets", "file-icons");
 const check = process.argv.includes("--check");
+
+/** Icons this project ships itself, and the file types they claim.
+ *
+ * Kept in step with `src/languages.js` by hand: it is one entry, and deriving
+ * it would mean teaching this script the language registry's shape to save a
+ * line. Extensions carry no leading dot, matching the upstream maps. */
+const OWN_ICONS = {
+  neper: { extensions: ["e"] },
+};
 
 if (!fs.existsSync(pkgDir)) {
   console.error("material-icon-theme is not installed. Run `npm install` first.");
@@ -57,7 +73,16 @@ if (!check && !process.argv.includes("--force")) {
   const mapPath = path.join(outDir, "map.json");
   if (fs.existsSync(mapPath)) {
     try {
-      if (JSON.parse(fs.readFileSync(mapPath, "utf8")).version === version) {
+      const built = JSON.parse(fs.readFileSync(mapPath, "utf8"));
+      // The version gate is about the vendored set. Our own icons change on
+      // their own schedule, so compare them too — otherwise editing one and
+      // running `npm run dev` would quietly keep serving the old drawing.
+      const ownCurrent = Object.keys(OWN_ICONS).every((id) => {
+        const from = path.join(ownDir, `${id}.svg`);
+        const to = path.join(outDir, `${id}.svg`);
+        return fs.existsSync(to) && fs.readFileSync(to).equals(fs.readFileSync(from));
+      });
+      if (built.version === version && ownCurrent) {
         process.exit(0);
       }
     } catch {
@@ -116,6 +141,18 @@ const map = {
   },
 };
 
+// Ours win over anything upstream claims for the same extension: the editor
+// highlights these languages, so its own icon is the more specific answer.
+for (const [id, { extensions = [], fileNames = [] }] of Object.entries(OWN_ICONS)) {
+  const file = path.join(ownDir, `${id}.svg`);
+  if (!fs.existsSync(file)) {
+    console.error(`assets/file-icons/${id}.svg is missing.`);
+    process.exit(1);
+  }
+  for (const extension of extensions) map.fileExtensions[extension] = id;
+  for (const name of fileNames) map.fileNames[name] = id;
+}
+
 /** id -> the file on disk it actually lives in. */
 const sourceFor = (id) => {
   const defined = theme.iconDefinitions[id]?.iconPath;
@@ -136,6 +173,10 @@ for (const id of wanted) {
 if (missing.length) {
   console.error(`${missing.length} icon(s) named by the maps have no file: ${missing.slice(0, 5).join(", ")}`);
   process.exit(1);
+}
+
+for (const id of Object.keys(OWN_ICONS)) {
+  files.set(`${id}.svg`, fs.readFileSync(path.join(ownDir, `${id}.svg`)));
 }
 
 for (const [openName, closedId] of aliased) {
