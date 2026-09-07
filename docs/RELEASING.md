@@ -28,11 +28,23 @@ signing inputs; nothing else here changes.
 
 ## Cutting a release
 
-1. Bump the version in all three places that must agree — the build fails
-   in confusing ways if they drift:
+1. Bump the version in all four places that must agree — the build fails in
+   confusing ways if the first three drift, and the fourth drifts silently:
    - [`package.json`](../package.json) (`version`)
    - [`src-tauri/tauri.conf.json`](../src-tauri/tauri.conf.json) (`version`)
    - [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) (`[package].version`)
+   - [`src/main.js`](../src/main.js) (`APP_VERSION`) — the fallback the About
+     box shows when the Tauri API is unavailable. Nothing fails if this one is
+     missed; the About box just quietly reports the previous version. It has
+     been missed before, which is why it is listed here now.
+
+   Then refresh the two lockfiles that carry the version, or the next install
+   rewrites them as an unrelated diff:
+
+   ```sh
+   npm install --package-lock-only
+   cargo update -p justcode --manifest-path src-tauri/Cargo.toml --offline
+   ```
 
 2. Commit that, then tag and push:
 
