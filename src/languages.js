@@ -405,6 +405,11 @@ export const LANGUAGE_LABELS = Object.fromEntries(
   Object.entries(LANGUAGES).map(([id, language]) => [id, language.label]),
 );
 
+/** Every extension each language claims — the project scan matches files by it. */
+export const LANGUAGE_EXTENSIONS = Object.fromEntries(
+  Object.entries(LANGUAGES).map(([id, language]) => [id, language.extensions]),
+);
+
 /** Every language as `{ id, label }`, sorted by label for the mode picker. */
 export function languageList() {
   return Object.entries(LANGUAGES)

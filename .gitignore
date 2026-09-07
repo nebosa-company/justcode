@@ -52,6 +52,13 @@ Thumbs.db
 /gate.lock
 crates/target/
 
+# Project Statistics writes this on every scan, beside whatever folder is open —
+# including this one. It is the baseline for the *next* scan rather than a record
+# worth keeping, so committing it would put a diff of every count into every
+# commit that happened to open the panel. Anchored, so a `.metrics` a project
+# genuinely tracks somewhere below the root still gets committed.
+/.metrics
+
 # `npm test` builds here rather than in `target`, so a running `tauri dev`
 # cannot turn the test run red by holding the lock on it.
 src-tauri/target-test/

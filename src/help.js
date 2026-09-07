@@ -1264,3 +1264,181 @@ export function showAbout(version) {
     body.append(row);
   }
 }
+
+/**
+ * Project statistics: every language in the open folder, and how each has moved
+ * since the last scan.
+ *
+ * The dialog opens before the scan finishes and fills in when it lands, because
+ * a whole-project walk is seconds on a cold cache and a window that does nothing
+ * for three seconds reads as a window that is broken.
+ *
+ * `rescan` is handed in rather than called from here so this file stays what the
+ * rest of it is — markup over data — and the invoking stays in main.js.
+ */
+export function showProjectStats(rescan) {
+  const body = openOverlay(t("stats.title"), true);
+  body.classList.add("stats-body");
+
+  const head = document.createElement("div");
+  head.className = "stats-head";
+  const window_ = document.createElement("span");
+  window_.className = "stats-window cold";
+  const again = document.createElement("button");
+  again.type = "button";
+  again.className = "stats-rescan";
+  again.textContent = t("stats.rescan");
+  head.append(window_, again);
+
+  const table = document.createElement("div");
+  table.className = "stats-table";
+
+  const note = document.createElement("p");
+  note.className = "stats-note";
+
+  body.append(head, table, note);
+
+  const number = (value) => value.toLocaleString();
+
+  /** A signed count, or nothing at all when there is no baseline to compare to. */
+  function deltaElement(value) {
+    const span = document.createElement("span");
+    span.className = "stats-delta";
+    if (value === null || value === undefined) return span;
+    // Colour marks direction, not judgement — deleting a thousand lines is a
+    // good day, so neither direction is styled as an error.
+    span.classList.add(value > 0 ? "up" : value < 0 ? "down" : "flat");
+    span.textContent = value === 0 ? "±0" : `${value > 0 ? "+" : "−"}${number(Math.abs(value))}`;
+    return span;
+  }
+
+  function cell(row, value, delta, className) {
+    const div = document.createElement("div");
+    if (className) div.className = className;
+    const figure = document.createElement("span");
+    figure.className = "stats-n";
+    figure.textContent = number(value);
+    div.append(figure, deltaElement(delta));
+    row.append(div);
+  }
+
+  /** Code / comment / blank as one bar, so a language's shape reads at a glance. */
+  function mixElement(counts) {
+    const bar = document.createElement("div");
+    bar.className = "stats-bar";
+    const total = counts.lines || 1;
+    for (const [field, name] of [["code", "code"], ["comment", "comm"]]) {
+      const part = document.createElement("i");
+      part.className = `stats-${name}`;
+      part.style.width = `${(counts[field] / total) * 100}%`;
+      bar.append(part);
+    }
+    // Numbers only, so the readout needs no string of its own in
+    // thirty-six locales: "86% / 8% / 6%", code first, in column order.
+    const percent = (field) => `${Math.round((counts[field] / total) * 100)}%`;
+    bar.title = `${percent("code")} / ${percent("comment")} / ${percent("blank")}`;
+    return bar;
+  }
+
+  function header() {
+    const row = document.createElement("div");
+    row.className = "stats-row stats-header";
+    for (const key of ["language", "files", "lines", "code", "comment", "blank"]) {
+      const cellElement = document.createElement("div");
+      cellElement.textContent = t(`stats.${key}`);
+      row.append(cellElement);
+    }
+    row.append(document.createElement("div"));
+    return row;
+  }
+
+  function languageRow(entry) {
+    const row = document.createElement("div");
+    row.className = "stats-row";
+
+    const name = document.createElement("div");
+    name.className = "stats-lang";
+    const label = document.createElement("span");
+    label.textContent = entry.label;
+    name.append(label);
+    if (entry.state === "new" || entry.state === "gone") {
+      const chip = document.createElement("span");
+      chip.className = `stats-chip ${entry.state}`;
+      chip.textContent =
+        entry.state === "new" ? t("stats.new") : `${t("stats.gone")} −${number(entry.lost)}`;
+      name.append(chip);
+    }
+    row.append(name);
+
+    for (const field of ["files", "lines", "code", "comment", "blank"]) {
+      cell(row, entry[field], entry.delta?.[field]);
+    }
+
+    const mix = document.createElement("div");
+    mix.className = "stats-mix";
+    mix.append(mixElement(entry));
+    row.append(mix);
+    return row;
+  }
+
+  function totalsRow(totals) {
+    const row = document.createElement("div");
+    row.className = "stats-row stats-totals";
+    const name = document.createElement("div");
+    name.textContent = t("stats.total");
+    row.append(name);
+    for (const field of ["files", "lines", "code", "comment", "blank"]) {
+      cell(row, totals[field], totals.delta?.[field]);
+    }
+    const mix = document.createElement("div");
+    mix.className = "stats-mix";
+    mix.append(mixElement(totals));
+    row.append(mix);
+    return row;
+  }
+
+  function render(report) {
+    table.replaceChildren(header());
+    // A language that has gone is worth one report, then it stops being news.
+    const rows = report.rows.filter((entry) => entry.files > 0 || entry.state === "gone");
+    for (const entry of rows) table.append(languageRow(entry));
+    table.append(totalsRow(report.totals));
+
+    const [scanned, baseline] = report.stamps;
+    window_.classList.toggle("cold", !report.window);
+    window_.textContent = report.window
+      ? report.window.since
+        ? t("stats.since", { date: report.window.text })
+        : report.window.text
+      : t("stats.noBaseline");
+    // Two localised stamps joined by an arrow — no sentence to translate.
+    window_.title = baseline ? `${baseline} → ${scanned}` : scanned;
+
+    note.textContent = report.truncated ? t("stats.truncated") : t("stats.stored");
+  }
+
+  function load() {
+    again.disabled = true;
+    table.replaceChildren(Object.assign(document.createElement("p"), {
+      className: "stats-waiting",
+      textContent: t("stats.scanning"),
+    }));
+    note.textContent = "";
+    rescan().then(
+      (report) => {
+        again.disabled = false;
+        render(report);
+      },
+      (error) => {
+        again.disabled = false;
+        table.replaceChildren(Object.assign(document.createElement("p"), {
+          className: "stats-waiting",
+          textContent: String(error),
+        }));
+      },
+    );
+  }
+
+  again.addEventListener("click", load);
+  load();
+}

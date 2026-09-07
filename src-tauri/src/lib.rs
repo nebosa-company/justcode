@@ -2552,6 +2552,275 @@ fn set_file_associations(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Project metrics (View > Project Statistics)
+// ---------------------------------------------------------------------------
+
+/// A file bigger than this is data, not source — a bundled map file, a vendored
+/// blob, a captured log. Counting it says nothing about the project and reading
+/// it costs the whole scan.
+const METRICS_MAX_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Enough for any project someone edits by hand. The cap is a stop, not a
+/// sample: the report says it was hit, so the numbers are never quietly partial.
+const METRICS_MAX_FILES: u32 = 50_000;
+
+/// The report, written beside the project it measures.
+const METRICS_FILE: &str = ".metrics";
+
+/// One language's name and comment syntax, sent from the front end.
+///
+/// The table lives in `src/stats.js` rather than here because `languages.js`
+/// already decides what a `.mjs` file is called, and two tables would drift the
+/// first time a language was added to one side only.
+#[derive(serde::Deserialize)]
+struct LangSpec {
+    label: String,
+    extensions: Vec<String>,
+    /// Prefixes that comment out the rest of the line (`//`, `#`, `REM`).
+    #[serde(default)]
+    line: Vec<String>,
+    /// Opening and closing delimiters of a block comment, where the language
+    /// has one.
+    #[serde(default)]
+    block: Option<(String, String)>,
+}
+
+#[derive(Default, Clone, serde::Serialize)]
+struct Counts {
+    files: u64,
+    lines: u64,
+    code: u64,
+    comment: u64,
+    blank: u64,
+}
+
+impl Counts {
+    fn add(&mut self, other: &Counts) {
+        self.files += other.files;
+        self.lines += other.lines;
+        self.code += other.code;
+        self.comment += other.comment;
+        self.blank += other.blank;
+    }
+}
+
+/// Whether `line` opens with `token` as a whole word.
+///
+/// Only alphabetic tokens need the check: `REM` is Batch's line comment, and
+/// without a boundary test it would comment out a line beginning `REMOVE`.
+/// Punctuation tokens cannot run into an identifier, so they take the plain
+/// path and stay case-sensitive.
+fn starts_with_token(line: &str, token: &str) -> bool {
+    if !token.starts_with(|c: char| c.is_alphabetic()) {
+        return line.starts_with(token);
+    }
+    let Some(head) = line.get(..token.len()) else { return false };
+    if !head.eq_ignore_ascii_case(token) {
+        return false;
+    }
+    let tail = &line[token.len()..];
+    tail.is_empty() || tail.starts_with(|c: char| c.is_whitespace())
+}
+
+/// The earliest byte at which a comment opens in `line`, ignoring position 0.
+///
+/// Position 0 is excluded because the caller has already tested it: what sits
+/// at the start of the line is code, and this finds where that code stops.
+fn next_comment(line: &str, spec: &LangSpec) -> Option<usize> {
+    let mut best: Option<usize> = None;
+    let mut consider = |at: usize| {
+        if at > 0 && best.map_or(true, |current| at < current) {
+            best = Some(at);
+        }
+    };
+    for token in &spec.line {
+        if let Some(at) = line.find(token.as_str()) {
+            consider(at);
+        }
+    }
+    if let Some((open, _)) = &spec.block {
+        if let Some(at) = line.find(open.as_str()) {
+            consider(at);
+        }
+    }
+    best
+}
+
+/// Splits one file into code, comment and blank lines.
+///
+/// A line carrying both code and a comment counts as code, which is the
+/// convention every other line counter follows and the only one that keeps
+/// `code + comment + blank == lines`.
+///
+/// ponytail: textual scan, not a parse. A comment delimiter inside a string
+/// literal — a `/*` in a pattern, a `#` in a shell string, a `//` in a URL —
+/// reads as the start of a comment, so a file that does that comes out a few
+/// lines light. The fix is parsing each file with its real grammar, which costs
+/// a Lezer parse per file across the whole project; do it if the numbers are
+/// ever visibly wrong, not on principle.
+fn count_lines(text: &str, spec: &LangSpec) -> Counts {
+    let mut counts = Counts { files: 1, ..Counts::default() };
+    let mut in_block = false;
+
+    for raw in text.lines() {
+        counts.lines += 1;
+        let mut rest = raw.trim();
+        let mut saw_code = false;
+        let mut saw_comment = false;
+
+        while !rest.is_empty() {
+            if in_block {
+                saw_comment = true;
+                let close = spec.block.as_ref().map(|(_, close)| close);
+                match close.and_then(|close| rest.find(close.as_str()).map(|at| at + close.len())) {
+                    Some(end) => {
+                        in_block = false;
+                        rest = rest[end..].trim();
+                    }
+                    None => rest = "",
+                }
+                continue;
+            }
+
+            if spec.line.iter().any(|token| starts_with_token(rest, token)) {
+                saw_comment = true;
+                rest = "";
+                continue;
+            }
+
+            if let Some((open, close)) = &spec.block {
+                if rest.starts_with(open.as_str()) {
+                    saw_comment = true;
+                    let after = &rest[open.len()..];
+                    match after.find(close.as_str()) {
+                        Some(at) => rest = after[at + close.len()..].trim(),
+                        None => {
+                            in_block = true;
+                            rest = "";
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            // Ordinary content. Everything up to the next comment opener on this
+            // line is code; the loop picks the comment up on its next turn.
+            saw_code = true;
+            match next_comment(rest, spec) {
+                Some(at) => rest = rest[at..].trim(),
+                None => rest = "",
+            }
+        }
+
+        if saw_code {
+            counts.code += 1;
+        } else if saw_comment {
+            counts.comment += 1;
+        } else {
+            counts.blank += 1;
+        }
+    }
+
+    counts
+}
+
+/// Walks one directory, following the same ignore rules the Explorer greys rows
+/// by — so the report counts what the project actually ships, with
+/// `node_modules`, `target` and `dist` left out because git leaves them out.
+fn scan_dir(
+    dir: &Path,
+    repo: &Path,
+    by_extension: &HashMap<String, usize>,
+    specs: &[LangSpec],
+    out: &mut HashMap<String, Counts>,
+    budget: &mut u32,
+) {
+    let chain = ignore_chain(repo, dir);
+    let Ok(entries) = fs::read_dir(dir) else { return };
+
+    for entry in entries.flatten() {
+        if *budget == 0 {
+            return;
+        }
+        let path = entry.path();
+        let Ok(meta) = entry.metadata() else { continue };
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        if meta.is_dir() {
+            // `.git` is the one directory no .gitignore mentions and nobody
+            // opened a folder to count.
+            if name == ".git" || is_ignored(&chain, &path, true) {
+                continue;
+            }
+            scan_dir(&path, repo, by_extension, specs, out, budget);
+            continue;
+        }
+
+        if !meta.is_file() || meta.len() > METRICS_MAX_BYTES || is_ignored(&chain, &path, false) {
+            continue;
+        }
+        // The report is not part of the project it measures.
+        if name == METRICS_FILE {
+            continue;
+        }
+
+        let Some(extension) = path.extension().map(|e| e.to_string_lossy().to_lowercase()) else {
+            continue;
+        };
+        let Some(&index) = by_extension.get(&extension) else { continue };
+        // Not UTF-8 means a binary wearing a known extension. Skipped rather
+        // than counted as one enormous line.
+        let Ok(text) = fs::read_to_string(&path) else { continue };
+
+        *budget -= 1;
+        let spec = &specs[index];
+        out.entry(spec.label.clone()).or_default().add(&count_lines(&text, spec));
+    }
+}
+
+/// Counts every source line under `root`, grouped by language.
+///
+/// `async` so the walk runs off the main thread: a synchronous command holds the
+/// UI thread, and a cold scan of a large project is seconds of disk, which would
+/// land as a frozen window rather than as a spinner.
+///
+/// Reading and writing `.metrics` is left to the caller, which already has
+/// `read_text_file` and `write_text_file` and — unlike this — has a date
+/// formatter. This only counts.
+#[tauri::command(async)]
+fn project_metrics(root: String, languages: Vec<LangSpec>) -> Result<serde_json::Value, String> {
+    let root_path = fs::canonicalize(&root).map_err(|e| format!("{root}: {e}"))?;
+    if !root_path.is_dir() {
+        return Err(format!("{root} is not a folder"));
+    }
+    // Ignore rules anchor at the repository rather than at whichever subfolder
+    // happens to be open, so a pattern written at the top still applies.
+    let repo = git_root(&root_path).unwrap_or_else(|| root_path.clone());
+
+    let mut by_extension = HashMap::new();
+    for (index, spec) in languages.iter().enumerate() {
+        for extension in &spec.extensions {
+            by_extension.insert(extension.to_lowercase(), index);
+        }
+    }
+
+    let mut out: HashMap<String, Counts> = HashMap::new();
+    let mut budget = METRICS_MAX_FILES;
+    scan_dir(&root_path, &repo, &by_extension, &languages, &mut out, &mut budget);
+
+    let mut totals = Counts::default();
+    for counts in out.values() {
+        totals.add(counts);
+    }
+
+    Ok(serde_json::json!({
+        "totals": totals,
+        "languages": out,
+        "truncated": budget == 0,
+    }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let boot_clock = BootClock(std::time::Instant::now());
@@ -2657,7 +2926,8 @@ pub fn run() {
             rename_entry,
             copy_entry,
             delete_entry,
-            explorer_watch
+            explorer_watch,
+            project_metrics
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -3425,5 +3695,194 @@ mod explorer_tests {
         let chain = ignore_chain(&root, &root);
         assert!(is_ignored(&chain, &root.join("a.tmp"), false));
         assert!(!is_ignored(&chain, &root.join("a.rs"), false));
+    }
+}
+
+#[cfg(test)]
+mod metrics_tests {
+    use super::{count_lines, scan_dir, starts_with_token, Counts, LangSpec};
+    use std::collections::HashMap;
+    use std::fs;
+
+    fn c_like() -> LangSpec {
+        serde_json::from_value(serde_json::json!({
+            "label": "C-like",
+            "extensions": ["c"],
+            "line": ["//"],
+            "block": ["/*", "*/"],
+        }))
+        .unwrap()
+    }
+
+    fn hashed() -> LangSpec {
+        serde_json::from_value(serde_json::json!({
+            "label": "Hashed",
+            "extensions": ["sh"],
+            "line": ["#"],
+        }))
+        .unwrap()
+    }
+
+    fn totals(counts: &Counts) -> (u64, u64, u64, u64) {
+        (counts.lines, counts.code, counts.comment, counts.blank)
+    }
+
+    /// The invariant the whole report rests on: every line lands in exactly one
+    /// bucket. If this drifts, the percentages in the panel stop adding to 100
+    /// and nobody can tell which of the four numbers is the wrong one.
+    #[test]
+    fn every_line_lands_in_exactly_one_bucket() {
+        let text = "// a\ncode();\n\n/* b\n   c */\nmore(); // trail\n";
+        let counts = count_lines(text, &c_like());
+        assert_eq!(counts.lines, counts.code + counts.comment + counts.blank);
+        assert_eq!(totals(&counts), (6, 2, 3, 1));
+    }
+
+    /// A line that is both is code — the convention every other counter uses.
+    #[test]
+    fn a_trailing_comment_leaves_the_line_as_code() {
+        let counts = count_lines("let a = 1; // why\n", &c_like());
+        assert_eq!(totals(&counts), (1, 1, 0, 0));
+    }
+
+    /// Code after a block comment closes mid-line still counts as code.
+    #[test]
+    fn code_after_a_closing_block_is_code() {
+        let counts = count_lines("/* setup */ run();\n", &c_like());
+        assert_eq!(totals(&counts), (1, 1, 0, 0));
+    }
+
+    /// An unterminated block runs to the end of the file rather than resetting
+    /// at the next line, which is what made the count drift the first time.
+    #[test]
+    fn an_unclosed_block_swallows_the_rest() {
+        let counts = count_lines("/* open\nstill inside\nand here\n", &c_like());
+        assert_eq!(totals(&counts), (3, 0, 3, 0));
+    }
+
+    /// Whitespace-only lines are blank whatever they contain.
+    #[test]
+    fn tabs_and_spaces_are_blank() {
+        let counts = count_lines("code();\n\t\n   \n", &c_like());
+        assert_eq!(totals(&counts), (3, 1, 0, 2));
+    }
+
+    /// A language with no block syntax must not be tripped by `/*`.
+    #[test]
+    fn a_line_only_language_ignores_block_delimiters() {
+        let counts = count_lines("echo /* not a comment */\n# real\n", &hashed());
+        assert_eq!(totals(&counts), (2, 1, 1, 0));
+    }
+
+    /// `REM` comments out a Batch line; `REMOVE` is a command.
+    #[test]
+    fn a_word_token_needs_a_boundary() {
+        assert!(starts_with_token("REM explain", "REM"));
+        assert!(starts_with_token("rem explain", "REM"));
+        assert!(starts_with_token("REM", "REM"));
+        assert!(!starts_with_token("REMOVE me", "REM"));
+        // Punctuation cannot run into an identifier, so it needs no boundary.
+        assert!(starts_with_token("//x", "//"));
+    }
+
+    /// The documented blind spot, pinned so it is a known quantity rather than a
+    /// surprise: a delimiter inside a string reads as a comment.
+    #[test]
+    fn a_delimiter_in_a_string_is_the_known_false_positive() {
+        let counts = count_lines("let url = \"http://x\";\n", &c_like());
+        assert_eq!(totals(&counts), (1, 1, 0, 0), "trailing case still reads as code");
+
+        let counts = count_lines("let s = \"/* not really */\";\n", &c_like());
+        assert_eq!(totals(&counts), (1, 1, 0, 0), "code before it keeps the line as code");
+    }
+
+    /// A last line with no newline still counts.
+    #[test]
+    fn a_missing_final_newline_still_counts() {
+        let counts = count_lines("a();\nb();", &c_like());
+        assert_eq!(totals(&counts), (2, 2, 0, 0));
+    }
+
+    /// The walk must count what the project ships and nothing else. Getting this
+    /// wrong is not a small error: a stray `node_modules` outweighs the whole of
+    /// the source it sits beside, and the report would be worthless rather than
+    /// merely off.
+    #[test]
+    fn the_walk_skips_what_git_skips() {
+        let dir = std::env::temp_dir().join("justcode-metrics-walk");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::create_dir_all(dir.join("node_modules/dep")).unwrap();
+        fs::create_dir_all(dir.join(".git")).unwrap();
+
+        fs::write(dir.join(".gitignore"), "node_modules/
+").unwrap();
+        fs::write(dir.join("src/a.c"), "// one
+code();
+
+").unwrap();
+        fs::write(dir.join("src/b.c"), "run();
+").unwrap();
+        fs::write(dir.join("node_modules/dep/huge.c"), "x();
+".repeat(500)).unwrap();
+        fs::write(dir.join(".git/config.c"), "y();
+").unwrap();
+        // A known extension holding something that is not text.
+        fs::write(dir.join("src/blob.c"), [0xff, 0xfe, 0x00, 0x01]).unwrap();
+        // An extension nothing claims.
+        fs::write(dir.join("src/notes.unknown"), "z();
+").unwrap();
+        // The report never counts itself.
+        fs::write(dir.join(".metrics"), "{}
+").unwrap();
+
+        let spec: LangSpec = serde_json::from_value(serde_json::json!({
+            "label": "C-like",
+            "extensions": ["c"],
+            "line": ["//"],
+            "block": ["/*", "*/"],
+        }))
+        .unwrap();
+        let specs = vec![spec];
+        let by_extension = HashMap::from([("c".to_string(), 0usize)]);
+
+        let mut out: HashMap<String, Counts> = HashMap::new();
+        let mut budget = 100;
+        scan_dir(&dir, &dir, &by_extension, &specs, &mut out, &mut budget);
+
+        let counted = out.get("C-like").expect("the two source files");
+        assert_eq!(counted.files, 2, "a.c and b.c, not the dependency or the blob");
+        assert_eq!((counted.lines, counted.code, counted.comment, counted.blank), (4, 2, 1, 1));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+
+    /// The cap has to stop the walk, not silently sample it.
+    #[test]
+    fn the_file_cap_stops_the_walk() {
+        let dir = std::env::temp_dir().join("justcode-metrics-cap");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        for n in 0..5 {
+            fs::write(dir.join(format!("f{n}.c")), "a();
+").unwrap();
+        }
+
+        let spec: LangSpec = serde_json::from_value(serde_json::json!({
+            "label": "C-like", "extensions": ["c"], "line": ["//"],
+        }))
+        .unwrap();
+        let specs = vec![spec];
+        let by_extension = HashMap::from([("c".to_string(), 0usize)]);
+
+        let mut out: HashMap<String, Counts> = HashMap::new();
+        let mut budget = 2;
+        scan_dir(&dir, &dir, &by_extension, &specs, &mut out, &mut budget);
+
+        assert_eq!(budget, 0, "the caller reports a partial scan from this");
+        assert_eq!(out.get("C-like").unwrap().files, 2);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

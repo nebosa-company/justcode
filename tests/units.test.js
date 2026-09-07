@@ -17,6 +17,7 @@ import { decideReload } from "../src/ondisk.js";
 import { renderMarkdownDocument } from "../src/markdown.js";
 import { formatAccel, isLetter, proseAccel } from "../src/shortcuts.js";
 import { StringStream } from "@codemirror/language";
+import { compare, scanSpecs, windowLabel } from "../src/stats.js";
 import { neper } from "../src/neper.js";
 import { intelAsm } from "../src/intel-asm.js";
 import { isNewer, installerFor } from "../src/update.js";
@@ -794,4 +795,133 @@ test("neper declarations are found at column 0 and nowhere else", () => {
     ],
     "in document order, with signatures intact",
   );
+});
+
+// ---------------------------------------------------------------------------
+// Project statistics
+// ---------------------------------------------------------------------------
+
+const HOUR = 3600_000;
+const DAY = 24 * HOUR;
+const NOW = Date.parse("2026-09-08T01:12:00Z");
+const ago = (ms) => new Date(NOW - ms).toISOString();
+
+test("the delta window is worded by Intl, and gives way to a date past a month", () => {
+  const label = (ms) => windowLabel(ago(ms), "en", NOW);
+
+  // Under an hour, minutes; under a day, hours; then days. `numeric: "auto"`
+  // is what produces "yesterday" rather than "1 day ago" — the reason the
+  // stdlib formatter was worth taking over seven hand-translated keys.
+  assert.equal(label(30 * 60_000).text, "30 minutes ago");
+  assert.equal(label(2 * HOUR).text, "2 hours ago");
+  assert.equal(label(2 * DAY).text, "2 days ago");
+  assert.equal(label(DAY).text, "yesterday");
+
+  // A scan seconds old rounds up rather than reading "0 minutes ago".
+  assert.equal(label(4000).text, "1 minute ago");
+
+  // Past thirty days the relative form stops carrying information and the
+  // date itself takes over.
+  const old = label(200 * DAY);
+  assert.equal(old.since, true);
+  assert.equal(old.text, "Feb 20, 2026");
+
+  // No previous scan is a state, not an error.
+  assert.equal(windowLabel(null, "en", NOW), null);
+  assert.equal(windowLabel("not a date", "en", NOW), null);
+});
+
+test("the window follows the app's language, not the machine's", () => {
+  // The whole point of handing `locale` in: switching the app to German must
+  // move the wording with it.
+  assert.equal(windowLabel(ago(2 * HOUR), "de", NOW).text, "vor 2 Stunden");
+  assert.equal(windowLabel(ago(2 * HOUR), "fr", NOW).text, "il y a 2 heures");
+});
+
+const counts = (files, lines, code, comment, blank) => ({ files, lines, code, comment, blank });
+
+test("a scan against a baseline gives every language a signed delta", () => {
+  const current = {
+    totals: counts(3, 300, 200, 60, 40),
+    languages: { Rust: counts(1, 100, 70, 20, 10), JavaScript: counts(2, 200, 130, 40, 30) },
+    truncated: false,
+  };
+  const baseline = {
+    totals: counts(3, 280, 190, 55, 35),
+    languages: { Rust: counts(1, 80, 60, 12, 8), JavaScript: counts(2, 200, 130, 43, 27) },
+  };
+
+  const { rows, totals } = compare(current, baseline);
+
+  // Biggest language first — the order a project is read in.
+  assert.deepEqual(rows.map((r) => r.label), ["JavaScript", "Rust"]);
+  assert.equal(rows[1].delta.lines, 20);
+  assert.equal(rows[1].delta.comment, 8);
+  // A language that lost comment lines carries a negative, not an absolute.
+  assert.equal(rows[0].delta.comment, -3);
+  assert.equal(totals.delta.lines, 20);
+  assert.equal(rows.every((row) => row.state === "same"), true);
+});
+
+test("the first scan shows figures and no deltas at all", () => {
+  const current = { totals: counts(1, 10, 8, 1, 1), languages: { Rust: counts(1, 10, 8, 1, 1) }, truncated: false };
+  const { rows, totals } = compare(current, null);
+
+  // Absent, not zeroed: a column of ±0 on a first run would read as "nothing
+  // changed" when the truth is "there is nothing to compare with".
+  assert.equal(rows[0].delta, null);
+  assert.equal(totals.delta, null);
+  assert.equal(rows[0].state, "first");
+});
+
+test("a language that appears is new, and one that goes is reported once", () => {
+  const current = {
+    totals: counts(1, 40, 30, 5, 5),
+    languages: { Rust: counts(1, 40, 30, 5, 5) },
+    truncated: false,
+  };
+  const baseline = {
+    totals: counts(2, 140, 100, 25, 15),
+    languages: { Python: counts(1, 100, 70, 20, 10) },
+  };
+
+  const rows = Object.fromEntries(compare(current, baseline).rows.map((r) => [r.label, r]));
+
+  // Arriving is not a delta equal to the whole language — there was nothing to
+  // grow from, so it is marked rather than measured.
+  assert.equal(rows.Rust.state, "new");
+  assert.equal(rows.Rust.delta, null);
+
+  // Leaving is worth one report: the row survives at zero, carrying what it
+  // used to hold, and is gone from the next scan because the next baseline
+  // will not mention it either.
+  assert.equal(rows.Python.state, "gone");
+  assert.equal(rows.Python.files, 0);
+  assert.equal(rows.Python.lost, 100);
+});
+
+test("every language the app can open is offered to the scanner", () => {
+  const specs = scanSpecs();
+  const byLabel = Object.fromEntries(specs.map((s) => [s.label, s]));
+
+  // Every language in the picker is scannable, or a project's files go
+  // uncounted with nothing to say they were skipped.
+  assert.equal(specs.length, languageList().length);
+  assert.equal(
+    specs.every((s) => Array.isArray(s.extensions) && s.extensions.length > 0),
+    true,
+  );
+
+  assert.deepEqual(byLabel.Rust.line, ["//"]);
+  assert.deepEqual(byLabel.Rust.block, ["/*", "*/"]);
+  // Markdown is prose-as-code by decision: under code/comment/blank there is no
+  // bucket for a paragraph, and calling a README "comment" would flatter every
+  // project that ships documentation.
+  assert.deepEqual(byLabel.Markdown.line, []);
+  assert.equal(byLabel.Markdown.block, null);
+  // JSON has no comment syntax to find.
+  assert.equal(byLabel.JSON.block, null);
+  // CSS has no line comment, only a block one.
+  assert.deepEqual(byLabel.CSS.line, []);
+  assert.deepEqual(byLabel.CSS.block, ["/*", "*/"]);
 });

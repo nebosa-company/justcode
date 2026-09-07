@@ -254,6 +254,28 @@ export const EN = {
   "panel.needsFile": "Open a file in the project first — the panel reads its journal.",
   "status.lineColumn": "Line {line}, Column {column}",
 
+  // Project Statistics. Deliberately few keys: the window's relative wording
+  // ("2 hours ago") comes from Intl.RelativeTimeFormat, which is already right
+  // in every locale here, and the mix and stamp tooltips are numbers and dates
+  // with no sentence around them.
+  "stats.title": "Project Statistics",
+  "stats.rescan": "Rescan",
+  "stats.language": "Language",
+  "stats.files": "Files",
+  "stats.lines": "Lines",
+  "stats.code": "Code",
+  "stats.comment": "Comment",
+  "stats.blank": "Blank",
+  "stats.total": "Total",
+  "stats.new": "new",
+  "stats.gone": "gone",
+  "stats.since": "since {date}",
+  "stats.noBaseline": "no baseline yet",
+  "stats.scanning": "Scanning the project…",
+  "stats.stored": "Kept in .metrics",
+  "stats.truncated": "Stopped at 50,000 files — these totals are partial.",
+  "stats.noFolder": "Open a folder first — there is no project to measure.",
+
   "tabs.empty": "No files open — press Ctrl+O to open, Ctrl+N for a new file",
   "tabs.newFileHint": "Double-click for a new file",
 

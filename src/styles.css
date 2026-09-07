@@ -2757,3 +2757,211 @@ body.perp-resizing {
 }
 
 .perp-approve:hover { background: var(--hover, rgba(127, 127, 127, 0.15)); }
+
+/* ---------- Project Statistics ---------- */
+
+.stats-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stats-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The window every delta is measured over. It answers "compared to what?", so
+   it sits with the title rather than in a footnote, and carries the exact
+   stamps on hover. The delta sign is drawn in, not typed, so no locale has to
+   translate a glyph. */
+.stats-window {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.stats-window::before {
+  content: "Δ";
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* No baseline: the pill is still there, saying so, rather than vanishing and
+   leaving the reader to wonder what the numbers are being compared with. */
+.stats-window.cold {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--fg-dim);
+}
+
+.stats-window.cold::before {
+  color: var(--fg-dim);
+}
+
+.stats-rescan {
+  margin-left: auto;
+  padding: 3px 11px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  background: var(--control);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.stats-rescan:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.stats-rescan:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A grid rather than a <table>: the row is one object with seven tracks, and
+   the totals row has to sit on the same tracks without a second <colgroup> to
+   keep in step. */
+.stats-table {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) repeat(5, max-content) 120px;
+  overflow-x: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-row {
+  display: contents;
+}
+
+.stats-row > div {
+  padding: 6px 10px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-row > div:first-child {
+  text-align: left;
+}
+
+.stats-header > div {
+  position: sticky;
+  top: 0;
+  /* Above the rows, or a scrolled delta paints through the header's own
+     background — a sticky cell without one loses to later siblings. */
+  z-index: 1;
+  background: var(--menu-bg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.stats-totals > div {
+  border-top: 2px solid var(--border-strong);
+  border-bottom: none;
+  font-weight: 600;
+}
+
+.stats-lang {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stats-n {
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+/* Colour marks direction, not judgement: deleting four hundred lines is the
+   good day, so neither direction is drawn as an error. An untouched language
+   fades rather than shouting a row of zeroes. */
+.stats-delta {
+  margin-left: 6px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+
+.stats-delta.up {
+  color: var(--accent);
+}
+
+.stats-delta.down {
+  color: var(--danger);
+}
+
+.stats-delta.flat {
+  opacity: 0.45;
+}
+
+.stats-chip {
+  padding: 1px 6px;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  color: var(--fg-dim);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.stats-chip.new {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.stats-chip.gone {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.stats-mix {
+  display: flex;
+  align-items: center;
+}
+
+/* Code, comment and blank as one bar. Blank is the track showing through
+   rather than a third segment, so two widths describe three quantities. */
+.stats-bar {
+  display: flex;
+  width: 100%;
+  height: 7px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.stats-bar i {
+  display: block;
+  height: 100%;
+}
+
+.stats-bar .stats-code {
+  background: var(--accent);
+}
+
+.stats-bar .stats-comm {
+  background: var(--fg-dim);
+}
+
+.stats-waiting,
+.stats-note {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+
+.stats-waiting {
+  grid-column: 1 / -1;
+  padding: 18px 10px;
+}

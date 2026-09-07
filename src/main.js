@@ -20,7 +20,9 @@ import {
   showAssociations,
   showNewFile,
   isOverlayOpen,
+  showProjectStats,
 } from "./help.js";
+import { scanProject } from "./stats.js";
 import { decideReload } from "./ondisk.js";
 import { findSymbols, supportsSymbols } from "./symbols.js";
 import { templateFor, hasTemplate } from "./templates.js";
@@ -2793,6 +2795,7 @@ function buildMenus() {
         run: openCommandPalette,
       },
       { label: t("view.problems"), icon: "warning", accel: "F8", run: showProblems },
+      { label: t("stats.title"), icon: "info", run: showStatistics },
       {
         label: t("view.nextProblem"),
         icon: "arrowDown",
@@ -3954,6 +3957,20 @@ function allCommands() {
   };
   for (const menu of buildMenus()) walk(menu.items, [menu.label]);
   return found;
+}
+
+/** View > Project Statistics.
+ *
+ * The scan needs a project, and "the folder that is open" is the only thing
+ * that means here — a lone file has no boundary to walk.
+ */
+async function showStatistics() {
+  const root = explorer.root();
+  if (!root) {
+    await message(t("stats.noFolder"), { title: t("stats.title") });
+    return;
+  }
+  showProjectStats(() => scanProject(root, currentLocale()));
 }
 
 function openCommandPalette() {
