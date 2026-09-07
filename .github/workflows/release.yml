@@ -8,6 +8,13 @@ name: Release
 #
 # Or run manually from the Actions tab (workflow_dispatch) against any ref —
 # useful for testing the pipeline before cutting a real tag.
+#
+# The release lands in this repository, and Help ▸ New Version reads it back
+# through the public releases API. That works only while this repository is
+# public: GitHub answers an unauthenticated request about a private one with 404
+# rather than 403, so making it private again would break the update check
+# silently. `src/update.js` and `RELEASE_PREFIX` in `src-tauri/src/lib.rs` both
+# name the repository, and a unit test asserts the two agree.
 on:
   push:
     tags:

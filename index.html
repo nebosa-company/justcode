@@ -68,6 +68,12 @@
            sibling of #workspace stacks underneath it however it is styled —
            which is what it did the first time this was driven. -->
       <div id="workspace-row">
+        <!-- The explorer (File > Open Folder). The mirror of the Perpetum pair
+             below: panel then resizer, but docked left, so it sits before the
+             workspace rather than after it. -->
+        <aside id="explorer-panel" hidden aria-label="Explorer"></aside>
+        <div id="explorer-resizer" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the Explorer panel" hidden></div>
+
         <!-- The panes and the terminal panel share this row/column: which of the
              two it is depends on the edge the terminal is docked to. -->
         <div id="workspace">

@@ -26,6 +26,15 @@ const SHORTCUTS = [
     ],
   },
   {
+    group: "sc.g.explorer",
+    items: [
+      ["Ctrl+Shift+E", "sc.toggleExplorer"],
+      ["Ctrl+K Ctrl+O", "sc.openFolder"],
+      ["F2", "sc.explorerRename"],
+      ["Del", "sc.explorerDelete"],
+    ],
+  },
+  {
     group: "sc.g.file",
     items: [
       ["Ctrl+N", "sc.newFile"],
@@ -988,6 +997,7 @@ function renderShortcutsInto(container) {
 const HELP_TOPICS = [
   { id: "overview", icon: "info", titleKey: "help.overviewTitle" },
   { id: "files", icon: "file", titleKey: "help.filesTitle" },
+  { id: "explorer", icon: "sidebar", titleKey: "help.explorerTitle" },
   { id: "editing", icon: "comment", titleKey: "help.editingTitle" },
   { id: "search", icon: "search", titleKey: "help.searchTitle" },
   { id: "bookmarks", icon: "bookmark", titleKey: "help.bookmarksTitle" },
@@ -1032,6 +1042,16 @@ function topicContent(topic, ctx) {
       };
     case "search":
       return { intro: t("help.searchIntro"), points: [t("help.searchPoint1"), t("help.searchPoint2")] };
+    case "explorer":
+      return {
+        intro: t("help.explorerIntro"),
+        points: [
+          t("help.explorerPoint1"),
+          t("help.explorerPoint2"),
+          t("help.explorerPoint3"),
+          t("help.explorerPoint4"),
+        ],
+      };
     case "bookmarks":
       return { intro: t("help.bookmarksIntro"), points: [t("help.bookmarksPoint1")] };
     case "splitTabs":

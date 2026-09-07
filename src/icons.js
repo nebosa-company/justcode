@@ -16,6 +16,10 @@ export const PATHS = {
     '<circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.2-4.2"/><path d="M11 8.5v5"/><path d="M8.5 11h5"/>',
   zoomOut: '<circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.2-4.2"/><path d="M8.5 11h5"/>',
   zoomReset: '<path d="M3 12a9 9 0 1 0 2.6-6.4"/><path d="M3 3.5V9h5.5"/>',
+  sidebar:
+    '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M5.4 8.2h2.2"/><path d="M5.4 11h2.2"/>',
+  folderOpen:
+    '<path d="M3 8V6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1"/><path d="M3 9h18l-2.1 8.3A2 2 0 0 1 17 19H5a2 2 0 0 1-2-2z"/>',
   toolbar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.5h18"/>',
   statusbar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15.5h18"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',

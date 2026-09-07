@@ -24,6 +24,8 @@ import {
 import { decideReload } from "./ondisk.js";
 import { findSymbols, supportsSymbols } from "./symbols.js";
 import { templateFor, hasTemplate } from "./templates.js";
+import { checkForNewVersion } from "./update.js";
+import * as explorer from "./explorer.js";
 import { openSearchPanel, findNext, findPrevious } from "@codemirror/search";
 import { t, setLocale, currentLocale, onLocaleChange, DEFAULT_LOCALE } from "./i18n.js";
 import { EditorView } from "@codemirror/view";
@@ -115,6 +117,9 @@ const STORAGE = {
   harnessVerbose: "justcode.harnessVerbose",
   perpPanel: "justcode.perpPanel",
   perpWidth: "justcode.perpWidth",
+  explorerPanel: "justcode.explorerPanel",
+  explorerWidth: "justcode.explorerWidth",
+  explorer: "justcode.explorer",
 };
 
 const MAX_RECENT_FILES = 15;
@@ -897,6 +902,7 @@ function renderStatus() {
   dom.statusPath.classList.toggle("clickable", Boolean(tab && tab.path));
   dom.statusLang.textContent = tab ? LANGUAGE_LABELS[tab.language] : "";
   dom.statusLang.disabled = !tab;
+  explorer.paintActive();
   if (!view) return;
   listeners.onSelection(cursorPosition(view.state));
   listeners.onDiagnostics(countDiagnostics(view.state));
@@ -2383,6 +2389,13 @@ function buildMenus() {
     items: [
       { label: t("file.new"), icon: "file", accel: "Ctrl+N", run: newFile },
       { label: t("file.open"), icon: "folder", accel: "Ctrl+O", run: openFile },
+      { label: t("file.openFolder"), icon: "folderOpen", accel: "Ctrl+K Ctrl+O", run: openFolder },
+      {
+        label: t("file.closeFolder"),
+        icon: "close",
+        enabled: () => Boolean(explorer.root()),
+        run: closeFolder,
+      },
       {
         label: t("file.recent"),
         icon: "clock",
@@ -2591,6 +2604,13 @@ function buildMenus() {
         run: () => setFontSize(DEFAULT_FONT_SIZE),
       },
       { separator: true },
+      {
+        label: t("view.explorer"),
+        icon: "sidebar",
+        accel: "Ctrl+Shift+E",
+        checked: () => explorerHost && !explorerHost.hidden,
+        run: toggleExplorer,
+      },
       {
         label: t("view.toolbar"),
         icon: "toolbar",
@@ -2887,6 +2907,7 @@ function buildMenus() {
     items: [
       { label: t("help.center"), icon: "help", accel: "F1", run: showHelp },
       { separator: true },
+      { label: t("help.newVersion"), icon: "refresh", run: checkForUpdate },
       { label: t("help.about"), icon: "info", run: showAboutDialog },
     ],
   },
@@ -2921,20 +2942,29 @@ function applyTranslations() {
   // the panel underneath it in the previous language, which reads worse than
   // either language on its own.
   perp.redraw();
+  explorer.redraw();
 }
 
 onLocaleChange(applyTranslations);
 createMenuBar(dom.menubar, buildMenus());
 
 /** Reads the version from Tauri, falling back when running in a browser. */
-async function showAboutDialog() {
-  let version = APP_VERSION;
+async function runningVersion() {
   try {
-    version = await getVersion();
+    return await getVersion();
   } catch {
     // Not running under Tauri — the bundled constant is right anyway.
+    return APP_VERSION;
   }
-  showAbout(version);
+}
+
+async function showAboutDialog() {
+  showAbout(await runningVersion());
+}
+
+/** Help ▸ New Version. The flow itself lives in update.js. */
+async function checkForUpdate() {
+  await checkForNewVersion(await runningVersion(), { flash: flashStatus, quit: closeWindow });
 }
 
 /**
@@ -3009,6 +3039,15 @@ window.addEventListener(
     // Escape still reaches the overlay's own handler.
     if (isOverlayOpen() && event.key !== "Escape") return;
 
+    // The tree owns the keyboard while focus is inside it: arrows walk rows,
+    // F2 renames, Delete trashes. Handled before the app's own bindings so
+    // Ctrl+C in the tree copies files rather than the editor's selection.
+    if (explorer.contains(event.target) && explorer.handleKey(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     // AltGr on Windows arrives as Ctrl+Alt. Treating it as a shortcut swallows
     // the characters it is there to type — `@` and `#` on a Turkish layout.
     // The two deliberate Ctrl+Alt bindings are handled explicitly further down.
@@ -3026,6 +3065,19 @@ window.addEventListener(
         splitActive(edge);
         return;
       }
+      // Ctrl+K Ctrl+O, the same chord VS Code opens a folder with.
+      if (ctrl && event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        event.stopPropagation();
+        openFolder();
+        return;
+      }
+    }
+
+    if (ctrl && event.shiftKey && !altGr && event.key.toLowerCase() === "e") {
+      event.preventDefault();
+      toggleExplorer();
+      return;
     }
 
     if (event.key === "F5") {
@@ -3270,6 +3322,7 @@ window.addEventListener("contextmenu", (event) => {
   const inEditor = panes.some((pane) => pane.editorEl.contains(event.target));
   if (inEditor) editorContextMenu(event);
   else if (terminalContains(event.target)) terminalContextMenu(event);
+  else if (explorer.contains(event.target)) explorer.contextMenu(event);
   else event.preventDefault();
 });
 
@@ -3444,6 +3497,22 @@ async function loadStartupState() {
     if (await perpRoot()) await togglePerpPanel();
   }
 
+  // Reopen the folder that was open last time, with the same branches showing.
+  // Unlike the harness panel this needs nothing to resolve, so a failed listing
+  // still shows the panel with its error rather than silently doing nothing —
+  // "the folder you had open has moved" is information.
+  if (localStorage.getItem(STORAGE.explorerPanel) === "true") {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE.explorer) || "null");
+      if (saved?.root) {
+        showExplorer(true);
+        await explorer.attach(saved.root, { restore: saved.expanded ?? [] });
+      }
+    } catch {
+      // A truncated or hand-edited blob is not worth a dialog at launch.
+    }
+  }
+
   if (localeReady) await localeReady;
 
   // Syntax highlighting for whatever ended up on screen, so the first paint is
@@ -3509,6 +3578,8 @@ startupReady
 // degrades to "the harness is not installed" rather than to an error.
 const perpHost = document.getElementById("perp-panel");
 const perpResizer = document.getElementById("perp-resizer");
+const explorerHost = document.getElementById("explorer-panel");
+const explorerResizer = document.getElementById("explorer-resizer");
 
 /** Drag the panel's edge to resize it, and remember the width.
  *
@@ -3517,11 +3588,11 @@ const perpResizer = document.getElementById("perp-resizer");
  * as pointer: the handle is a focusable separator, which is the one control here
  * that is useless without arrow keys.
  */
-function initPerpResizer() {
-  if (!perpResizer || !perpHost) return;
+function initSideResizer(handle, panel, storageKey, edge, busyClass) {
+  if (!handle || !panel) return;
 
   const limits = () => {
-    const style = getComputedStyle(perpHost);
+    const style = getComputedStyle(panel);
     return {
       min: parseFloat(style.minWidth) || 200,
       max: parseFloat(style.maxWidth) || window.innerWidth * 0.6,
@@ -3530,40 +3601,50 @@ function initPerpResizer() {
   const setWidth = (px) => {
     const { min, max } = limits();
     const width = Math.round(Math.max(min, Math.min(px, max)));
-    perpHost.style.width = `${width}px`;
-    localStorage.setItem(STORAGE.perpWidth, String(width));
+    panel.style.width = `${width}px`;
+    localStorage.setItem(storageKey, String(width));
   };
 
-  perpResizer.addEventListener("pointerdown", (event) => {
+  handle.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     // Captured so a fast drag that outruns the 5px handle keeps its events.
-    perpResizer.setPointerCapture(event.pointerId);
-    perpResizer.classList.add("dragging");
-    document.body.classList.add("perp-resizing");
+    handle.setPointerCapture(event.pointerId);
+    handle.classList.add("dragging");
+    document.body.classList.add(busyClass);
 
-    const move = (moved) => setWidth(window.innerWidth - moved.clientX);
+    // A left-docked panel grows as the pointer moves right, a right-docked one
+    // as it moves left. That is the whole difference between the two.
+    const move = (moved) =>
+      setWidth(
+        edge === "left"
+          ? moved.clientX - panel.getBoundingClientRect().left
+          : window.innerWidth - moved.clientX
+      );
     const done = () => {
-      perpResizer.removeEventListener("pointermove", move);
-      perpResizer.classList.remove("dragging");
-      document.body.classList.remove("perp-resizing");
+      handle.removeEventListener("pointermove", move);
+      handle.classList.remove("dragging");
+      document.body.classList.remove(busyClass);
     };
-    perpResizer.addEventListener("pointermove", move);
-    perpResizer.addEventListener("pointerup", done, { once: true });
-    perpResizer.addEventListener("pointercancel", done, { once: true });
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", done, { once: true });
+    handle.addEventListener("pointercancel", done, { once: true });
   });
 
-  perpResizer.addEventListener("keydown", (event) => {
+  handle.addEventListener("keydown", (event) => {
     const step = event.shiftKey ? 48 : 12;
-    if (event.key === "ArrowLeft") setWidth(perpHost.offsetWidth + step);
-    else if (event.key === "ArrowRight") setWidth(perpHost.offsetWidth - step);
+    const grow = edge === "left" ? "ArrowRight" : "ArrowLeft";
+    const shrink = edge === "left" ? "ArrowLeft" : "ArrowRight";
+    if (event.key === grow) setWidth(panel.offsetWidth + step);
+    else if (event.key === shrink) setWidth(panel.offsetWidth - step);
     else return;
     event.preventDefault();
   });
 
-  const remembered = Number(localStorage.getItem(STORAGE.perpWidth));
+  const remembered = Number(localStorage.getItem(storageKey));
   if (remembered > 0) setWidth(remembered);
 }
-initPerpResizer();
+initSideResizer(perpResizer, perpHost, STORAGE.perpWidth, "right", "perp-resizing");
+initSideResizer(explorerResizer, explorerHost, STORAGE.explorerWidth, "left", "explorer-resizing");
 
 perp.configure({
   // `I-4`: reuse the surfaces this editor already has rather than inventing
@@ -3923,6 +4004,75 @@ async function startCycle() {
 async function openPerpPanel() {
   if (perpHost?.hidden) await togglePerpPanel();
 }
+
+/**
+ * File > Open Folder. The panel opens whether or not the listing succeeds — a
+ * folder that has gone since last time should say so in the tree rather than
+ * leave the menu item looking broken.
+ */
+async function openFolder(path = null) {
+  const chosen = path ?? (await openDialog({ directory: true, multiple: false }));
+  if (!chosen || Array.isArray(chosen)) return;
+  showExplorer(true);
+  await explorer.attach(chosen);
+  rememberExplorer();
+}
+
+function closeFolder() {
+  explorer.detach();
+  localStorage.removeItem(STORAGE.explorer);
+}
+
+/** View > Explorer. Hidden, not detached, so the tree comes back as it was. */
+function toggleExplorer() {
+  if (!explorerHost) return;
+  const opening = explorerHost.hidden;
+  showExplorer(opening);
+  if (opening && !explorer.root()) openFolder();
+}
+
+function showExplorer(visible) {
+  if (!explorerHost) return;
+  explorerHost.hidden = !visible;
+  if (explorerResizer) explorerResizer.hidden = !visible;
+  localStorage.setItem(STORAGE.explorerPanel, String(visible));
+  if (visible) explorer.mount(explorerHost);
+  createMenuBar(dom.menubar, buildMenus());
+}
+
+/** The open folder and which parts of it are expanded, on the session debounce. */
+let explorerSaveTimer = null;
+function rememberExplorer() {
+  clearTimeout(explorerSaveTimer);
+  explorerSaveTimer = setTimeout(() => {
+    const state = explorer.state();
+    if (state) localStorage.setItem(STORAGE.explorer, JSON.stringify(state));
+  }, SESSION_SAVE_DELAY);
+}
+
+explorer.configure({
+  openPath: (path) => openPath(path).then(renderStatus),
+  activePath: () => activeTab()?.path ?? null,
+  openFolder,
+  openInTerminal: (cwd) => invoke("open_external_terminal", { profile: "default", elevated: false, cwd }),
+  // A renamed file has to reach the tab showing it, or Save writes to a name
+  // that is no longer on disk.
+  onPathRenamed: (from, to) => {
+    for (const tab of tabs) {
+      if (!tab.path) continue;
+      if (samePathKey(tab.path) === samePathKey(from)) {
+        tab.path = to;
+        tab.name = baseName(to);
+      } else if (samePathKey(tab.path).startsWith(samePathKey(from) + "\\")) {
+        // A renamed folder moves every tab underneath it too.
+        tab.path = to + tab.path.slice(from.length);
+      }
+    }
+    renderTabs();
+    renderStatus();
+  },
+  onChanged: rememberExplorer,
+});
 
 async function togglePerpPanel() {
   if (!perpHost) return;
