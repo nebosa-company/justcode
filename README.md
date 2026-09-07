@@ -1,8 +1,41 @@
+<img src="src-tauri/icons/128x128.png" alt="" width="96" align="left" hspace="12" vspace="4">
+
 # JustCode
 
-A small code editor packaged as a Windows desktop app with Tauri 2. The editor
-is CodeMirror 6; the shell (file dialogs, disk access, launching the browser) is
-Rust.
+**A small, fast code editor for Windows, macOS and Linux.** It opens instantly,
+stays out of the way, and does the things you actually asked a text editor to
+do.
+
+<br clear="left">
+
+![JustCode: the Explorer open on a project, with a Rust file in the editor](docs/screenshot.png)
+
+## What this is
+
+JustCode is a deliberate reaction to editors that have become platforms. It is
+one native window over a CodeMirror 6 buffer, with a Rust shell doing the file
+dialogs, disk access, terminals and process launching. That is the whole
+architecture.
+
+- **Light.** One window, one process tree, no background language servers, no
+  indexer crawling your project, no update daemon. What it needs to show you a
+  file is what it uses.
+- **Fast to start.** The theme is painted on the first frame, before the bundle
+  loads, so there is no white flash and no splash screen — the window that
+  appears is the editor. Boot time is measured on every launch rather than
+  assumed.
+- **No plugin architecture.** Nothing to install, nothing to configure, nothing
+  that can slow the editor down or break it after an update. Everything below is
+  in the box, and the whole feature set is one page long on purpose.
+- **No useless features.** No telemetry, no account, no AI sidebar, no
+  marketplace, no onboarding tour, nothing that phones home. The one thing that
+  talks to the network is **Help → New Version**, and only when you click it.
+- **It is a text editor.** Syntax highlighting, linting, find and replace, split
+  panes, a real terminal, a file tree. Not an IDE, and not trying to become one.
+
+The tradeoff is honest and worth stating: there is no debugger, no refactoring
+engine and no language-server intelligence. If you want those, use an IDE —
+they are good at it. JustCode is for the other half of the day.
 
 ## Features
 
@@ -13,6 +46,11 @@ buttons, and keyboard shortcuts.
 | --- | --- |
 | New file | `Ctrl+N` / **New** / double-click the empty strip right of the tabs |
 | Open file | `Ctrl+O` / **Open** — multi-select supported |
+| Open folder | `Ctrl+K Ctrl+O` / **File → Open Folder** — the folder's tree appears in the Explorer |
+| Show/hide the Explorer | `Ctrl+Shift+E` / **View → Explorer** |
+| New file / folder in the tree | right-click in the Explorer, or its header buttons |
+| Rename / delete in the tree | `F2` / `Del` — Delete goes to the Recycle Bin |
+| Move / copy in the tree | drag a row, or `Ctrl`-drag to copy |
 | Save | `Ctrl+S` / **Save** |
 | Save as | `Ctrl+Shift+S` |
 | Close tab | `Ctrl+W`, the tab's `×`, or middle-click |
@@ -52,6 +90,7 @@ start/end, and `PageUp`/`PageDown` (with `Shift` to extend) move by a page.
 | Interface language (36) | **View → Language…** |
 | Keyboard shortcuts | `F1` / **Help → Shortcuts** |
 | Version | **Help → About JustCode** |
+| Check for a newer version | **Help → New Version** |
 | Find / replace | `Ctrl+F` / `Ctrl+H` |
 | Go to symbol | `Ctrl+Shift+G` / **Edit → Go to Symbol…** — a filterable list of the declarations in the current file. Disabled for a language with no symbol support, such as plain text |
 | Problems panel | `F8` opens and closes it / **View → Problems**, or click the problem count in the status bar |
@@ -310,6 +349,58 @@ Both the installer and the in-app screen write the same per-extension ProgID
 (`JustCode.<ext>`), so toggling a type in the app cleanly overrides what the
 installer registered instead of leaving a second, competing entry behind.
 
+## The Explorer
+
+**File → Open Folder** (`Ctrl+K Ctrl+O`) opens one folder as a tree beside the
+editor. `Ctrl+Shift+E` shows and hides it, like the toolbar and the status bar,
+and the folder you had open — along with which branches were expanded — comes
+back at the next launch.
+
+- **Material Icon Theme icons.** The full upstream set, vendored at build time
+  from the `material-icon-theme` package (MIT) into `public/file-icons/`, so
+  the tree looks like the one people already know and needs no network.
+- **Hidden and ignored files are shown, greyed.** A dotfile, a Windows
+  hidden/system file, and anything `git check-ignore` would match are all dimmed
+  rather than dropped — nothing in the folder is invisible, and the tooltip says
+  which of the two it is. Nested `.gitignore` files, negations and
+  `core.excludesFile` are all honoured, via ripgrep's `ignore` crate.
+- **The usual file operations**, from the right-click menu: new file and folder,
+  cut, copy, paste, duplicate, rename (`F2`), delete (`Del`), copy path, copy
+  relative path, reveal in the file manager, and open a terminal there. Deleting
+  goes to the Recycle Bin, never to nothing — and if the trash is unavailable
+  the operation fails and says so rather than falling back to a real delete.
+- **Drag to move, `Ctrl`-drag to copy.** A folder cannot be dropped into its own
+  subtree; that guard runs in the UI and again in the backend, because a symlink
+  can lie to the UI.
+- **Keyboard throughout.** Arrows walk the tree, `←`/`→` collapse and expand,
+  `Enter` opens, `Home`/`End` jump, `Space` toggles selection, and typing jumps
+  to a name. Rows are a proper ARIA tree, so a screen reader gets the levels and
+  positions.
+
+The tree is read one folder at a time, so a root containing `node_modules` costs
+one row until you open it. Folders that are open are polled once a second, so a
+file created from a terminal shows up on its own.
+
+## A note on updates
+
+**Help → New Version** asks GitHub for the newest release and, if there is one,
+downloads that platform's installer and hands it to the system. It runs only
+when the menu item is chosen; nothing is checked at startup.
+
+The installers are published to `nebosa-company/justcode-releases` rather than
+to this repository. This one is private, and GitHub answers an unauthenticated
+request about a private repository with 404, so a release published here would
+be invisible to the check. The releases repository carries no source — only the
+built installers — which is what lets the check run without a token in the app.
+
+The download is **not signature-verified**. `RELEASE_PREFIX` in
+`src-tauri/src/lib.rs` refuses any URL that is not on that repository's release
+path, and the transfer is HTTPS, so the trust boundary is GitHub's TLS and
+whoever can push a release to that repository. Nothing beyond that is checked
+before the installer is handed to the OS to run. Signing the releases, or
+publishing checksums and verifying them after the download, are both real
+improvements and neither is done today.
+
 ## A note on the Content Security Policy
 
 `tauri.conf.json` sets `"csp": null` deliberately. A CSP was tried and reverted:
@@ -349,6 +440,9 @@ src/theme.js          light editor theme + highlight style, paired with one-dark
 src/menu.js           data-driven File/Edit/View menu bar + editor context menu
 src/terminal.js       integrated terminal panel (xterm.js over a real pty)
 src/icons.js          inline SVG icon set (currentColor, no network requests)
+src/explorer.js       the Open Folder tree: rendering, keyboard, drag, context menu
+src/filetree.js       its rules with no DOM: sorting, containment, names, icon lookup
+tools/vendor-file-icons.mjs  vendors the Material Icon Theme into public/file-icons
 src/linters.js        HTML tag balance, embedded-script and CSS/JS syntax linting
 src/styles.css        themed chrome around the editor
 src-tauri/src/lib.rs  file I/O, browser launch, Markdown preview, file-open args
