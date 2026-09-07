@@ -2,17 +2,17 @@
 // newer than this build, fetches its installer and hands it to the system.
 //
 // Not the Tauri updater plugin: that wants every release signed with a key pair
-// this project does not have and an update feed it does not publish.
+// this project does not have and an update feed it does not publish. The
+// releases API describes exactly what the workflow uploaded, so the check is a
+// plain fetch with no credential in the client.
 //
-// The installers live in `nebosa-company/justcode-releases`, a repository that
-// holds no source and exists only to carry them. The source repository is
-// private, and GitHub answers an unauthenticated request about a private
-// repository with 404 rather than 403 — so pointing this at the source repo,
-// which is what it did first, made every check report failure and there was
-// nothing in the answer to say why. A public releases repo is what lets the
-// check be a plain fetch with no credential in the client: the release API
-// describes exactly what the workflow uploaded, and `browser_download_url`
-// needs no token because the assets are public even though the code is not.
+// That last part depends on this repository staying public, and it is the whole
+// feature: GitHub answers an unauthenticated request about a *private*
+// repository with 404 rather than 403, so the day this repo is made private
+// again every check starts reporting a failure with nothing in the answer to
+// say why, and `browser_download_url` stops resolving too. If that happens, the
+// fix is to publish the installers to a separate public repository and point
+// `LATEST_RELEASE` and `RELEASE_PREFIX` at it — not to ship a token here.
 //
 // The check only ever runs when the menu item is chosen. Nothing phones home on
 // startup.
@@ -21,8 +21,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { t } from "./i18n.js";
 
-const LATEST_RELEASE =
-  "https://api.github.com/repos/nebosa-company/justcode-releases/releases/latest";
+const LATEST_RELEASE = "https://api.github.com/repos/nebosa-company/justcode/releases/latest";
 
 // The installer to look for, per platform, best first. Windows gets the NSIS
 // setup rather than the .msi because that is the one the workflow publishes as

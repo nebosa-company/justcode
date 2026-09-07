@@ -387,19 +387,20 @@ file created from a terminal shows up on its own.
 downloads that platform's installer and hands it to the system. It runs only
 when the menu item is chosen; nothing is checked at startup.
 
-The installers are published to `nebosa-company/justcode-releases` rather than
-to this repository. This one is private, and GitHub answers an unauthenticated
-request about a private repository with 404, so a release published here would
-be invisible to the check. The releases repository carries no source — only the
-built installers — which is what lets the check run without a token in the app.
+It reads this repository's own releases over the public API, which is why no
+token ships in the app. That depends on the repository staying public — GitHub
+answers an unauthenticated request about a private one with 404 rather than 403,
+so making it private would break the check silently, and the fix then would be to
+publish the installers to a separate public repository rather than to ship a
+credential here.
 
 The download is **not signature-verified**. `RELEASE_PREFIX` in
-`src-tauri/src/lib.rs` refuses any URL that is not on that repository's release
+`src-tauri/src/lib.rs` refuses any URL that is not on this repository's release
 path, and the transfer is HTTPS, so the trust boundary is GitHub's TLS and
-whoever can push a release to that repository. Nothing beyond that is checked
-before the installer is handed to the OS to run. Signing the releases, or
-publishing checksums and verifying them after the download, are both real
-improvements and neither is done today.
+whoever can push a release here. Nothing beyond that is checked before the
+installer is handed to the OS to run. Signing the releases, or publishing
+checksums and verifying them after the download, are both real improvements and
+neither is done today.
 
 ## A note on the Content Security Policy
 

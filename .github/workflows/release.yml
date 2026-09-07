@@ -9,28 +9,20 @@ name: Release
 # Or run manually from the Actions tab (workflow_dispatch) against any ref —
 # useful for testing the pipeline before cutting a real tag.
 #
-# The release is created in `nebosa-company/justcode-releases`, not here. This
-# repository is private, and GitHub answers an unauthenticated request about a
-# private repository with 404 — so Help ▸ New Version could never see a release
-# published here, whatever it asked. The releases repository holds no source and
-# exists only to make the installers publicly fetchable without shipping a
-# credential in the app. `src/update.js` and `RELEASE_PREFIX` in
-# `src-tauri/src/lib.rs` both name it, and a unit test asserts the two agree.
-#
-# Publishing across repositories needs a real token: the automatic
-# `secrets.GITHUB_TOKEN` is scoped to the repository the workflow runs in and
-# cannot write a release anywhere else. `RELEASES_TOKEN` is a PAT with
-# `contents: write` on the releases repository.
+# The release lands in this repository, and Help ▸ New Version reads it back
+# through the public releases API. That works only while this repository is
+# public: GitHub answers an unauthenticated request about a private one with 404
+# rather than 403, so making it private again would break the update check
+# silently. `src/update.js` and `RELEASE_PREFIX` in `src-tauri/src/lib.rs` both
+# name the repository, and a unit test asserts the two agree.
 on:
   push:
     tags:
       - "v*.*.*"
   workflow_dispatch:
 
-# Nothing is written back to this repository; the release lands in the other one
-# under RELEASES_TOKEN.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   release:
@@ -89,10 +81,8 @@ jobs:
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          owner: nebosa-company
-          repo: justcode-releases
           tagName: ${{ github.ref_name }}
           releaseName: "JustCode ${{ github.ref_name }}"
           releaseBody: "Automated build from ${{ github.ref_name }}. Download the installer for your platform below."

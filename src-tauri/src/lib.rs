@@ -484,14 +484,11 @@ fn reveal_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), Str
 /// the bridge: anything not served from this project's own releases is
 /// refused, and the redirect ureq follows afterwards leaves that host.
 ///
-/// `justcode-releases`, not `justcode`: the source repository is private, so
-/// its release assets are not fetchable without a token. The installers are
-/// published to a separate public repository that holds no source, which is
-/// what keeps a credential out of this binary. Kept in step with
-/// `LATEST_RELEASE` in `src/update.js` — the two naming different repositories
-/// means every download is refused after a check that succeeded.
-const RELEASE_PREFIX: &str =
-    "https://github.com/nebosa-company/justcode-releases/releases/download/";
+/// Kept in step with `LATEST_RELEASE` in `src/update.js`: the two naming
+/// different repositories would refuse every download after a check that
+/// succeeded, which `the_prefix_matches_the_url_the_front_end_asks_for` exists
+/// to catch.
+const RELEASE_PREFIX: &str = "https://github.com/nebosa-company/justcode/releases/download/";
 
 /// Where a downloaded asset is allowed to land: the temp folder, under the
 /// asset's own last path segment. An asset called `../../justcode.exe` would
@@ -2865,13 +2862,12 @@ mod update_tests {
         // that merely mentions the project is not one GitHub serves it from.
         for url in [
             "https://example.com/justcode.exe",
-            "http://github.com/nebosa-company/justcode-releases/releases/download/v1/x.exe",
-            "https://github.com/someone-else/justcode-releases/releases/download/v1/x.exe",
-            "https://evil.example/https://github.com/nebosa-company/justcode-releases/releases/download/v1/x.exe",
-            // The same owner's *source* repository. It is private, so nothing
-            // is downloadable from it anyway, but the guard names one
-            // repository rather than an owner and this is what says so.
-            "https://github.com/nebosa-company/justcode/releases/download/v1/x.exe",
+            "http://github.com/nebosa-company/justcode/releases/download/v1/x.exe",
+            "https://github.com/someone-else/justcode/releases/download/v1/x.exe",
+            "https://evil.example/https://github.com/nebosa-company/justcode/releases/download/v1/x.exe",
+            // The guard names one repository rather than an owner, so another
+            // of this owner's repositories is still refused.
+            "https://github.com/nebosa-company/justcode-releases/releases/download/v1/x.exe",
         ] {
             assert!(
                 download_update(url.to_string(), "x.exe".into()).is_err(),
