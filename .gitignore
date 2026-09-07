@@ -22,16 +22,11 @@ src-tauri/gen/
 # cargo workspace from src-tauri/, deliberately — see .harness/binding.md).
 crates/target/
 
-# Bundles produced by scripts/pack.mjs
+# Release bundles, copied out of src-tauri/target for a hand-made release.
 *.msi
 *.nsis.zip
 *.exe.sig
-
-# Vendored UPX binary. It is GPL-licensed, so it is fetched rather than
-# redistributed from here; tools/README.md says where to get it, and
-# scripts/pack.mjs fails with that pointer when it is absent.
-tools/upx.exe
-tools/upx
+artifacts-linux/
 
 # Editor directories and files
 .vscode/*

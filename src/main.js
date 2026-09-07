@@ -89,9 +89,9 @@ const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 40;
 // What a brand-new file gets. Existing files keep whatever they came with.
 const DEFAULT_EOL = navigator.userAgent.includes("Windows") ? "\r\n" : "\n";
-// Mirrors the version in tauri.conf.json / package.json; used when the Tauri
-// API is unavailable (running the frontend in a plain browser).
-const APP_VERSION = "0.3.0";
+// package.json's version, substituted by Vite; used when the Tauri API is
+// unavailable (running the frontend in a plain browser).
+const APP_VERSION = __APP_VERSION__;
 
 // The file manager is named differently per platform, and the menu should say
 // the name people actually know.

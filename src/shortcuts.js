@@ -104,14 +104,6 @@ export function formatAccel(spec, isMac) {
 }
 
 /**
- * The name of the command modifier, for prose that has to say it.
- *
- * Used where a sentence explains a gesture — "Ctrl+click to add a cursor" —
- * rather than naming a shortcut.
- */
-export const COMMAND_KEY = IS_MAC ? "⌘" : "Ctrl";
-
-/**
  * The modifier names inside a *sentence*, for the gesture rows the reference
  * list carries as prose — "Alt+click to add a cursor", "Ctrl+Wheel to zoom".
  *

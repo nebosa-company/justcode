@@ -9,8 +9,6 @@
     "prebuild": "node tools/vendor-file-icons.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "pack": "node scripts/pack.mjs",
-    "build:packed": "tauri build && node scripts/pack.mjs",
     "tauri": "tauri",
     "sync:associations": "node tools/sync-associations.mjs",
     "check:associations": "node tools/sync-associations.mjs --check",
@@ -49,7 +47,6 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "acorn": "^8.14.1",
-    "dictionary-en": "^4.0.0",
     "marked": "^18.0.6",
     "nspell": "^2.1.5"
   },

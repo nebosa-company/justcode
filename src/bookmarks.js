@@ -129,8 +129,3 @@ export function gotoBookmark(view, slot) {
   view.focus();
   return true;
 }
-
-/** Which slots are currently set, for menu state. */
-export function activeBookmarkSlots(state) {
-  return [...state.field(bookmarkField).keys()].sort((a, b) => a - b);
-}
