@@ -20,6 +20,18 @@ import { StringStream } from "@codemirror/language";
 import { neper } from "../src/neper.js";
 import { intelAsm } from "../src/intel-asm.js";
 import { isNewer, installerFor } from "../src/update.js";
+import {
+  fileIconId,
+  isInside,
+  nextTypeAhead,
+  pathKey,
+  relativePath,
+  sortEntries,
+  uniqueName,
+  validateName,
+  visibleRows,
+} from "../src/filetree.js";
+import { readFileSync, readdirSync } from "node:fs";
 
 test("a file's language comes from its own extension, not its path", () => {
   assert.equal(languageIdFor("a.py"), "python");
@@ -326,6 +338,200 @@ test("each platform is offered the installer it can actually run", () => {
   assert.equal(pick("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)"), "JustCode_0.2.6_universal.dmg");
   assert.equal(pick("Mozilla/5.0 (X11; Linux x86_64)"), "JustCode_0.2.6_amd64.AppImage");
   assert.equal(pick("Mozilla/5.0 (PlayStation 5)"), undefined, "an unknown platform offers nothing");
+});
+
+// ------------------------------------------------------------------ explorer
+
+test("folders come before files, and names sort the way a person counts", () => {
+  const sorted = sortEntries([
+    { name: "file10.txt", isDir: false },
+    { name: "zebra", isDir: true },
+    { name: "file2.txt", isDir: false },
+    { name: "Apple.txt", isDir: false },
+    { name: "apples", isDir: true },
+  ]).map((entry) => entry.name);
+
+  assert.deepEqual(sorted.slice(0, 2), ["apples", "zebra"], "every folder comes first");
+  // The one that matters: a plain string compare puts file10 before file2,
+  // which is how every hand-rolled file list gets numbering wrong.
+  assert.deepEqual(sorted.slice(2), ["Apple.txt", "file2.txt", "file10.txt"]);
+});
+
+test("a folder is not inside a sibling whose name merely starts the same way", () => {
+  // The boundary a bare startsWith gets wrong, and the reason drag-and-drop
+  // needs a real check: C:\ab starts with C:\a and is nowhere near it.
+  assert.equal(isInside("C:\\a", "C:\\ab"), false);
+  assert.equal(isInside("C:\\a", "C:\\a\\b"), true);
+  // Separator and case both vary on Windows and neither changes the answer.
+  assert.equal(isInside("C:/a", "c:\\A\\b"), true);
+  assert.equal(isInside("C:\\a", "C:\\a"), false, "a folder is not inside itself");
+  assert.equal(isInside("C:\\a\\", "C:\\a\\b"), true, "a trailing separator is not a difference");
+});
+
+test("a path under the root loses the root and keeps its separator", () => {
+  assert.equal(relativePath("C:\\p", "C:\\p\\src\\main.js"), "src\\main.js");
+  assert.equal(relativePath("C:\\p", "C:\\p"), "", "the root itself is empty, not a dot");
+  assert.equal(
+    relativePath("C:\\p", "D:\\elsewhere\\x.txt"),
+    "D:\\elsewhere\\x.txt",
+    "something outside the root is returned whole rather than mangled"
+  );
+});
+
+test("a name Windows refuses is refused before the write is attempted", () => {
+  const siblings = ["taken.txt", "Folder"];
+  const key = (name, options) => validateName(name, siblings, options)?.key ?? null;
+
+  assert.equal(key("ordinary.txt"), null);
+  assert.equal(key(""), "explorer.nameEmpty");
+  assert.equal(key("   "), "explorer.nameEmpty");
+  assert.equal(key("a/b"), "explorer.nameSeparator");
+  assert.equal(key("a\\b"), "explorer.nameSeparator");
+  assert.equal(key("a:b"), "explorer.nameInvalidChars");
+  assert.equal(key("a?b"), "explorer.nameInvalidChars");
+  // Reserved device names are refused with an extension too: CON.txt is as
+  // unopenable as CON, which is why the stem is what gets checked.
+  assert.equal(key("CON"), "explorer.nameReserved");
+  assert.equal(key("com1.txt"), "explorer.nameReserved");
+  assert.equal(key("console.txt"), null, "only the exact device names, not anything starting with one");
+  // Windows silently strips these, so the file you get is not the one you asked
+  // for.
+  assert.equal(key("x."), "explorer.nameTrailing");
+  assert.equal(key("x "), "explorer.nameTrailing");
+  // A duplicate that differs only in case is still a duplicate on NTFS.
+  assert.equal(key("TAKEN.TXT"), "explorer.nameExists");
+  // Except when renaming a file to a different casing of its own name, which is
+  // a rename people actually do and which the naive check refuses.
+  assert.equal(key("Taken.TXT", { self: "taken.txt" }), null);
+});
+
+test("a duplicate keeps its extension and takes the first free number", () => {
+  assert.equal(uniqueName("a.txt", ["a.txt"]), "a copy.txt");
+  assert.equal(uniqueName("a.txt", ["a.txt", "a copy.txt"]), "a copy 2.txt");
+  assert.equal(uniqueName("a.txt", ["a.txt", "a copy.txt", "a copy 2.txt"]), "a copy 3.txt");
+  // A leading dot is a name, not an extension — the same rule the language
+  // registry states about .gitignore.
+  assert.equal(uniqueName(".gitignore", [".gitignore"]), ".gitignore copy");
+  // Asserted so the compound-extension behaviour is a decision rather than an
+  // accident: only the last segment is treated as the extension.
+  assert.equal(uniqueName("a.tar.gz", ["a.tar.gz"]), "a.tar copy.gz");
+  assert.equal(uniqueName("plain", ["plain"]), "plain copy");
+  assert.equal(uniqueName("free.txt", ["other.txt"]), "free copy.txt");
+});
+
+test("only expanded folders contribute rows, and depth counts from the root", () => {
+  const node = (path, name, isDir, children) => [
+    pathKey(path),
+    { path, name, isDir, children },
+  ];
+  const nodes = new Map([
+    node("C:\\p", "p", true, ["C:\\p\\src", "C:\\p\\readme.md"]),
+    node("C:\\p\\src", "src", true, ["C:\\p\\src\\main.js"]),
+    node("C:\\p\\src\\main.js", "main.js", false, null),
+    node("C:\\p\\readme.md", "readme.md", false, null),
+  ]);
+
+  const collapsed = visibleRows("C:\\p", nodes, new Set());
+  assert.deepEqual(
+    collapsed.map((row) => row.node.name),
+    ["src", "readme.md"],
+    "a collapsed folder costs one row whatever is under it"
+  );
+
+  const open = visibleRows("C:\\p", nodes, new Set([pathKey("C:\\p\\src")]));
+  assert.deepEqual(
+    open.map((row) => [row.node.name, row.depth]),
+    [["src", 0], ["main.js", 1], ["readme.md", 0]],
+    "an expanded folder's children sit one level deeper, in place"
+  );
+
+  // A folder that has never been read has children === null, which is not the
+  // same as a folder that was read and is empty.
+  const unread = new Map([node("C:\\q", "q", true, null)]);
+  assert.deepEqual(visibleRows("C:\\q", unread, new Set()), []);
+});
+
+test("a folder with more children than the clamp offers to show the rest", () => {
+  const children = Array.from({ length: 5 }, (_, n) => `C:\\p\\f${n}.txt`);
+  const nodes = new Map([
+    [pathKey("C:\\p"), { path: "C:\\p", name: "p", isDir: true, children }],
+    ...children.map((path) => [
+      pathKey(path),
+      { path, name: path.split("\\").pop(), isDir: false, children: null },
+    ]),
+  ]);
+
+  const rows = visibleRows("C:\\p", nodes, new Set(), { clamp: 2 });
+  assert.equal(rows.length, 3, "two rows plus the one that offers the rest");
+  assert.equal(rows.at(-1).more, 3, "and it says how many are left");
+});
+
+test("type-ahead lands on the next match after the current row, and wraps", () => {
+  const rows = ["alpha", "beta", "bravo", "charlie"].map((name) => ({ node: { name } }));
+
+  assert.equal(nextTypeAhead(rows, 0, "b"), 1);
+  // Typing the same letter again steps to the next match rather than sitting
+  // on the one already under the cursor.
+  assert.equal(nextTypeAhead(rows, 1, "b"), 2);
+  assert.equal(nextTypeAhead(rows, 2, "b"), 1, "and wraps past the end");
+  assert.equal(nextTypeAhead(rows, 0, "A"), 0, "matching ignores case");
+  assert.equal(nextTypeAhead(rows, 0, "z"), -1, "no match is -1, not 0");
+});
+
+test("a file's icon comes from the most specific rule that matches it", () => {
+  const map = {
+    file: "file",
+    folder: "folder",
+    folderRoot: "folder-root",
+    fileExtensions: { js: "javascript", ts: "typescript", "d.ts": "typescript-def" },
+    fileNames: { "package.json": "nodejs", ".config/stylelintrc": "stylelint" },
+    folderNames: { src: "folder-src", "META-INF": "folder-java" },
+    light: { fileExtensions: { js: "javascript-light" }, fileNames: {}, folderNames: {} },
+  };
+
+  assert.equal(fileIconId(map, "app.js"), "javascript");
+  assert.equal(fileIconId(map, "package.json"), "nodejs", "an exact name beats its extension");
+  // A compound extension beats its own suffix, which is the whole reason the
+  // lookup walks the segments instead of taking the last one.
+  assert.equal(fileIconId(map, "types.d.ts"), "typescript-def");
+  assert.equal(fileIconId(map, "plain.ts"), "typescript");
+  assert.equal(fileIconId(map, "thing.qqq"), "file", "an unknown extension still gets an icon");
+  assert.equal(fileIconId(map, "README"), "file", "so does a file with no extension at all");
+  // 204 of the theme's file-name keys carry a directory; without the parent
+  // probe they are dead weight in the map.
+  assert.equal(fileIconId(map, "stylelintrc", { parent: ".config" }), "stylelint");
+  // 60 keys across the maps are not lowercase, so exact case is tried first.
+  assert.equal(fileIconId(map, "META-INF", { isDir: true }), "folder-java");
+  assert.equal(fileIconId(map, "src", { isDir: true }), "folder-src");
+  assert.equal(fileIconId(map, "src", { isDir: true, expanded: true }), "folder-src-open");
+  assert.equal(fileIconId(map, "whatever", { isDir: true }), "folder");
+  assert.equal(fileIconId(map, "app.js", { light: true }), "javascript-light");
+});
+
+test("every icon the vendored map names was actually vendored", () => {
+  // A missing SVG is a silent broken image in the tree, not an exception, so
+  // nothing at runtime would ever report a half-finished vendoring. This is the
+  // file-icon counterpart of the "every icon a source file names exists" check.
+  const dir = new URL("../public/file-icons/", import.meta.url);
+  const map = JSON.parse(readFileSync(new URL("map.json", dir), "utf8"));
+  const onDisk = new Set(readdirSync(dir));
+
+  const named = new Set();
+  const claimFolder = (id) => {
+    named.add(`${id}.svg`);
+    named.add(`${id}-open.svg`);
+  };
+  for (const table of [map, map.light]) {
+    if (table.file) named.add(`${table.file}.svg`);
+    if (table.folder) claimFolder(table.folder);
+    if (table.folderRoot) claimFolder(table.folderRoot);
+    for (const id of Object.values(table.fileExtensions ?? {})) named.add(`${id}.svg`);
+    for (const id of Object.values(table.fileNames ?? {})) named.add(`${id}.svg`);
+    for (const id of Object.values(table.folderNames ?? {})) claimFolder(id);
+  }
+
+  const missing = [...named].filter((file) => !onDisk.has(file));
+  assert.deepEqual(missing, [], `${missing.length} icon(s) named by map.json are not on disk`);
 });
 
 // ----------------------------------------------------------------- intel asm

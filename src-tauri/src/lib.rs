@@ -543,6 +543,436 @@ fn install_update(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .map_err(|e| format!("{e}"))
 }
 
+// ---------------------------------------------------------------- explorer
+//
+// The File > Open Folder tree. Six commands, and two guards that every mutating
+// one of them goes through.
+//
+// The README already notes that the commands exposed over IPC read and write
+// arbitrary files. Delete is a different class of risk from the rest: reading
+// the wrong file is a bug, deleting the wrong tree is a loss. So everything
+// here is anchored to the folder the user actually opened, and a path that
+// resolves outside it is refused rather than clamped.
+
+/// One row in the explorer.
+///
+/// `hidden` and `ignored` are *reported*, not acted on. The panel greys those
+/// rows rather than dropping them - that is the whole requirement - so the
+/// backend must not decide for it.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Entry {
+    name: String,
+    path: String,
+    is_dir: bool,
+    is_symlink: bool,
+    hidden: bool,
+    ignored: bool,
+    size: u64,
+    /// Millis since the epoch, or `None` when the platform will not say.
+    modified: Option<u64>,
+}
+
+/// The top of the repository `from` sits in, if it is in one.
+///
+/// Extracted from the loop `harness_state` used to carry inline, which was the
+/// only place in the codebase that knew what a repository root was. Both
+/// callers want the same answer, and a second copy would have drifted.
+fn git_root(from: &Path) -> Option<PathBuf> {
+    let mut dir = Some(from);
+    while let Some(candidate) = dir {
+        if candidate.join(".git").exists() {
+            return Some(candidate.to_path_buf());
+        }
+        dir = candidate.parent();
+    }
+    None
+}
+
+/// Hidden by either convention, because either one alone is wrong.
+///
+/// The dotfile rule alone misses `desktop.ini`, `Thumbs.db` and
+/// `System Volume Information`, none of which carry a dot and none of which
+/// anyone opened a folder to look at. `file_attributes()` comes from `std`, so
+/// this needs no Windows crate.
+fn is_hidden(name: &str, meta: &fs::Metadata) -> bool {
+    if name.starts_with('.') {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const HIDDEN_OR_SYSTEM: u32 = 0x2 | 0x4;
+        return meta.file_attributes() & HIDDEN_OR_SYSTEM != 0;
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = meta;
+        false
+    }
+}
+
+/// The user's `core.excludesFile` matcher.
+///
+/// Memoised because it parses `$HOME/.gitconfig`, and unlike every other
+/// matcher in the chain it cannot usefully change while the app is running.
+fn global_ignore() -> &'static ignore::gitignore::Gitignore {
+    static GLOBAL: std::sync::OnceLock<ignore::gitignore::Gitignore> = std::sync::OnceLock::new();
+    GLOBAL.get_or_init(|| ignore::gitignore::Gitignore::global().0)
+}
+
+/// Every matcher that applies inside `dir`, deepest first.
+///
+/// One `Gitignore` per file rather than one builder fed every file: a builder
+/// anchors all its patterns to its own root, so `/build` written in
+/// `sub/.gitignore` would come to mean `<repo>/build` instead of
+/// `<repo>/sub/build`.
+///
+/// ponytail: no matcher cache. Not having one *is* the invalidation story - an
+/// edited .gitignore takes effect on the next expand with no staleness window
+/// and no wiring at all, at the cost of re-reading a handful of small files per
+/// listing. If a deep tree on a network share ever shows up in a profile, key a
+/// Mutex<HashMap<PathBuf, (SystemTime, Gitignore)>> on the gitignore path and
+/// compare mtime.
+fn ignore_chain(repo: &Path, dir: &Path) -> Vec<ignore::gitignore::Gitignore> {
+    let mut chain = Vec::new();
+    let mut at = Some(dir);
+    while let Some(candidate) = at {
+        let file = candidate.join(".gitignore");
+        if file.is_file() {
+            chain.push(ignore::gitignore::Gitignore::new(&file).0);
+        }
+        if candidate == repo {
+            break;
+        }
+        at = candidate.parent();
+    }
+    // Built against the repository rather than against `.git/info/`, so its
+    // patterns anchor where git anchors them.
+    let exclude = repo.join(".git/info/exclude");
+    if exclude.is_file() {
+        let mut builder = ignore::gitignore::GitignoreBuilder::new(repo);
+        builder.add(&exclude);
+        if let Ok(built) = builder.build() {
+            chain.push(built);
+        }
+    }
+    chain
+}
+
+/// Whether git would ignore `path`. The deepest matcher wins, which is what git
+/// does; a whitelist (`!pattern`) at any level stops the search rather than
+/// falling through to a shallower ignore.
+fn is_ignored(chain: &[ignore::gitignore::Gitignore], path: &Path, is_dir: bool) -> bool {
+    use ignore::Match;
+    let decided = chain.iter().find_map(|matcher| {
+        // `matched_path_or_any_parents` panics by contract when handed a path
+        // outside the matcher's root. Every matcher in the chain is rooted at
+        // an ancestor of `path`, so that holds here - and the global matcher,
+        // whose root is the user's home and so is *not* an ancestor, is asked
+        // separately below with `matched`, which does not panic.
+        match matcher.matched_path_or_any_parents(path, is_dir) {
+            Match::None => None,
+            Match::Ignore(_) => Some(true),
+            Match::Whitelist(_) => Some(false),
+        }
+    });
+    if let Some(answer) = decided {
+        return answer;
+    }
+    matches!(global_ignore().matched(path, is_dir), Match::Ignore(_))
+}
+
+/// A directory the tree may act *in*: the root itself, or anything under it.
+fn resolve_dir(root: &Path, dir: &str) -> Result<PathBuf, String> {
+    let resolved = fs::canonicalize(dir).map_err(|e| format!("{dir}: {e}"))?;
+    if !resolved.starts_with(root) {
+        return Err(format!("{dir} is outside the open folder"));
+    }
+    Ok(resolved)
+}
+
+/// A path the tree may act *on*.
+///
+/// The *parent* is canonicalised, not the target, for two reasons that both
+/// bite. Canonicalising the target resolves a symlink, which silently turns
+/// "delete this link" into "delete what it points at"; and it fails outright on
+/// a path that does not exist yet, which is every New File and the destination
+/// of every rename.
+///
+/// The root itself is refused. Delete on the tree's top row would otherwise
+/// trash the whole open project, and Rename on it would rename the folder out
+/// from under the tree displaying it.
+fn resolve_target(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let raw = PathBuf::from(path);
+    let name = raw
+        .file_name()
+        .ok_or_else(|| format!("{path} is not a file name"))?;
+    let parent = raw
+        .parent()
+        .ok_or_else(|| format!("{path} has no parent folder"))?;
+    let parent = fs::canonicalize(parent).map_err(|e| format!("{path}: {e}"))?;
+    if !parent.starts_with(root) {
+        return Err(format!("{path} is outside the open folder"));
+    }
+    let resolved = parent.join(name);
+    if resolved == root {
+        return Err("the open folder itself cannot be changed from inside it".into());
+    }
+    Ok(resolved)
+}
+
+/// The root, canonicalised once, for the containment checks to compare against.
+fn resolve_root(root: &str) -> Result<PathBuf, String> {
+    fs::canonicalize(root).map_err(|e| format!("{root}: {e}"))
+}
+
+/// One directory level, unsorted.
+///
+/// Lazy on purpose: a root with a `node_modules` in it makes eager scanning
+/// indefensible, and one level at a time means a symlink loop costs one
+/// `read_dir` per click rather than running away on its own.
+///
+/// Ordering is the front end's job. `Intl.Collator` with `numeric: true` is the
+/// natural, case-insensitive, locale-correct sort the webview already ships;
+/// reproducing it here would be a hand-rolled comparator plus a test to keep it
+/// honest.
+#[tauri::command(async)]
+fn list_dir(root: String, dir: String) -> Result<Vec<Entry>, String> {
+    let root = resolve_root(&root)?;
+    let resolved = resolve_dir(&root, &dir)?;
+    let repo = git_root(&resolved);
+    let chain = repo
+        .as_ref()
+        .map(|repo| ignore_chain(repo, &resolved))
+        .unwrap_or_default();
+
+    let mut rows = Vec::new();
+    let listing = fs::read_dir(&resolved).map_err(|e| format!("{dir}: {e}"))?;
+    for entry in listing.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        // Built from the path the caller gave rather than from the canonicalised
+        // one: `canonicalize` hands back a `\\?\` path on Windows, and one of
+        // those reaching the front end would be round-tripped into
+        // `reveal_item_in_dir` and the terminal's cwd, breaking both.
+        let path = Path::new(&dir).join(&name);
+        // The matchers are rooted at `resolved`, the canonicalised directory,
+        // and `matched_path_or_any_parents` panics by contract on a path
+        // outside its root. `dir` as the caller wrote it is not always the
+        // same string - a verbatim prefix or an 8.3 short name both differ -
+        // so the ignore question is asked about the canonical path even though
+        // the row carries the caller's.
+        let under_root = resolved.join(&name);
+        let Ok(link) = entry.metadata() else { continue };
+        let is_symlink = link.file_type().is_symlink();
+        // `read_dir`'s metadata does not follow links. Follow it once by hand so
+        // a junction to a folder still expands like a folder; a broken link
+        // resolves to a file and still lists, rather than killing the listing.
+        let is_dir = if is_symlink {
+            fs::metadata(&path).map(|meta| meta.is_dir()).unwrap_or(false)
+        } else {
+            link.is_dir()
+        };
+        rows.push(Entry {
+            // git hides `.git` and no .gitignore pattern matches it, so the one
+            // folder every repository has would otherwise be the only undimmed
+            // thing in the tree that is never worth opening.
+            ignored: repo.is_some() && (name == ".git" || is_ignored(&chain, &under_root, is_dir)),
+            hidden: is_hidden(&name, &link),
+            name,
+            path: path.to_string_lossy().into_owned(),
+            is_dir,
+            is_symlink,
+            size: link.len(),
+            modified: link
+                .modified()
+                .ok()
+                .and_then(|when| when.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|since| since.as_millis() as u64),
+        });
+    }
+    Ok(rows)
+}
+
+/// Whether `name` is one path component, and not a way out of the folder.
+///
+/// Validating the name rather than re-normalising a joined path is what keeps
+/// traversal impossible at the source: there is no `..` to resolve if `..` was
+/// never accepted in the first place.
+fn check_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name == "." || name == ".." {
+        return Err(format!("{name:?} is not a name"));
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err(format!("{name:?} is a path, not a name"));
+    }
+    Ok(())
+}
+
+/// New File and New Folder. One command with a flag rather than two, because
+/// the two differ by a single call and share every check.
+#[tauri::command(async)]
+fn create_entry(root: String, dir: String, name: String, directory: bool) -> Result<String, String> {
+    check_name(&name)?;
+    let root = resolve_root(&root)?;
+    let parent = resolve_dir(&root, &dir)?;
+    let target = Path::new(&dir).join(&name);
+    if directory {
+        // `create_dir`, not `create_dir_all`: the parent has already been
+        // checked to be inside the root, and `_all` would happily build a path
+        // that never was.
+        fs::create_dir(parent.join(&name)).map_err(|e| format!("{name}: {e}"))?;
+    } else {
+        // `create_new` is the atomic refusal to clobber. `write_text_file` is
+        // deliberately not reused here - it truncates, so New File over an
+        // existing name would silently empty it.
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(parent.join(&name))
+            .map_err(|e| format!("{name}: {e}"))?;
+    }
+    Ok(target.to_string_lossy().into_owned())
+}
+
+/// Rename, and drag-to-move. The same `fs::rename` either way.
+#[tauri::command(async)]
+fn rename_entry(root: String, from: String, to: String) -> Result<(), String> {
+    let root = resolve_root(&root)?;
+    let source = resolve_target(&root, &from)?;
+    let target = resolve_target(&root, &to)?;
+
+    if source != target && target.starts_with(&source) {
+        return Err("a folder cannot be moved inside itself".into());
+    }
+    // Windows and APFS are case-insensitive, so `target.exists()` is *true* when
+    // the only change is the casing - the obvious guard refuses the very rename
+    // it was written to allow. Canonicalising both asks the OS for the on-disk
+    // identity instead, so Foo.txt -> foo.txt compares equal and goes through,
+    // while Foo.txt -> Bar.txt over a real Bar.txt still does not.
+    let same_file = fs::canonicalize(&target).ok() == fs::canonicalize(&source).ok();
+    if target.exists() && !same_file {
+        return Err(format!("{} already exists", target.display()));
+    }
+    fs::rename(&source, &target).map_err(|e| format!("{}: {e}", target.display()))
+}
+
+/// Recursive copy, used by Paste and Duplicate.
+///
+/// Symlinks are skipped rather than followed. Copying through a junction that
+/// points at `C:\` is exactly how this feature fills a disk.
+fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    let meta = fs::symlink_metadata(from).map_err(|e| format!("{}: {e}", from.display()))?;
+    if meta.file_type().is_symlink() {
+        return Ok(());
+    }
+    if !meta.is_dir() {
+        fs::copy(from, to).map_err(|e| format!("{}: {e}", to.display()))?;
+        return Ok(());
+    }
+    fs::create_dir(to).map_err(|e| format!("{}: {e}", to.display()))?;
+    let listing = fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?;
+    for entry in listing.flatten() {
+        copy_tree(&entry.path(), &to.join(entry.file_name()))?;
+    }
+    Ok(())
+}
+
+/// Paste and Duplicate.
+#[tauri::command(async)]
+fn copy_entry(root: String, from: String, to: String) -> Result<(), String> {
+    let root = resolve_root(&root)?;
+    let source = resolve_target(&root, &from)?;
+    let target = resolve_target(&root, &to)?;
+
+    // Copying a folder into its own subtree recurses until the disk is full.
+    if target.starts_with(&source) {
+        return Err("a folder cannot be copied inside itself".into());
+    }
+    // Never overwrite. Inventing a free name (`foo copy 2.txt`) is the front
+    // end's job - it already holds the listing, so it costs no round trip, and
+    // this refusal is what makes its retry loop safe against a race.
+    if target.exists() {
+        return Err(format!("{} already exists", target.display()));
+    }
+    copy_tree(&source, &target)
+}
+
+/// Move to the Recycle Bin / Trash.
+///
+/// A `Vec` because a multi-select delete should be one entry in the bin's undo
+/// rather than five, and because `trash::delete_all` exists.
+///
+/// Every path is resolved before any is deleted, so a request carrying one path
+/// outside the root deletes nothing rather than half the selection.
+///
+/// There is deliberately no fall back to `fs::remove_*` when the trash is
+/// unavailable - on Linux a mount with no writable `.Trash-$uid` genuinely
+/// cannot take the file, and turning "the trash did not work" into "your file is
+/// gone" is the one outcome worse than the error.
+#[tauri::command(async)]
+fn delete_entry(root: String, paths: Vec<String>) -> Result<(), String> {
+    let root = resolve_root(&root)?;
+    let targets = paths
+        .iter()
+        .map(|path| resolve_target(&root, path))
+        .collect::<Result<Vec<_>, _>>()?;
+    trash::delete_all(&targets).map_err(|e| format!("{e}"))
+}
+
+/// Bumped whenever the expanded set changes, so a watcher thread whose
+/// generation is stale exits on its next tick rather than emitting alongside
+/// its replacement.
+static EXPLORER_WATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// One `stat` per expanded folder per second. A folder's mtime moves when an
+/// entry is added, removed or renamed - the whole set of events that changes
+/// what the tree shows. It does *not* move when a child's contents change, which
+/// is why a row must not display anything that would then go stale.
+const EXPLORER_WATCH_MS: u64 = 1_000;
+
+/// Watch the folders the tree currently has open, and say which ones moved.
+///
+/// The set is replaced wholesale on every call: expanding a folder re-sends the
+/// whole list. An empty list stops watching, because the generation is bumped
+/// before the early return - which is why there is no `explorer_unwatch` to go
+/// with this, unlike `watch_files`.
+///
+/// One deliberate difference from `watch_files`: a folder that has *gone* is
+/// reported here. There it is suppressed, because a deleted file's buffer is the
+/// last copy of it and replacing that with nothing is the worst outcome
+/// available. Here the row simply has to leave the tree.
+#[tauri::command]
+fn explorer_watch(app: tauri::AppHandle, dirs: Vec<String>) {
+    use std::sync::atomic::Ordering;
+
+    let generation = EXPLORER_WATCH.fetch_add(1, Ordering::SeqCst) + 1;
+    if dirs.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        let stamp = |dir: &str| fs::metadata(dir).ok().and_then(|meta| meta.modified().ok());
+        let mut seen: Vec<_> = dirs.iter().map(|dir| stamp(dir)).collect();
+        loop {
+            std::thread::sleep(Duration::from_millis(EXPLORER_WATCH_MS));
+            if EXPLORER_WATCH.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            let mut moved = Vec::new();
+            for (index, dir) in dirs.iter().enumerate() {
+                let now = stamp(dir);
+                if now != seen[index] {
+                    moved.push(dir.clone());
+                    seen[index] = now;
+                }
+            }
+            if !moved.is_empty() && app.emit("explorer:changed", moved).is_err() {
+                return;
+            }
+        }
+    });
+}
+
 /// Runs a script in its own console window, from the folder it lives in, so its
 /// output stays on screen after it finishes. `kind` picks the interpreter; only
 /// the shells below are accepted.
@@ -1093,15 +1523,7 @@ fn harness_state(from: String) -> serde_json::Value {
     // Where `init` would go: the top of the repository if there is one, because a
     // harness belongs beside the project rather than beside whichever file happens
     // to be open.
-    let mut init_root = start.to_path_buf();
-    let mut dir = Some(start);
-    while let Some(candidate) = dir {
-        if candidate.join(".git").exists() {
-            init_root = candidate.to_path_buf();
-            break;
-        }
-        dir = candidate.parent();
-    }
+    let init_root = git_root(start).unwrap_or_else(|| start.to_path_buf());
 
     let requirements = root
         .as_ref()
@@ -2232,7 +2654,13 @@ pub fn run() {
             terminal_close,
             open_external_terminal,
             download_update,
-            install_update
+            install_update,
+            list_dir,
+            create_entry,
+            rename_entry,
+            copy_entry,
+            delete_entry,
+            explorer_watch
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -2731,5 +3159,240 @@ mod harness_root_tests {
     fn a_path_that_does_not_exist_is_passed_through() {
         let missing = std::env::temp_dir().join("justcode-no-such-dir-here");
         assert_eq!(directory_of(&missing.to_string_lossy()), missing);
+    }
+}
+
+#[cfg(test)]
+mod explorer_tests {
+    use super::{
+        check_name, copy_entry, create_entry, git_root, ignore_chain, is_ignored, list_dir,
+        rename_entry, resolve_target,
+    };
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    /// A scratch folder that cleans itself up, so a failing assertion does not
+    /// leave the next run reading the last run's tree.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "justcode-explorer-{tag}-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            fs::create_dir_all(&dir).expect("scratch");
+            Self(dir)
+        }
+        fn path(&self) -> &Path {
+            &self.0
+        }
+        fn text(&self) -> String {
+            self.0.to_string_lossy().into_owned()
+        }
+        fn join(&self, rel: &str) -> String {
+            self.0.join(rel).to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).ok();
+        }
+    }
+
+    fn names(root: &Scratch, dir: &str) -> Vec<String> {
+        list_dir(root.text(), dir.to_string())
+            .expect("list")
+            .into_iter()
+            .map(|entry| entry.name)
+            .collect()
+    }
+
+    /// The requirement is "greyed", not "gone". The dotfile test alone misses
+    /// every Windows-hidden file that carries no dot — `desktop.ini`,
+    /// `Thumbs.db` — so half the hidden files rendered as ordinary ones.
+    #[test]
+    fn a_dotfile_is_reported_hidden() {
+        let scratch = Scratch::new("hidden");
+        fs::write(scratch.join(".env"), "x").unwrap();
+        fs::write(scratch.join("plain.txt"), "x").unwrap();
+
+        let rows = list_dir(scratch.text(), scratch.text()).expect("list");
+        let hidden = |name: &str| rows.iter().find(|row| row.name == name).unwrap().hidden;
+        assert!(hidden(".env"), "a dotfile is hidden");
+        assert!(!hidden("plain.txt"), "an ordinary file is not");
+        assert_eq!(rows.len(), 2, "both are listed, neither is dropped");
+    }
+
+    /// The Windows half of the same rule. `attrib +h` sets the attribute the
+    /// dotfile convention knows nothing about.
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_hidden_file_without_a_dot_is_reported_hidden() {
+        let scratch = Scratch::new("winhidden");
+        let file = scratch.join("desktop.ini");
+        fs::write(&file, "x").unwrap();
+        std::process::Command::new("attrib")
+            .arg("+h")
+            .arg(&file)
+            .status()
+            .expect("attrib");
+
+        let rows = list_dir(scratch.text(), scratch.text()).expect("list");
+        let row = rows.iter().find(|row| row.name == "desktop.ini").unwrap();
+        assert!(row.hidden, "FILE_ATTRIBUTE_HIDDEN counts even with no dot");
+    }
+
+    /// Any script running in the webview can invoke `delete_entry`. Without
+    /// this guard a single malformed argument puts somebody's Documents folder
+    /// in the Recycle Bin.
+    #[test]
+    fn a_path_outside_the_root_is_refused() {
+        let scratch = Scratch::new("outside");
+        let root = fs::canonicalize(scratch.path()).unwrap();
+        fs::create_dir(scratch.join("sub")).unwrap();
+
+        assert!(resolve_target(&root, &scratch.join("sub/../../elsewhere.txt")).is_err());
+        assert!(resolve_target(&root, "C:/Windows/System32/drivers/etc/hosts").is_err());
+        assert!(
+            resolve_target(&root, &scratch.join("sub/ok.txt")).is_ok(),
+            "a path that is genuinely inside still goes through"
+        );
+    }
+
+    /// Delete on the tree's top row trashed the whole open project, and Rename
+    /// on it renamed the folder out from under the tree displaying it.
+    #[test]
+    fn the_root_itself_is_refused() {
+        let scratch = Scratch::new("rootitself");
+        let root = fs::canonicalize(scratch.path()).unwrap();
+        let as_given = root.to_string_lossy().into_owned();
+        assert!(resolve_target(&root, &as_given).is_err(), "the root is not a target");
+    }
+
+    /// NTFS and APFS are case-insensitive, so the destination "already exists"
+    /// — it *is* the source. The obvious `to.exists()` guard therefore refused
+    /// the one rename it was written to allow.
+    #[test]
+    fn a_case_only_rename_is_allowed() {
+        let scratch = Scratch::new("caserename");
+        fs::write(scratch.join("Foo.txt"), "x").unwrap();
+
+        rename_entry(scratch.text(), scratch.join("Foo.txt"), scratch.join("foo.txt"))
+            .expect("a case-only rename is not a collision");
+
+        // And a real collision is still refused.
+        fs::write(scratch.join("Bar.txt"), "x").unwrap();
+        assert!(
+            rename_entry(scratch.text(), scratch.join("foo.txt"), scratch.join("Bar.txt")).is_err(),
+            "renaming over a different file is still a collision"
+        );
+    }
+
+    /// Copying a folder into its own subtree recurses until the disk is full.
+    #[test]
+    fn a_folder_cannot_be_copied_into_itself() {
+        let scratch = Scratch::new("copyself");
+        fs::create_dir_all(scratch.join("a/b")).unwrap();
+
+        assert!(copy_entry(scratch.text(), scratch.join("a"), scratch.join("a/b/a")).is_err());
+        assert!(
+            copy_entry(scratch.text(), scratch.join("a"), scratch.join("a-copy")).is_ok(),
+            "a copy that is not nested still works"
+        );
+    }
+
+    /// Validating the name is what makes traversal impossible: there is no
+    /// `..` left to resolve if `..` was never accepted.
+    #[test]
+    fn a_name_that_is_really_a_path_is_refused() {
+        for name in ["", ".", "..", "sub/evil", "..\\..\\evil", "/etc/passwd"] {
+            assert!(check_name(name).is_err(), "{name:?} was accepted as a name");
+        }
+        assert!(check_name("ordinary.txt").is_ok());
+    }
+
+    /// New File over an existing name must fail rather than empty it.
+    /// `write_text_file` would have truncated, which is why it is not reused.
+    #[test]
+    fn creating_over_an_existing_file_does_not_empty_it() {
+        let scratch = Scratch::new("clobber");
+        fs::write(scratch.join("keep.txt"), "precious").unwrap();
+
+        assert!(
+            create_entry(scratch.text(), scratch.text(), "keep.txt".into(), false).is_err(),
+            "New File over an existing name is refused"
+        );
+        assert_eq!(
+            fs::read_to_string(scratch.join("keep.txt")).unwrap(),
+            "precious",
+            "and the file it refused to create is untouched"
+        );
+    }
+
+    /// The requirement in one assertion: an ignored file is *listed*, and
+    /// flagged, rather than filtered out. `WalkBuilder` would have dropped it,
+    /// which is why the path-level API is used instead.
+    #[test]
+    fn an_ignored_file_is_listed_and_flagged_rather_than_dropped() {
+        let scratch = Scratch::new("ignored");
+        fs::create_dir(scratch.join(".git")).unwrap();
+        fs::write(scratch.join(".gitignore"), "build/\n!build/keep.md\n").unwrap();
+        fs::create_dir(scratch.join("build")).unwrap();
+        fs::write(scratch.join("build/out.o"), "x").unwrap();
+        fs::write(scratch.join("build/keep.md"), "x").unwrap();
+        fs::write(scratch.join("src.rs"), "x").unwrap();
+
+        let listed = names(&scratch, &scratch.text());
+        assert!(listed.contains(&"build".to_string()), "the ignored folder is still listed");
+        assert!(listed.contains(&".git".to_string()), "so is .git");
+
+        let rows = list_dir(scratch.text(), scratch.join("build")).expect("list build");
+        let ignored = |name: &str| rows.iter().find(|row| row.name == name).unwrap().ignored;
+        assert_eq!(rows.len(), 2, "nothing is filtered out of an ignored folder");
+        assert!(ignored("out.o"), "a file inside an ignored folder is ignored");
+        assert!(!ignored("keep.md"), "a whitelist re-includes it");
+
+        let top = list_dir(scratch.text(), scratch.text()).expect("list root");
+        let flag = |name: &str| top.iter().find(|row| row.name == name).unwrap().ignored;
+        assert!(flag("build"), "the ignored folder is flagged");
+        assert!(flag(".git"), "git hides .git and no pattern matches it");
+        assert!(!flag("src.rs"), "an ordinary file is not");
+    }
+
+    /// git ignores nothing when there is no repository, so neither does this.
+    /// A stray .gitignore in a plain folder must not grey anything.
+    #[test]
+    fn nothing_is_ignored_outside_a_repository() {
+        let scratch = Scratch::new("norepo");
+        fs::write(scratch.join(".gitignore"), "*.log\n").unwrap();
+        fs::write(scratch.join("noisy.log"), "x").unwrap();
+
+        assert!(git_root(&fs::canonicalize(scratch.path()).unwrap()).is_none());
+        let rows = list_dir(scratch.text(), scratch.text()).expect("list");
+        assert!(
+            rows.iter().all(|row| !row.ignored),
+            "with no .git above it, nothing is ignored"
+        );
+    }
+
+    /// `matched_path_or_any_parents` panics by contract when handed a path
+    /// outside the matcher's root. A panic inside a command is a far worse
+    /// outcome than a wrongly-black row, so the chain is only ever asked about
+    /// paths under its own root — and this is what says so.
+    #[test]
+    fn asking_about_a_path_under_the_chain_root_does_not_panic() {
+        let scratch = Scratch::new("panic");
+        fs::create_dir(scratch.join(".git")).unwrap();
+        fs::write(scratch.join(".gitignore"), "*.tmp\n").unwrap();
+        let root = fs::canonicalize(scratch.path()).unwrap();
+
+        let chain = ignore_chain(&root, &root);
+        assert!(is_ignored(&chain, &root.join("a.tmp"), false));
+        assert!(!is_ignored(&chain, &root.join("a.rs"), false));
     }
 }

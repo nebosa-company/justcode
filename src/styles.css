@@ -1809,6 +1809,263 @@ button.primary:hover {
   display: none;
 }
 
+/* ---------- Explorer panel ----------
+   Docked left, and styled entirely from the variables the three themes already
+   declare, so it follows the theme rather than naming a colour of its own. */
+#explorer-panel {
+  display: flex;
+  flex-direction: column;
+  width: 15rem;
+  min-width: 10rem;
+  max-width: 40vw;
+  overflow: hidden;
+  border-inline-end: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--fg);
+}
+
+#explorer-panel[hidden] {
+  display: none;
+}
+
+#explorer-resizer {
+  flex: none;
+  width: 5px;
+  margin-inline-start: -2px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 5;
+}
+
+#explorer-resizer:hover,
+#explorer-resizer:focus-visible,
+#explorer-resizer.dragging {
+  background: var(--accent);
+  outline: none;
+}
+
+#explorer-resizer[hidden] {
+  display: none;
+}
+
+/* While dragging, the pointer owns the window: text must not select and the
+   editor must not fight for the cursor. */
+body.explorer-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.explorer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.explorer-title {
+  overflow: hidden;
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--fg-dim);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.explorer-action {
+  display: inline-flex;
+  padding: 3px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.explorer-action:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.explorer-tree {
+  flex: 1;
+  min-height: 0;
+  padding-block: 2px;
+  overflow: auto;
+}
+
+.explorer-notice,
+.explorer-empty {
+  margin: 0;
+  padding: 0.75rem;
+  color: var(--fg-dim);
+  font-size: 0.9em;
+}
+
+.explorer-empty-title {
+  margin: 0 0 0.35rem;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.explorer-empty p {
+  margin: 0 0 0.75rem;
+}
+
+.explorer-open {
+  width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* One row. The indent guides are the background rather than extra elements:
+   exactly `--depth` of them, drawn once, with no per-level markup to keep in
+   step with the tree. */
+.explorer-row {
+  --indent: 10px;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 22px;
+  padding-inline-start: calc(var(--depth) * var(--indent));
+  border: none;
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--border) 0 1px,
+    transparent 1px var(--indent)
+  );
+  background-repeat: no-repeat;
+  background-size: calc(var(--depth) * var(--indent)) 100%;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+[dir="rtl"] .explorer-row {
+  background-image: repeating-linear-gradient(
+    to left,
+    var(--border) 0 1px,
+    transparent 1px var(--indent)
+  );
+}
+
+.explorer-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.explorer-twisty {
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  width: 16px;
+  color: var(--fg-dim);
+}
+
+.explorer-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* The autism theme is deliberately low-arousal — roughly half the saturation of
+   the others. A column of full-strength brand logos would be the loudest thing
+   on that screen, so the file icons are pulled back to match it. */
+html[data-theme="autism"] .explorer-icon {
+  filter: saturate(0.5);
+}
+
+.explorer-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-row:hover {
+  background-color: var(--hover);
+}
+
+.explorer-row[aria-selected="true"] {
+  background-color: var(--active);
+}
+
+.explorer-tree:focus-within .explorer-row[aria-selected="true"] {
+  background-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.explorer-row.active .explorer-label {
+  font-weight: 600;
+}
+
+/* Dimming goes on the body rather than the row, so a hidden or ignored file
+   that is selected still gets a full-strength selection bar behind it. One
+   class covers both: VS Code does not tell them apart visually either, and the
+   tooltip is where the difference belongs. */
+.explorer-row.dim .explorer-body {
+  opacity: 0.55;
+}
+
+.explorer-row.cut .explorer-body {
+  opacity: 0.4;
+}
+
+.explorer-row.drop-into,
+.explorer-tree.drop-into {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.explorer-more {
+  color: var(--fg-dim);
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.explorer-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.explorer-input.invalid {
+  border-color: var(--danger);
+}
+
+.explorer-input-error {
+  position: absolute;
+  z-index: 6;
+  margin-block-start: 22px;
+  margin-inline-start: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--danger);
+  border-radius: 3px;
+  background: var(--menu-bg);
+  color: var(--danger);
+  font-size: 0.9em;
+}
+
+.explorer-input-error[hidden] {
+  display: none;
+}
+
 /* The row that puts the editor and the panel side by side. Without it the
    panel stacks under the workspace, because the app shell is a column. */
 #workspace-row {

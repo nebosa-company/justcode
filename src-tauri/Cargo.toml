@@ -29,6 +29,21 @@ portable-pty = "0.8"
 # Just enough HTTP to fetch a release asset: blocking, rustls, no async runtime.
 ureq = "2"
 
+# Delete puts things in the Recycle Bin, not the void. Recovering a file deleted
+# by mistake is the OS's job and it already does it well; `fs::remove_dir_all`
+# behind a menu item called Delete is a data-loss bug waiting for one mis-click.
+# Default features on purpose: they pick the COM apartment on Windows, and
+# turning them off is a silent behaviour change rather than a saving.
+trash = "5"
+
+# gitignore matching for the explorer's greyed rows. Ripgrep's, so it handles
+# what a hand-rolled matcher gets wrong: negation, anchoring, `**`, the
+# trailing-slash directory rule, character classes, per-directory precedence and
+# `core.excludesFile`. Every one of those getting it wrong greys a file that
+# should be black. Used through `ignore::gitignore` — the path-level API — not
+# `WalkBuilder`, which filters ignored entries rather than labelling them.
+ignore = "0.4"
+
 # File associations are per-user registry entries under HKCU\Software\Classes,
 # so they need no elevation. Windows only — nothing else here reads the registry.
 [target.'cfg(windows)'.dependencies]
