@@ -1,4 +1,4 @@
-// Project statistics: how many lines the open folder holds, split into code,
+// Project metrics: how many lines the open folder holds, split into code,
 // comment and blank, grouped by language, and compared with the last scan.
 //
 // The counting happens in Rust (`project_metrics`) because it is a whole-project

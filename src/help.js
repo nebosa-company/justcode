@@ -134,7 +134,7 @@ const SHORTCUTS = [
       ["Ctrl++ / Ctrl+-", "sc.zoomInOut"],
       ["Ctrl+0", "sc.resetZoom"],
       ["sc.k.ctrlWheel", "sc.zoom"],
-      ["F6", "sc.projectStats"],
+      ["F6", "sc.projectMetrics"],
       ["F8", "sc.showProblems"],
       ["F4 / Shift+F4", "sc.nextPrevProblem"],
       ["Ctrl+Shift+M", "sc.problemsPanel"],
@@ -1277,25 +1277,25 @@ export function showAbout(version) {
  * `rescan` is handed in rather than called from here so this file stays what the
  * rest of it is — markup over data — and the invoking stays in main.js.
  */
-export function showProjectStats(rescan, iconFor) {
-  const body = openOverlay(t("stats.title"), true);
-  body.classList.add("stats-body");
+export function showMetricsPanel(rescan, iconFor) {
+  const body = openOverlay(t("metrics.title"), true);
+  body.classList.add("metrics-body");
 
   const head = document.createElement("div");
-  head.className = "stats-head";
+  head.className = "metrics-head";
   const window_ = document.createElement("span");
-  window_.className = "stats-window cold";
+  window_.className = "metrics-window cold";
   const again = document.createElement("button");
   again.type = "button";
-  again.className = "stats-rescan";
-  again.textContent = t("stats.rescan");
+  again.className = "metrics-rescan";
+  again.textContent = t("metrics.rescan");
   head.append(window_, again);
 
   const table = document.createElement("div");
-  table.className = "stats-table";
+  table.className = "metrics-table";
 
   const note = document.createElement("p");
-  note.className = "stats-note";
+  note.className = "metrics-note";
 
   body.append(head, table, note);
 
@@ -1304,7 +1304,7 @@ export function showProjectStats(rescan, iconFor) {
   /** A signed count, or nothing at all when there is no baseline to compare to. */
   function deltaElement(value) {
     const span = document.createElement("span");
-    span.className = "stats-delta";
+    span.className = "metrics-delta";
     if (value === null || value === undefined) return span;
     // Colour marks direction, not judgement — deleting a thousand lines is a
     // good day, so neither direction is styled as an error.
@@ -1317,7 +1317,7 @@ export function showProjectStats(rescan, iconFor) {
     const div = document.createElement("div");
     if (className) div.className = className;
     const figure = document.createElement("span");
-    figure.className = "stats-n";
+    figure.className = "metrics-n";
     figure.textContent = number(value);
     div.append(figure, deltaElement(delta));
     row.append(div);
@@ -1326,11 +1326,11 @@ export function showProjectStats(rescan, iconFor) {
   /** Code / comment / blank as one bar, so a language's shape reads at a glance. */
   function mixElement(counts) {
     const bar = document.createElement("div");
-    bar.className = "stats-bar";
+    bar.className = "metrics-bar";
     const total = counts.lines || 1;
     for (const [field, name] of [["code", "code"], ["comment", "comm"]]) {
       const part = document.createElement("i");
-      part.className = `stats-${name}`;
+      part.className = `metrics-${name}`;
       part.style.width = `${(counts[field] / total) * 100}%`;
       bar.append(part);
     }
@@ -1339,17 +1339,17 @@ export function showProjectStats(rescan, iconFor) {
     // already carries, so the tooltip costs no string of its own in
     // thirty-six locales.
     const percent = (field) =>
-      `${t(`stats.${field}`)} ${Math.round((counts[field] / total) * 100)}%`;
+      `${t(`metrics.${field}`)} ${Math.round((counts[field] / total) * 100)}%`;
     bar.title = ["code", "comment", "blank"].map(percent).join(" · ");
     return bar;
   }
 
   function header() {
     const row = document.createElement("div");
-    row.className = "stats-row stats-header";
+    row.className = "metrics-row metrics-header";
     for (const key of ["language", "files", "lines", "code", "comment", "blank", "mix"]) {
       const cellElement = document.createElement("div");
-      cellElement.textContent = t(`stats.${key}`);
+      cellElement.textContent = t(`metrics.${key}`);
       row.append(cellElement);
     }
     return row;
@@ -1357,17 +1357,17 @@ export function showProjectStats(rescan, iconFor) {
 
   function languageRow(entry) {
     const row = document.createElement("div");
-    row.className = "stats-row";
+    row.className = "metrics-row";
 
     const name = document.createElement("div");
-    name.className = "stats-lang";
+    name.className = "metrics-lang";
 
     // The tree's own mark for a file of this language, drawn from an extension
     // the project actually has — so the row and the files it counts look alike.
     const url = entry.extensions?.length ? iconFor?.(`x.${entry.extensions[0]}`) : null;
     if (url) {
       const icon = document.createElement("img");
-      icon.className = "stats-icon";
+      icon.className = "metrics-icon";
       icon.src = url;
       icon.alt = "";
       name.append(icon);
@@ -1380,16 +1380,16 @@ export function showProjectStats(rescan, iconFor) {
     // Which extensions this project uses, not every one the language claims.
     if (entry.extensions?.length) {
       const found = document.createElement("span");
-      found.className = "stats-ext";
+      found.className = "metrics-ext";
       found.textContent = entry.extensions.map((ext) => `.${ext}`).join(" ");
       name.append(found);
     }
 
     if (entry.state === "new" || entry.state === "gone") {
       const chip = document.createElement("span");
-      chip.className = `stats-chip ${entry.state}`;
+      chip.className = `metrics-chip ${entry.state}`;
       chip.textContent =
-        entry.state === "new" ? t("stats.new") : `${t("stats.gone")} −${number(entry.lost)}`;
+        entry.state === "new" ? t("metrics.new") : `${t("metrics.gone")} −${number(entry.lost)}`;
       name.append(chip);
     }
     row.append(name);
@@ -1399,7 +1399,7 @@ export function showProjectStats(rescan, iconFor) {
     }
 
     const mix = document.createElement("div");
-    mix.className = "stats-mix";
+    mix.className = "metrics-mix";
     mix.append(mixElement(entry));
     row.append(mix);
     return row;
@@ -1407,15 +1407,15 @@ export function showProjectStats(rescan, iconFor) {
 
   function totalsRow(totals) {
     const row = document.createElement("div");
-    row.className = "stats-row stats-totals";
+    row.className = "metrics-row metrics-totals";
     const name = document.createElement("div");
-    name.textContent = t("stats.total");
+    name.textContent = t("metrics.total");
     row.append(name);
     for (const field of ["files", "lines", "code", "comment", "blank"]) {
       cell(row, totals[field], totals.delta?.[field]);
     }
     const mix = document.createElement("div");
-    mix.className = "stats-mix";
+    mix.className = "metrics-mix";
     mix.append(mixElement(totals));
     row.append(mix);
     return row;
@@ -1433,13 +1433,13 @@ export function showProjectStats(rescan, iconFor) {
     window_.classList.toggle("cold", !report.window);
     window_.textContent = report.window
       ? report.window.since
-        ? t("stats.since", { date: report.window.text })
+        ? t("metrics.since", { date: report.window.text })
         : report.window.text
-      : t("stats.noBaseline");
+      : t("metrics.noBaseline");
     // Two localised stamps joined by an arrow — no sentence to translate.
     window_.title = baseline ? `${baseline} → ${scanned}` : scanned;
 
-    note.textContent = report.truncated ? t("stats.truncated") : t("stats.stored");
+    note.textContent = report.truncated ? t("metrics.truncated") : t("metrics.stored");
   }
 
   function load() {
@@ -1449,8 +1449,8 @@ export function showProjectStats(rescan, iconFor) {
     // a big project is what you look at for half a minute.
     window_.hidden = true;
     table.replaceChildren(Object.assign(document.createElement("p"), {
-      className: "stats-waiting",
-      textContent: t("stats.scanning"),
+      className: "metrics-waiting",
+      textContent: t("metrics.scanning"),
     }));
     note.textContent = "";
     rescan().then(
@@ -1461,7 +1461,7 @@ export function showProjectStats(rescan, iconFor) {
       (error) => {
         again.disabled = false;
         table.replaceChildren(Object.assign(document.createElement("p"), {
-          className: "stats-waiting",
+          className: "metrics-waiting",
           textContent: String(error),
         }));
       },

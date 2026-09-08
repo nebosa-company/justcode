@@ -17,7 +17,7 @@ import { decideReload } from "../src/ondisk.js";
 import { renderMarkdownDocument } from "../src/markdown.js";
 import { formatAccel, isLetter, proseAccel } from "../src/shortcuts.js";
 import { StringStream } from "@codemirror/language";
-import { compare, scanSpecs, windowLabel } from "../src/stats.js";
+import { compare, scanSpecs, windowLabel } from "../src/metrics.js";
 import { neper } from "../src/neper.js";
 import { intelAsm } from "../src/intel-asm.js";
 import { isNewer, installerFor } from "../src/update.js";

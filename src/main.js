@@ -20,9 +20,9 @@ import {
   showAssociations,
   showNewFile,
   isOverlayOpen,
-  showProjectStats,
+  showMetricsPanel,
 } from "./help.js";
-import { scanProject } from "./stats.js";
+import { scanProject } from "./metrics.js";
 import { decideReload } from "./ondisk.js";
 import { findSymbols, supportsSymbols } from "./symbols.js";
 import { templateFor, hasTemplate } from "./templates.js";
@@ -2831,7 +2831,7 @@ function buildMenus() {
         accel: "Ctrl+Shift+P",
         run: openCommandPalette,
       },
-      { label: t("stats.title"), icon: "info", accel: "F6", run: showStatistics },
+      { label: t("metrics.title"), icon: "info", accel: "F6", run: showProjectMetrics },
       { label: t("view.problems"), icon: "warning", accel: "F8", run: showProblems },
       {
         label: t("view.nextProblem"),
@@ -3161,7 +3161,7 @@ window.addEventListener(
     if (event.key === "F6" && !ctrl) {
       event.preventDefault();
       event.stopPropagation();
-      showStatistics();
+      showProjectMetrics();
       return;
     }
     // Walking the problems is F4, Shift+F4 backwards — the Visual Studio
@@ -4007,16 +4007,16 @@ function allCommands() {
  * The scan needs a project, and "the folder that is open" is the only thing
  * that means here — a lone file has no boundary to walk.
  */
-async function showStatistics() {
+async function showProjectMetrics() {
   const root = explorer.root();
   if (!root) {
-    await message(t("stats.noFolder"), { title: t("stats.title") });
+    await message(t("metrics.noFolder"), { title: t("metrics.title") });
     return;
   }
   // The icon map is loaded when a folder is attached, but a first paint that
   // is missing every mark is worth one await rather than a race.
   await explorer.ensureIcons();
-  showProjectStats(() => scanProject(root, currentLocale()), explorer.fileIconUrl);
+  showMetricsPanel(() => scanProject(root, currentLocale()), explorer.fileIconUrl);
 }
 
 function openCommandPalette() {

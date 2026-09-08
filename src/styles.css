@@ -2774,13 +2774,13 @@ body.perp-resizing {
 
 /* ---------- Project Statistics ---------- */
 
-.stats-body {
+.metrics-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.stats-head {
+.metrics-head {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2792,11 +2792,11 @@ body.perp-resizing {
    translate a glyph. */
 /* `display` here beats the `hidden` attribute, so say so explicitly — the
    pill is hidden while a scan is in flight. */
-.stats-window[hidden] {
+.metrics-window[hidden] {
   display: none;
 }
 
-.stats-window {
+.metrics-window {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2810,7 +2810,7 @@ body.perp-resizing {
   cursor: help;
 }
 
-.stats-window::before {
+.metrics-window::before {
   content: "Δ";
   font-weight: 600;
   color: var(--accent);
@@ -2818,17 +2818,17 @@ body.perp-resizing {
 
 /* No baseline: the pill is still there, saying so, rather than vanishing and
    leaving the reader to wonder what the numbers are being compared with. */
-.stats-window.cold {
+.metrics-window.cold {
   border-color: var(--border-strong);
   background: transparent;
   color: var(--fg-dim);
 }
 
-.stats-window.cold::before {
+.metrics-window.cold::before {
   color: var(--fg-dim);
 }
 
-.stats-rescan {
+.metrics-rescan {
   margin-left: auto;
   padding: 3px 11px;
   border-radius: 5px;
@@ -2839,11 +2839,11 @@ body.perp-resizing {
   cursor: pointer;
 }
 
-.stats-rescan:hover:not(:disabled) {
+.metrics-rescan:hover:not(:disabled) {
   background: var(--hover);
 }
 
-.stats-rescan:disabled {
+.metrics-rescan:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -2851,32 +2851,32 @@ body.perp-resizing {
 /* A grid rather than a <table>: the row is one object with seven tracks, and
    the totals row has to sit on the same tracks without a second <colgroup> to
    keep in step. */
-.stats-table {
+.metrics-table {
   display: grid;
   grid-template-columns: minmax(140px, 1fr) repeat(5, max-content) 120px;
   overflow-x: auto;
   font-variant-numeric: tabular-nums;
 }
 
-.stats-row {
+.metrics-row {
   display: contents;
 }
 
-.stats-row > div {
+.metrics-row > div {
   padding: 6px 10px;
   text-align: right;
   white-space: nowrap;
   border-bottom: 1px solid var(--border);
 }
 
-.stats-row > div:first-child,
+.metrics-row > div:first-child,
 /* The mix column holds a bar that fills its track, so its heading sits over
    the bar's left edge rather than adrift at the right. */
-.stats-row > div:last-child {
+.metrics-row > div:last-child {
   text-align: left;
 }
 
-.stats-header > div {
+.metrics-header > div {
   position: sticky;
   top: 0;
   /* Above the rows, or a scrolled delta paints through the header's own
@@ -2890,20 +2890,20 @@ body.perp-resizing {
   color: var(--fg-dim);
 }
 
-.stats-totals > div {
+.metrics-totals > div {
   border-top: 2px solid var(--border-strong);
   border-bottom: none;
   font-weight: 600;
 }
 
-.stats-lang {
+.metrics-lang {
   display: flex;
   align-items: center;
   gap: 7px;
 }
 
 /* Sized to the tree's own rows, so the two read as the same kind of mark. */
-.stats-icon {
+.metrics-icon {
   width: 16px;
   height: 16px;
   flex: none;
@@ -2911,39 +2911,39 @@ body.perp-resizing {
 
 /* What the project actually uses, not everything the language claims. Dimmed
    and monospace: it identifies the row, it is not a second heading. */
-.stats-ext {
+.metrics-ext {
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 11px;
   color: var(--fg-dim);
 }
 
-.stats-n {
+.metrics-n {
   font-family: "Cascadia Code", Consolas, monospace;
 }
 
 /* Colour marks direction, not judgement: deleting four hundred lines is the
    good day, so neither direction is drawn as an error. An untouched language
    fades rather than shouting a row of zeroes. */
-.stats-delta {
+.metrics-delta {
   margin-left: 6px;
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 11px;
   color: var(--fg-dim);
 }
 
-.stats-delta.up {
+.metrics-delta.up {
   color: var(--accent);
 }
 
-.stats-delta.down {
+.metrics-delta.down {
   color: var(--danger);
 }
 
-.stats-delta.flat {
+.metrics-delta.flat {
   opacity: 0.45;
 }
 
-.stats-chip {
+.metrics-chip {
   padding: 1px 6px;
   border-radius: 9px;
   border: 1px solid var(--border-strong);
@@ -2953,24 +2953,24 @@ body.perp-resizing {
   text-transform: uppercase;
 }
 
-.stats-chip.new {
+.metrics-chip.new {
   color: var(--accent);
   border-color: var(--accent);
 }
 
-.stats-chip.gone {
+.metrics-chip.gone {
   color: var(--danger);
   border-color: var(--danger);
 }
 
-.stats-mix {
+.metrics-mix {
   display: flex;
   align-items: center;
 }
 
 /* Code, comment and blank as one bar. Blank is the track showing through
    rather than a third segment, so two widths describe three quantities. */
-.stats-bar {
+.metrics-bar {
   display: flex;
   width: 100%;
   height: 7px;
@@ -2979,27 +2979,27 @@ body.perp-resizing {
   background: var(--border);
 }
 
-.stats-bar i {
+.metrics-bar i {
   display: block;
   height: 100%;
 }
 
-.stats-bar .stats-code {
+.metrics-bar .metrics-code {
   background: var(--accent);
 }
 
-.stats-bar .stats-comm {
+.metrics-bar .metrics-comm {
   background: var(--fg-dim);
 }
 
-.stats-waiting,
-.stats-note {
+.metrics-waiting,
+.metrics-note {
   margin: 0;
   color: var(--fg-dim);
   font-size: 12px;
 }
 
-.stats-waiting {
+.metrics-waiting {
   grid-column: 1 / -1;
   padding: 18px 10px;
 }
