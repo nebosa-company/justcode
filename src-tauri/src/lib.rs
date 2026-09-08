@@ -2735,15 +2735,23 @@ fn count_lines(text: &str, spec: &LangSpec) -> Counts {
     counts
 }
 
-/// Walks one directory, following the same ignore rules the Explorer greys rows
-/// by — so the report counts what the project actually ships, with
+/// One file worth counting: where it is, the extension it matched, and which
+/// language spec that extension belongs to.
+type Candidate = (PathBuf, String, usize);
+
+/// Lists what to count, following the same ignore rules the Explorer greys rows
+/// by — so the report covers what the project actually ships, with
 /// `node_modules`, `target` and `dist` left out because git leaves them out.
-fn scan_dir(
+///
+/// Listing is separated from reading so the reading can be spread over threads.
+/// This half is `stat` and pattern matching and stays on one: it is a fraction
+/// of the cost, and the ignore chain is rebuilt per directory, which is
+/// awkward to share and pointless to parallelise.
+fn collect_files(
     dir: &Path,
     repo: &Path,
     by_extension: &HashMap<String, usize>,
-    specs: &[LangSpec],
-    out: &mut HashMap<String, Counts>,
+    out: &mut Vec<Candidate>,
     budget: &mut u32,
 ) {
     let chain = ignore_chain(repo, dir);
@@ -2763,7 +2771,7 @@ fn scan_dir(
             if name == ".git" || is_ignored(&chain, &path, true) {
                 continue;
             }
-            scan_dir(&path, repo, by_extension, specs, out, budget);
+            collect_files(&path, repo, by_extension, out, budget);
             continue;
         }
 
@@ -2779,16 +2787,65 @@ fn scan_dir(
             continue;
         };
         let Some(&index) = by_extension.get(&extension) else { continue };
-        // Not UTF-8 means a binary wearing a known extension. Skipped rather
-        // than counted as one enormous line.
-        let Ok(text) = fs::read_to_string(&path) else { continue };
 
         *budget -= 1;
-        let spec = &specs[index];
+        out.push((path, extension, index));
+    }
+}
+
+/// Reads and classifies one slice of the file list.
+fn count_chunk(files: &[Candidate], specs: &[LangSpec]) -> HashMap<String, Counts> {
+    let mut out: HashMap<String, Counts> = HashMap::new();
+    for (path, extension, index) in files {
+        // Not UTF-8 means a binary wearing a known extension. Skipped rather
+        // than counted as one enormous line.
+        let Ok(text) = fs::read_to_string(path) else { continue };
+        let spec = &specs[*index];
         let mut counted = count_lines(&text, spec);
-        counted.extensions.insert(extension);
+        counted.extensions.insert(extension.clone());
         out.entry(spec.label.clone()).or_default().add(&counted);
     }
+    out
+}
+
+/// The same counting, spread over the machine's cores.
+///
+/// This is where a large project's time goes: celvyx is 1.85M lines across
+/// 7,383 files, and reading them one after another took ~37s on a cold page
+/// cache. The work divides cleanly because `count_lines` is pure and each file
+/// is independent — the only shared thing is the merge at the end.
+///
+/// Threads rather than a work-stealing pool: chunking a list that is already
+/// known is the whole scheduling problem here, and a runtime for it would be a
+/// dependency bought for one call site.
+///
+/// ponytail: chunks are equal in *file count*, not in bytes, so one thread
+/// holding a few very large files finishes last and the tail is idle. Splitting
+/// by size, or handing out files one at a time behind a shared cursor, is the
+/// fix if that tail ever shows up in a measurement.
+fn count_all(files: &[Candidate], specs: &[LangSpec]) -> HashMap<String, Counts> {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(8);
+    // Below this the threads cost more than the reading they save.
+    if threads <= 1 || files.len() < 64 {
+        return count_chunk(files, specs);
+    }
+
+    let chunk = files.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> =
+            files.chunks(chunk).map(|slice| scope.spawn(move || count_chunk(slice, specs))).collect();
+
+        let mut merged: HashMap<String, Counts> = HashMap::new();
+        for worker in workers {
+            // A panicked worker loses its slice rather than the whole scan;
+            // the alternative is a report that fails entirely because one file
+            // was pathological.
+            for (label, counts) in worker.join().unwrap_or_default() {
+                merged.entry(label).or_default().add(&counts);
+            }
+        }
+        merged
+    })
 }
 
 /// Counts every source line under `root`, grouped by language.
@@ -2817,9 +2874,10 @@ fn project_metrics(root: String, languages: Vec<LangSpec>) -> Result<serde_json:
         }
     }
 
-    let mut out: HashMap<String, Counts> = HashMap::new();
+    let mut files = Vec::new();
     let mut budget = METRICS_MAX_FILES;
-    scan_dir(&root_path, &repo, &by_extension, &languages, &mut out, &mut budget);
+    collect_files(&root_path, &repo, &by_extension, &mut files, &mut budget);
+    let out = count_all(&files, &languages);
 
     let mut totals = Counts::default();
     for counts in out.values() {
@@ -3712,7 +3770,9 @@ mod explorer_tests {
 
 #[cfg(test)]
 mod metrics_tests {
-    use super::{count_lines, scan_dir, starts_with_token, Counts, LangSpec};
+    use super::{
+        collect_files, count_all, count_chunk, count_lines, starts_with_token, Counts, LangSpec,
+    };
     use std::collections::HashMap;
     use std::fs;
 
@@ -3858,9 +3918,10 @@ code();
         let specs = vec![spec];
         let by_extension = HashMap::from([("c".to_string(), 0usize)]);
 
-        let mut out: HashMap<String, Counts> = HashMap::new();
+        let mut files = Vec::new();
         let mut budget = 100;
-        scan_dir(&dir, &dir, &by_extension, &specs, &mut out, &mut budget);
+        collect_files(&dir, &dir, &by_extension, &mut files, &mut budget);
+        let out = count_all(&files, &specs);
 
         let counted = out.get("C-like").expect("the two source files");
         assert_eq!(counted.files, 2, "a.c and b.c, not the dependency or the blob");
@@ -3873,6 +3934,7 @@ code();
 
         let _ = fs::remove_dir_all(&dir);
     }
+
 
 
     /// The cap has to stop the walk, not silently sample it.
@@ -3893,12 +3955,68 @@ code();
         let specs = vec![spec];
         let by_extension = HashMap::from([("c".to_string(), 0usize)]);
 
-        let mut out: HashMap<String, Counts> = HashMap::new();
+        let mut files = Vec::new();
         let mut budget = 2;
-        scan_dir(&dir, &dir, &by_extension, &specs, &mut out, &mut budget);
+        collect_files(&dir, &dir, &by_extension, &mut files, &mut budget);
 
         assert_eq!(budget, 0, "the caller reports a partial scan from this");
-        assert_eq!(out.get("C-like").unwrap().files, 2);
+        assert_eq!(files.len(), 2);
+        assert_eq!(count_all(&files, &specs).get("C-like").unwrap().files, 2);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Threads must not change the answer. The merge is the only shared state
+    /// in the scan, and a wrong merge shows up as a plausible number rather
+    /// than a crash — which is exactly the kind of bug that survives a demo.
+    #[test]
+    fn many_threads_count_what_one_thread_counts() {
+        let dir = std::env::temp_dir().join("justcode-metrics-parallel");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        // Enough files to clear the threshold that keeps small scans on one
+        // thread, and varied enough that a chunk boundary lands mid-language.
+        for n in 0..200 {
+            let body = match n % 3 {
+                0 => "// a
+code();
+
+",
+                1 => "/* open
+still inside */
+run();
+",
+                _ => "one();
+two(); // trail
+",
+            };
+            fs::write(dir.join(format!("f{n}.c")), body).unwrap();
+        }
+
+        let spec: LangSpec = serde_json::from_value(serde_json::json!({
+            "label": "C-like", "extensions": ["c"], "line": ["//"], "block": ["/*", "*/"],
+        }))
+        .unwrap();
+        let specs = vec![spec];
+        let by_extension = HashMap::from([("c".to_string(), 0usize)]);
+
+        let mut files = Vec::new();
+        let mut budget = 1000;
+        collect_files(&dir, &dir, &by_extension, &mut files, &mut budget);
+        assert_eq!(files.len(), 200, "the threshold for threading is cleared");
+
+        let threaded = count_all(&files, &specs);
+        let sequential = count_chunk(&files, &specs);
+
+        let a = threaded.get("C-like").unwrap();
+        let b = sequential.get("C-like").unwrap();
+        assert_eq!(
+            (a.files, a.lines, a.code, a.comment, a.blank),
+            (b.files, b.lines, b.code, b.comment, b.blank),
+        );
+        assert_eq!(a.extensions, b.extensions);
+        assert_eq!(a.lines, a.code + a.comment + a.blank);
 
         let _ = fs::remove_dir_all(&dir);
     }
