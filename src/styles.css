@@ -2849,7 +2849,10 @@ body.perp-resizing {
   border-bottom: 1px solid var(--border);
 }
 
-.stats-row > div:first-child {
+.stats-row > div:first-child,
+/* The mix column holds a bar that fills its track, so its heading sits over
+   the bar's left edge rather than adrift at the right. */
+.stats-row > div:last-child {
   text-align: left;
 }
 
@@ -2876,7 +2879,22 @@ body.perp-resizing {
 .stats-lang {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
+}
+
+/* Sized to the tree's own rows, so the two read as the same kind of mark. */
+.stats-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* What the project actually uses, not everything the language claims. Dimmed
+   and monospace: it identifies the row, it is not a second heading. */
+.stats-ext {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  color: var(--fg-dim);
 }
 
 .stats-n {

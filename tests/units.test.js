@@ -838,7 +838,8 @@ test("the window follows the app's language, not the machine's", () => {
   assert.equal(windowLabel(ago(2 * HOUR), "fr", NOW).text, "il y a 2 heures");
 });
 
-const counts = (files, lines, code, comment, blank) => ({ files, lines, code, comment, blank });
+const counts = (files, lines, code, comment, blank, extensions = []) =>
+  ({ files, lines, code, comment, blank, extensions });
 
 test("a scan against a baseline gives every language a signed delta", () => {
   const current = {
@@ -877,12 +878,12 @@ test("the first scan shows figures and no deltas at all", () => {
 test("a language that appears is new, and one that goes is reported once", () => {
   const current = {
     totals: counts(1, 40, 30, 5, 5),
-    languages: { Rust: counts(1, 40, 30, 5, 5) },
+    languages: { Rust: counts(1, 40, 30, 5, 5, ["rs"]) },
     truncated: false,
   };
   const baseline = {
     totals: counts(2, 140, 100, 25, 15),
-    languages: { Python: counts(1, 100, 70, 20, 10) },
+    languages: { Python: counts(1, 100, 70, 20, 10, ["py"]) },
   };
 
   const rows = Object.fromEntries(compare(current, baseline).rows.map((r) => [r.label, r]));
@@ -898,6 +899,10 @@ test("a language that appears is new, and one that goes is reported once", () =>
   assert.equal(rows.Python.state, "gone");
   assert.equal(rows.Python.files, 0);
   assert.equal(rows.Python.lost, 100);
+  // A row at zero has no extensions of its own left, so it keeps the ones it
+  // had — otherwise the language that just vanished is the one row with no
+  // icon and no extension beside it.
+  assert.deepEqual(rows.Python.extensions, ["py"]);
 });
 
 test("every language the app can open is offered to the scanner", () => {

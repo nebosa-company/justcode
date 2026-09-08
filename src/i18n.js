@@ -266,6 +266,7 @@ export const EN = {
   "stats.code": "Code",
   "stats.comment": "Comment",
   "stats.blank": "Blank",
+  "stats.mix": "Mix",
   "stats.total": "Total",
   "stats.new": "new",
   "stats.gone": "gone",

@@ -132,7 +132,7 @@ export function exactStamps(scannedIso, baselineIso, locale) {
 }
 
 const FIELDS = ["files", "lines", "code", "comment", "blank"];
-const ZERO = { files: 0, lines: 0, code: 0, comment: 0, blank: 0 };
+const ZERO = { files: 0, lines: 0, code: 0, comment: 0, blank: 0, extensions: [] };
 
 /**
  * Joins a scan to the previous one.
@@ -150,10 +150,12 @@ export function compare(current, baseline) {
   const rows = [...names].map((label) => {
     const now = current.languages[label] || ZERO;
     const then = before[label] || null;
+    const extensions = now.extensions?.length ? now.extensions : then?.extensions || [];
     const delta = first || !then ? null : Object.fromEntries(FIELDS.map((f) => [f, now[f] - then[f]]));
     return {
       label,
       ...now,
+      extensions,
       delta,
       state: first ? "first" : !then ? "new" : now.files === 0 ? "gone" : "same",
       lost: then && now.files === 0 ? then.lines : 0,

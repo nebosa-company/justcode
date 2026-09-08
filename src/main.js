@@ -3970,7 +3970,10 @@ async function showStatistics() {
     await message(t("stats.noFolder"), { title: t("stats.title") });
     return;
   }
-  showProjectStats(() => scanProject(root, currentLocale()));
+  // The icon map is loaded when a folder is attached, but a first paint that
+  // is missing every mark is worth one await rather than a race.
+  await explorer.ensureIcons();
+  showProjectStats(() => scanProject(root, currentLocale()), explorer.fileIconUrl);
 }
 
 function openCommandPalette() {

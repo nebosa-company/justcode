@@ -126,16 +126,33 @@ async function loadIconMap() {
   return iconMap;
 }
 
-function iconUrl(node, isExpanded) {
+/** The icon a file of this name gets, as a URL, or null before the map loads.
+ *
+ * Exported because Project Statistics marks each language with the same icon
+ * the tree would draw for one of its files — two resolvers would drift, and a
+ * panel whose JavaScript row wore a different mark from the .js rows beside it
+ * would read as a different kind of thing.
+ */
+export function fileIconUrl(name, { isDir = false, expanded = false, parent = "" } = {}) {
   if (!iconMap) return null;
-  const light = document.documentElement.dataset.theme === "light";
-  const id = fileIconId(iconMap, node.name, {
+  const id = fileIconId(iconMap, name, {
+    isDir,
+    expanded,
+    parent,
+    light: document.documentElement.dataset.theme === "light",
+  });
+  return id ? new URL(`file-icons/${id}.svg`, document.baseURI).href : null;
+}
+
+/** Loads the icon map if it is not already in hand. */
+export const ensureIcons = loadIconMap;
+
+function iconUrl(node, isExpanded) {
+  return fileIconUrl(node.name, {
     isDir: node.isDir,
     expanded: isExpanded,
     parent: baseName(parentOf(node.path)),
-    light,
   });
-  return id ? new URL(`file-icons/${id}.svg`, document.baseURI).href : null;
 }
 
 /* ------------------------------------------------------------ reading disk */

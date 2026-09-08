@@ -1276,7 +1276,7 @@ export function showAbout(version) {
  * `rescan` is handed in rather than called from here so this file stays what the
  * rest of it is — markup over data — and the invoking stays in main.js.
  */
-export function showProjectStats(rescan) {
+export function showProjectStats(rescan, iconFor) {
   const body = openOverlay(t("stats.title"), true);
   body.classList.add("stats-body");
 
@@ -1333,22 +1333,24 @@ export function showProjectStats(rescan) {
       part.style.width = `${(counts[field] / total) * 100}%`;
       bar.append(part);
     }
-    // Numbers only, so the readout needs no string of its own in
-    // thirty-six locales: "86% / 8% / 6%", code first, in column order.
-    const percent = (field) => `${Math.round((counts[field] / total) * 100)}%`;
-    bar.title = `${percent("code")} / ${percent("comment")} / ${percent("blank")}`;
+    // Named, not just listed — three bare percentages leave the reader to guess
+    // which slice is which. The words are the column headings this table
+    // already carries, so the tooltip costs no string of its own in
+    // thirty-six locales.
+    const percent = (field) =>
+      `${t(`stats.${field}`)} ${Math.round((counts[field] / total) * 100)}%`;
+    bar.title = ["code", "comment", "blank"].map(percent).join(" · ");
     return bar;
   }
 
   function header() {
     const row = document.createElement("div");
     row.className = "stats-row stats-header";
-    for (const key of ["language", "files", "lines", "code", "comment", "blank"]) {
+    for (const key of ["language", "files", "lines", "code", "comment", "blank", "mix"]) {
       const cellElement = document.createElement("div");
       cellElement.textContent = t(`stats.${key}`);
       row.append(cellElement);
     }
-    row.append(document.createElement("div"));
     return row;
   }
 
@@ -1358,9 +1360,30 @@ export function showProjectStats(rescan) {
 
     const name = document.createElement("div");
     name.className = "stats-lang";
+
+    // The tree's own mark for a file of this language, drawn from an extension
+    // the project actually has — so the row and the files it counts look alike.
+    const url = entry.extensions?.length ? iconFor?.(`x.${entry.extensions[0]}`) : null;
+    if (url) {
+      const icon = document.createElement("img");
+      icon.className = "stats-icon";
+      icon.src = url;
+      icon.alt = "";
+      name.append(icon);
+    }
+
     const label = document.createElement("span");
     label.textContent = entry.label;
     name.append(label);
+
+    // Which extensions this project uses, not every one the language claims.
+    if (entry.extensions?.length) {
+      const found = document.createElement("span");
+      found.className = "stats-ext";
+      found.textContent = entry.extensions.map((ext) => `.${ext}`).join(" ");
+      name.append(found);
+    }
+
     if (entry.state === "new" || entry.state === "gone") {
       const chip = document.createElement("span");
       chip.className = `stats-chip ${entry.state}`;

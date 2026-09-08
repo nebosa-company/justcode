@@ -2593,6 +2593,15 @@ struct Counts {
     code: u64,
     comment: u64,
     blank: u64,
+    /// Which of the language's extensions this project actually uses, sorted.
+    ///
+    /// The report groups by language rather than by extension, so a row saying
+    /// only "JavaScript" leaves the reader guessing whether it covers the .mjs
+    /// files too. Listing what was found answers that without splitting one
+    /// language across several rows — and it is what was found, not what the
+    /// language claims, so a project with no .cjs never sees .cjs.
+    #[serde(default)]
+    extensions: std::collections::BTreeSet<String>,
 }
 
 impl Counts {
@@ -2602,6 +2611,7 @@ impl Counts {
         self.code += other.code;
         self.comment += other.comment;
         self.blank += other.blank;
+        self.extensions.extend(other.extensions.iter().cloned());
     }
 }
 
@@ -2775,7 +2785,9 @@ fn scan_dir(
 
         *budget -= 1;
         let spec = &specs[index];
-        out.entry(spec.label.clone()).or_default().add(&count_lines(&text, spec));
+        let mut counted = count_lines(&text, spec);
+        counted.extensions.insert(extension);
+        out.entry(spec.label.clone()).or_default().add(&counted);
     }
 }
 
@@ -3853,6 +3865,11 @@ code();
         let counted = out.get("C-like").expect("the two source files");
         assert_eq!(counted.files, 2, "a.c and b.c, not the dependency or the blob");
         assert_eq!((counted.lines, counted.code, counted.comment, counted.blank), (4, 2, 1, 1));
+        // What the project uses, not what the language claims: the spec also
+        // offers nothing else, but the blob and the dependency are both `.c`
+        // and neither may add an extension the report then attributes to code
+        // it did not count.
+        assert_eq!(counted.extensions.iter().cloned().collect::<Vec<_>>(), vec!["c".to_string()]);
 
         let _ = fs::remove_dir_all(&dir);
     }
