@@ -660,9 +660,13 @@ fn ignore_chain(repo: &Path, dir: &Path) -> Vec<ignore::gitignore::Gitignore> {
 /// Whether git would ignore `path`. The deepest matcher wins, which is what git
 /// does; a whitelist (`!pattern`) at any level stops the search rather than
 /// falling through to a shallower ignore.
-fn is_ignored(chain: &[ignore::gitignore::Gitignore], path: &Path, is_dir: bool) -> bool {
+fn is_ignored<'a>(
+    chain: impl IntoIterator<Item = &'a ignore::gitignore::Gitignore>,
+    path: &Path,
+    is_dir: bool,
+) -> bool {
     use ignore::Match;
-    let decided = chain.iter().find_map(|matcher| {
+    let decided = chain.into_iter().find_map(|matcher| {
         // `matched_path_or_any_parents` panics by contract when handed a path
         // outside the matcher's root. Every matcher in the chain is rooted at
         // an ancestor of `path`, so that holds here - and the global matcher,
@@ -2743,18 +2747,22 @@ type Candidate = (PathBuf, String, usize);
 /// by — so the report covers what the project actually ships, with
 /// `node_modules`, `target` and `dist` left out because git leaves them out.
 ///
-/// Listing is separated from reading so the reading can be spread over threads.
-/// This half is `stat` and pattern matching and stays on one: it is a fraction
-/// of the cost, and the ignore chain is rebuilt per directory, which is
-/// awkward to share and pointless to parallelise.
+/// `chain` is every matcher that applies inside `dir`, deepest first, and is
+/// handed down rather than rebuilt. [`ignore_chain`] climbs to the repository
+/// root re-reading every `.gitignore` it passes, which is the right answer for
+/// the Explorer — one listing, and an edited ignore file takes effect with no
+/// cache to invalidate. A recursive walk asking the same question at every
+/// directory pays that climb thousands of times: on celvyx it was 450ms of a
+/// 780ms scan, more than the reading of 1.85M lines. What a child needs is its
+/// parent's chain with the child's own `.gitignore` in front, which is a
+/// pointer copy, so the staleness story is unchanged and the climb is gone.
 fn collect_files(
     dir: &Path,
-    repo: &Path,
+    chain: &[&ignore::gitignore::Gitignore],
     by_extension: &HashMap<String, usize>,
     out: &mut Vec<Candidate>,
     budget: &mut u32,
 ) {
-    let chain = ignore_chain(repo, dir);
     let Ok(entries) = fs::read_dir(dir) else { return };
 
     for entry in entries.flatten() {
@@ -2768,14 +2776,29 @@ fn collect_files(
         if meta.is_dir() {
             // `.git` is the one directory no .gitignore mentions and nobody
             // opened a folder to count.
-            if name == ".git" || is_ignored(&chain, &path, true) {
+            if name == ".git" || is_ignored(chain.iter().copied(), &path, true) {
                 continue;
             }
-            collect_files(&path, repo, by_extension, out, budget);
+            // The child's own rules go in front of everything it inherits,
+            // because the deepest matcher wins — the order `ignore_chain`
+            // built by climbing.
+            let own = {
+                let file = path.join(".gitignore");
+                file.is_file().then(|| ignore::gitignore::Gitignore::new(&file).0)
+            };
+            let mut inherited = Vec::with_capacity(chain.len() + 1);
+            if let Some(matcher) = &own {
+                inherited.push(matcher);
+            }
+            inherited.extend_from_slice(chain);
+            collect_files(&path, &inherited, by_extension, out, budget);
             continue;
         }
 
-        if !meta.is_file() || meta.len() > METRICS_MAX_BYTES || is_ignored(&chain, &path, false) {
+        if !meta.is_file()
+            || meta.len() > METRICS_MAX_BYTES
+            || is_ignored(chain.iter().copied(), &path, false)
+        {
             continue;
         }
         // The report is not part of the project it measures.
@@ -2874,9 +2897,15 @@ fn project_metrics(root: String, languages: Vec<LangSpec>) -> Result<serde_json:
         }
     }
 
+    // Built once for the folder that was opened — it carries the matchers from
+    // any directory between it and the repository root, plus `.git/info/exclude`.
+    // Every directory below inherits from this rather than rebuilding it.
+    let base = ignore_chain(&repo, &root_path);
+    let base: Vec<&ignore::gitignore::Gitignore> = base.iter().collect();
+
     let mut files = Vec::new();
     let mut budget = METRICS_MAX_FILES;
-    collect_files(&root_path, &repo, &by_extension, &mut files, &mut budget);
+    collect_files(&root_path, &base, &by_extension, &mut files, &mut budget);
     let out = count_all(&files, &languages);
 
     let mut totals = Counts::default();
@@ -3918,9 +3947,11 @@ code();
         let specs = vec![spec];
         let by_extension = HashMap::from([("c".to_string(), 0usize)]);
 
+        let base = super::ignore_chain(&dir, &dir);
+        let base: Vec<_> = base.iter().collect();
         let mut files = Vec::new();
         let mut budget = 100;
-        collect_files(&dir, &dir, &by_extension, &mut files, &mut budget);
+        collect_files(&dir, &base, &by_extension, &mut files, &mut budget);
         let out = count_all(&files, &specs);
 
         let counted = out.get("C-like").expect("the two source files");
@@ -3934,6 +3965,7 @@ code();
 
         let _ = fs::remove_dir_all(&dir);
     }
+
 
 
 
@@ -3955,9 +3987,11 @@ code();
         let specs = vec![spec];
         let by_extension = HashMap::from([("c".to_string(), 0usize)]);
 
+        let base = super::ignore_chain(&dir, &dir);
+        let base: Vec<_> = base.iter().collect();
         let mut files = Vec::new();
         let mut budget = 2;
-        collect_files(&dir, &dir, &by_extension, &mut files, &mut budget);
+        collect_files(&dir, &base, &by_extension, &mut files, &mut budget);
 
         assert_eq!(budget, 0, "the caller reports a partial scan from this");
         assert_eq!(files.len(), 2);
@@ -4001,9 +4035,11 @@ two(); // trail
         let specs = vec![spec];
         let by_extension = HashMap::from([("c".to_string(), 0usize)]);
 
+        let base = super::ignore_chain(&dir, &dir);
+        let base: Vec<_> = base.iter().collect();
         let mut files = Vec::new();
         let mut budget = 1000;
-        collect_files(&dir, &dir, &by_extension, &mut files, &mut budget);
+        collect_files(&dir, &base, &by_extension, &mut files, &mut budget);
         assert_eq!(files.len(), 200, "the threshold for threading is cleared");
 
         let threaded = count_all(&files, &specs);
@@ -4017,6 +4053,64 @@ two(); // trail
         );
         assert_eq!(a.extensions, b.extensions);
         assert_eq!(a.lines, a.code + a.comment + a.blank);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The property the inherited chain has to preserve: a deeper .gitignore
+    /// still beats a shallower one, whitelist included.
+    ///
+    /// This is the whole risk of handing the chain down instead of rebuilding
+    /// it. Get the order wrong and the root's `*.c` swallows the subdirectory's
+    /// `!keep.c`, which looks like a slightly small number rather than a bug.
+    #[test]
+    fn a_deeper_ignore_file_still_wins() {
+        let dir = std::env::temp_dir().join("justcode-metrics-nested");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("deep/deeper")).unwrap();
+
+        // The root hides every .c file.
+        fs::write(dir.join(".gitignore"), "*.c
+").unwrap();
+        fs::write(dir.join("root.c"), "a();
+").unwrap();
+
+        // A subdirectory takes one back, and that rule must reach its own
+        // children too.
+        fs::write(dir.join("deep/.gitignore"), "!keep.c
+").unwrap();
+        fs::write(dir.join("deep/keep.c"), "b();
+").unwrap();
+        fs::write(dir.join("deep/other.c"), "c();
+").unwrap();
+        fs::write(dir.join("deep/deeper/keep.c"), "d();
+").unwrap();
+
+        let spec: LangSpec = serde_json::from_value(serde_json::json!({
+            "label": "C-like", "extensions": ["c"], "line": ["//"],
+        }))
+        .unwrap();
+        let specs = vec![spec];
+        let by_extension = HashMap::from([("c".to_string(), 0usize)]);
+
+        let base = super::ignore_chain(&dir, &dir);
+        let base: Vec<_> = base.iter().collect();
+        let mut files = Vec::new();
+        let mut budget = 1000;
+        collect_files(&dir, &base, &by_extension, &mut files, &mut budget);
+
+        let mut found: Vec<String> = files
+            .iter()
+            .map(|(path, _, _)| path.strip_prefix(&dir).unwrap().to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/"))
+            .collect();
+        found.sort();
+
+        assert_eq!(
+            found,
+            vec!["deep/deeper/keep.c".to_string(), "deep/keep.c".to_string()],
+            "the whitelist reaches deeper, and the root rule still hides the rest",
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
