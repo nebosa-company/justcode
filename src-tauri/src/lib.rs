@@ -1775,9 +1775,21 @@ struct BootClock(std::time::Instant);
 /// config: on Windows that setting is applied with `ShowWindow`, which reveals
 /// the window immediately and defeats `"visible": false` — the frame appeared
 /// about half a second before the editor inside it was ready.
+///
+/// The minimised branch is about the launcher rather than the user. Windows
+/// lets whatever started this process dictate its first `ShowWindow` call
+/// through `STARTUPINFO`, so a JustCode launched by a script, a task, or a
+/// shortcut set to "run minimized" has the `maximize` above swallowed and lands
+/// as a taskbar button — and `show` leaves it there, because `SW_SHOW` displays
+/// a window in its current state rather than restoring it. The result was an
+/// app that looked like it had failed to open a window at all.
 fn reveal(window: &tauri::WebviewWindow) {
     let _ = window.maximize();
     let _ = window.show();
+    if window.is_minimized().unwrap_or(false) {
+        let _ = window.unminimize();
+        let _ = window.maximize();
+    }
     let _ = window.set_focus();
 }
 
@@ -3001,13 +3013,12 @@ pub fn run() {
             let files = files_from_args(argv);
             if let Some(window) = app.get_webview_window("main") {
                 // Opening a document from Explorer should land you in the
-                // editor the same way starting the app does — which is
-                // maximised (see `reveal`). Unminimising alone left a window
-                // that had been dropped to the taskbar restored to whatever
-                // small size it last had, with the new file somewhere inside it.
-                let _ = window.unminimize();
-                let _ = window.maximize();
-                let _ = window.set_focus();
+                // editor the same way starting the app does — which is what
+                // `reveal` is, so it is called rather than repeated here.
+                // Unminimising alone left a window that had been dropped to the
+                // taskbar restored to whatever small size it last had, with the
+                // new file somewhere inside it.
+                reveal(&window);
             }
             if !files.is_empty() {
                 let _ = app.emit("open-files", files);
