@@ -72,7 +72,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # The Node the bundle is built with, not the one the actions run on —
+          # those are pinned by the action versions above. 20 went end-of-life,
+          # and building a release on an unmaintained runtime is a security
+          # answer nobody wants to have to give.
+          node-version: 22
           cache: npm
 
       - name: Install frontend dependencies
