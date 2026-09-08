@@ -501,6 +501,24 @@ fn update_target(file_name: &str) -> Result<PathBuf, String> {
     Ok(std::env::temp_dir().join(name))
 }
 
+/// The same name with `-n` before the extension: `setup-1.exe` beside
+/// `setup.exe`.
+///
+/// Windows refuses to open a file another process is holding (os error 32), and
+/// the installer this feature just launched is exactly such a process: checking
+/// again after an install that was started but not finished used to fail with
+/// nothing but that message. A busy target falls back to a name next to it
+/// instead, which stays in the temp folder `install_update` insists on.
+fn numbered(target: &Path, n: u32) -> PathBuf {
+    let stem = target.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let mut name = format!("{stem}-{n}");
+    if let Some(extension) = target.extension() {
+        name.push('.');
+        name.push_str(&extension.to_string_lossy());
+    }
+    target.with_file_name(name)
+}
+
 /// Downloads a release asset into the temp folder and returns where it landed.
 ///
 /// The name is reduced to its last path segment before it is joined onto the
@@ -514,7 +532,17 @@ fn download_update(url: String, file_name: String) -> Result<String, String> {
     let target = update_target(&file_name)?;
 
     let response = ureq::get(&url).call().map_err(|e| format!("{e}"))?;
-    let mut file = fs::File::create(&target).map_err(|e| format!("{e}"))?;
+    let mut last = String::new();
+    let (mut file, target) = std::iter::once(target.clone())
+        .chain((1..5).map(|n| numbered(&target, n)))
+        .find_map(|path| match fs::File::create(&path) {
+            Ok(file) => Some((file, path)),
+            Err(e) => {
+                last = format!("{}: {e}", path.display());
+                None
+            }
+        })
+        .ok_or(last)?;
     std::io::copy(&mut response.into_reader(), &mut file).map_err(|e| format!("{e}"))?;
     Ok(target.display().to_string())
 }
@@ -3206,7 +3234,7 @@ mod terminal_tests {
 
 #[cfg(test)]
 mod update_tests {
-    use super::{download_update, update_target};
+    use super::{download_update, numbered, update_target};
 
     #[test]
     fn a_download_lands_in_temp_under_its_own_name() {
@@ -3223,6 +3251,15 @@ mod update_tests {
         );
         assert!(update_target("").is_err());
         assert!(update_target("..").is_err());
+    }
+
+    #[test]
+    fn a_busy_target_falls_back_to_a_name_beside_it() {
+        let temp = std::env::temp_dir();
+        let target = temp.join("JustCode_0.4.4_x64-setup.exe");
+        // Still in the temp folder, or `install_update` would refuse to run it.
+        assert_eq!(numbered(&target, 1), temp.join("JustCode_0.4.4_x64-setup-1.exe"));
+        assert_eq!(numbered(&temp.join("justcode"), 2), temp.join("justcode-2"));
     }
 
     #[test]
