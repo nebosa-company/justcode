@@ -2557,7 +2557,7 @@ fn set_file_associations(
 }
 
 // ---------------------------------------------------------------------------
-// Project metrics (View > Project Statistics)
+// Project metrics (View > Project Metrics)
 // ---------------------------------------------------------------------------
 
 /// A file bigger than this is data, not source — a bundled map file, a vendored

@@ -254,11 +254,11 @@ export const EN = {
   "panel.needsFile": "Open a file in the project first — the panel reads its journal.",
   "status.lineColumn": "Line {line}, Column {column}",
 
-  // Project Statistics. Deliberately few keys: the window's relative wording
+  // Project Metrics. Deliberately few keys: the window's relative wording
   // ("2 hours ago") comes from Intl.RelativeTimeFormat, which is already right
   // in every locale here, and the mix and stamp tooltips are numbers and dates
   // with no sentence around them.
-  "stats.title": "Project Statistics",
+  "stats.title": "Project Metrics",
   "stats.rescan": "Rescan",
   "stats.language": "Language",
   "stats.files": "Files",
@@ -323,6 +323,8 @@ export const EN = {
   "edit.goToSymbol": "Go to Symbol…",
   "file.recent": "Recent Files",
   "file.recentEmpty": "No recent files",
+  "file.recentFolders": "Recent Folders",
+  "file.recentFoldersEmpty": "No recent folders",
   "file.associations": "File Associations…",
 
   "modal.symbolsTitle": "Go to symbol",
@@ -583,6 +585,7 @@ export const EN = {
   "sc.zoomInOut": "Zoom in / out",
   "sc.resetZoom": "Reset zoom",
   "sc.zoom": "Zoom",
+  "sc.projectStats": "Open project metrics",
   "sc.showProblems": "Show or hide problems",
   "sc.nextPrevProblem": "Next / previous problem",
   "sc.problemsPanel": "Open the problems panel",

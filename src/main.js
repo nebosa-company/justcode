@@ -111,6 +111,7 @@ const STORAGE = {
   spellcheck: "justcode.spellcheck",
   locale: "justcode.locale",
   recent: "justcode.recent",
+  recentFolders: "justcode.recentFolders",
   wordWrap: "justcode.wordWrap",
   bionicReading: "justcode.bionicReading",
   newFavourites: "justcode.newFavourites",
@@ -125,6 +126,10 @@ const STORAGE = {
 };
 
 const MAX_RECENT_FILES = 15;
+
+// Shorter than the file list on purpose: a person works in a handful of
+// projects and twenty of them would be a list to search rather than pick from.
+const MAX_RECENT_FOLDERS = 10;
 
 // A cap on the files carried across a restart. Every one of them is read from
 // disk before the window is shown, so an enormous session would be paid for as
@@ -1162,16 +1167,16 @@ function newFile() {
 
 // ------------------------------------------------------------- recent files
 
-/** The recent list as `{path, at}`, newest first.
+/** One recent list — files or folders — as `{path, at}`, newest first.
  *
  * Reads the old format too — a bare array of paths — because a stored list from
  * before this carried no times, and dropping it to gain a grouping nobody asked
  * for would be a poor trade. Those entries get `at: 0`, which sorts them under
  * the line as "before today", which is true.
  */
-function readRecentFiles() {
+function readRecentList(where) {
   try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE.recent) || "[]");
+    const stored = JSON.parse(localStorage.getItem(where) || "[]");
     if (!Array.isArray(stored)) return [];
     return stored
       .map((entry) => {
@@ -1187,18 +1192,26 @@ function readRecentFiles() {
   }
 }
 
-/** Records a path as most-recent, keeping the list unique and capped.
+/** Records a path as most-recent in one of the lists, unique and capped.
  *
- * Called on every open, including re-opening a file that is already in a tab, so
- * the order is genuinely "last reached" rather than "first discovered".
+ * Called on every open, including re-opening a file that is already in a tab or
+ * a folder already in the Explorer, so the order is genuinely "last reached"
+ * rather than "first discovered".
  */
-function rememberRecentFile(path) {
+function rememberRecent(where, path, cap) {
   if (!path) return;
   const key = samePathKey(path);
-  const rest = readRecentFiles().filter((entry) => samePathKey(entry.path) !== key);
+  const rest = readRecentList(where).filter((entry) => samePathKey(entry.path) !== key);
   const next = [{ path, at: Date.now() }, ...rest];
-  localStorage.setItem(STORAGE.recent, JSON.stringify(next.slice(0, MAX_RECENT_FILES)));
+  localStorage.setItem(where, JSON.stringify(next.slice(0, cap)));
 }
+
+const readRecentFiles = () => readRecentList(STORAGE.recent);
+const rememberRecentFile = (path) => rememberRecent(STORAGE.recent, path, MAX_RECENT_FILES);
+
+const readRecentFolders = () => readRecentList(STORAGE.recentFolders);
+const rememberRecentFolder = (path) =>
+  rememberRecent(STORAGE.recentFolders, path, MAX_RECENT_FOLDERS);
 
 /** Midnight this morning, in local time. The boundary for "today". */
 function startOfToday() {
@@ -2399,6 +2412,30 @@ function buildMenus() {
         run: closeFolder,
       },
       {
+        label: t("file.recentFolders"),
+        icon: "clock",
+        // Built fresh each time, same as the file list below it.
+        submenu: () => {
+          const recent = readRecentFolders();
+          if (!recent.length) {
+            return [{ label: t("file.recentFoldersEmpty"), enabled: () => false, run() {} }];
+          }
+          const current = explorer.root();
+          return recent.map((entry) => {
+            const open = current && samePathKey(entry.path) === samePathKey(current);
+            return {
+              // The folder already open is marked for the same reason an open
+              // file is: picking it does nothing, and finding that out by
+              // clicking is a waste of a trip through the menu.
+              icon: open ? "check" : "folder",
+              label: baseName(entry.path) || entry.path,
+              hint: open ? `${entry.path} — ${t("file.recentOpen")}` : entry.path,
+              run: () => openFolder(entry.path),
+            };
+          });
+        },
+      },
+      {
         label: t("file.recent"),
         icon: "clock",
         // Built fresh each time the menu opens, so it is never stale.
@@ -2794,8 +2831,8 @@ function buildMenus() {
         accel: "Ctrl+Shift+P",
         run: openCommandPalette,
       },
+      { label: t("stats.title"), icon: "info", accel: "F6", run: showStatistics },
       { label: t("view.problems"), icon: "warning", accel: "F8", run: showProblems },
-      { label: t("stats.title"), icon: "info", run: showStatistics },
       {
         label: t("view.nextProblem"),
         icon: "arrowDown",
@@ -3119,6 +3156,12 @@ window.addEventListener(
       event.preventDefault();
       event.stopPropagation();
       showProblems();
+      return;
+    }
+    if (event.key === "F6" && !ctrl) {
+      event.preventDefault();
+      event.stopPropagation();
+      showStatistics();
       return;
     }
     // Walking the problems is F4, Shift+F4 backwards — the Visual Studio
@@ -3959,7 +4002,7 @@ function allCommands() {
   return found;
 }
 
-/** View > Project Statistics.
+/** View > Project Metrics.
  *
  * The scan needs a project, and "the folder that is open" is the only thing
  * that means here — a lone file has no boundary to walk.
@@ -4035,6 +4078,7 @@ async function openFolder(path = null) {
   if (!chosen || Array.isArray(chosen)) return;
   showExplorer(true);
   await explorer.attach(chosen);
+  rememberRecentFolder(chosen);
   rememberExplorer();
 }
 

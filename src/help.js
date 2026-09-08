@@ -134,6 +134,7 @@ const SHORTCUTS = [
       ["Ctrl++ / Ctrl+-", "sc.zoomInOut"],
       ["Ctrl+0", "sc.resetZoom"],
       ["sc.k.ctrlWheel", "sc.zoom"],
+      ["F6", "sc.projectStats"],
       ["F8", "sc.showProblems"],
       ["F4 / Shift+F4", "sc.nextPrevProblem"],
       ["Ctrl+Shift+M", "sc.problemsPanel"],
@@ -1266,7 +1267,7 @@ export function showAbout(version) {
 }
 
 /**
- * Project statistics: every language in the open folder, and how each has moved
+ * Project metrics: every language in the open folder, and how each has moved
  * since the last scan.
  *
  * The dialog opens before the scan finishes and fills in when it lands, because
