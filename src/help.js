@@ -1428,6 +1428,7 @@ export function showProjectStats(rescan, iconFor) {
     table.append(totalsRow(report.totals));
 
     const [scanned, baseline] = report.stamps;
+    window_.hidden = false;
     window_.classList.toggle("cold", !report.window);
     window_.textContent = report.window
       ? report.window.since
@@ -1442,6 +1443,10 @@ export function showProjectStats(rescan, iconFor) {
 
   function load() {
     again.disabled = true;
+    // Nothing to say about a window until there is a result to have one. Left
+    // in place it renders as an empty chip holding a lone delta sign, which on
+    // a big project is what you look at for half a minute.
+    window_.hidden = true;
     table.replaceChildren(Object.assign(document.createElement("p"), {
       className: "stats-waiting",
       textContent: t("stats.scanning"),

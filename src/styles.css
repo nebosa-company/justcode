@@ -2776,6 +2776,12 @@ body.perp-resizing {
    it sits with the title rather than in a footnote, and carries the exact
    stamps on hover. The delta sign is drawn in, not typed, so no locale has to
    translate a glyph. */
+/* `display` here beats the `hidden` attribute, so say so explicitly — the
+   pill is hidden while a scan is in flight. */
+.stats-window[hidden] {
+  display: none;
+}
+
 .stats-window {
   display: inline-flex;
   align-items: center;
