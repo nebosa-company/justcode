@@ -1439,7 +1439,7 @@ export function showMetricsPanel(rescan, iconFor) {
     // Two localised stamps joined by an arrow — no sentence to translate.
     window_.title = baseline ? `${baseline} → ${scanned}` : scanned;
 
-    note.textContent = report.truncated ? t("metrics.truncated") : t("metrics.stored");
+    note.textContent = t("metrics.stored");
   }
 
   function load() {

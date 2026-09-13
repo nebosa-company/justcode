@@ -274,7 +274,6 @@ export const EN = {
   "metrics.noBaseline": "no baseline yet",
   "metrics.scanning": "Scanning the project…",
   "metrics.stored": "Kept in .metrics",
-  "metrics.truncated": "Stopped at 50,000 files — these totals are partial.",
   "metrics.noFolder": "Open a folder first — there is no project to measure.",
 
   "tabs.empty": "No files open — press Ctrl+O to open, Ctrl+N for a new file",

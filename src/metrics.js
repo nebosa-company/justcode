@@ -195,7 +195,6 @@ export async function scanProject(root, locale) {
     version: 1,
     scanned,
     root: root.replace(/\\/g, "/"),
-    truncated: current.truncated,
     totals: current.totals,
     languages: current.languages,
   };
@@ -208,7 +207,6 @@ export async function scanProject(root, locale) {
     ...compare(current, baseline),
     scanned,
     baseline: baseline?.scanned || null,
-    truncated: current.truncated,
     window: windowLabel(baseline?.scanned, locale),
     stamps: exactStamps(scanned, baseline?.scanned, locale),
   };

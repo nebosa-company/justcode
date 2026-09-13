@@ -2605,10 +2605,6 @@ fn set_file_associations(
 /// it costs the whole scan.
 const METRICS_MAX_BYTES: u64 = 8 * 1024 * 1024;
 
-/// Enough for any project someone edits by hand. The cap is a stop, not a
-/// sample: the report says it was hit, so the numbers are never quietly partial.
-const METRICS_MAX_FILES: u32 = 50_000;
-
 /// The report, written beside the project it measures.
 const METRICS_FILE: &str = ".metrics";
 
@@ -2801,14 +2797,10 @@ fn collect_files(
     chain: &[&ignore::gitignore::Gitignore],
     by_extension: &HashMap<String, usize>,
     out: &mut Vec<Candidate>,
-    budget: &mut u32,
 ) {
     let Ok(entries) = fs::read_dir(dir) else { return };
 
     for entry in entries.flatten() {
-        if *budget == 0 {
-            return;
-        }
         let path = entry.path();
         let Ok(meta) = entry.metadata() else { continue };
         let name = entry.file_name().to_string_lossy().to_string();
@@ -2831,7 +2823,7 @@ fn collect_files(
                 inherited.push(matcher);
             }
             inherited.extend_from_slice(chain);
-            collect_files(&path, &inherited, by_extension, out, budget);
+            collect_files(&path, &inherited, by_extension, out);
             continue;
         }
 
@@ -2851,7 +2843,6 @@ fn collect_files(
         };
         let Some(&index) = by_extension.get(&extension) else { continue };
 
-        *budget -= 1;
         out.push((path, extension, index));
     }
 }
@@ -2944,8 +2935,7 @@ fn project_metrics(root: String, languages: Vec<LangSpec>) -> Result<serde_json:
     let base: Vec<&ignore::gitignore::Gitignore> = base.iter().collect();
 
     let mut files = Vec::new();
-    let mut budget = METRICS_MAX_FILES;
-    collect_files(&root_path, &base, &by_extension, &mut files, &mut budget);
+    collect_files(&root_path, &base, &by_extension, &mut files);
     let out = count_all(&files, &languages);
 
     let mut totals = Counts::default();
@@ -2956,7 +2946,6 @@ fn project_metrics(root: String, languages: Vec<LangSpec>) -> Result<serde_json:
     Ok(serde_json::json!({
         "totals": totals,
         "languages": out,
-        "truncated": budget == 0,
     }))
 }
 
@@ -3998,8 +3987,7 @@ code();
         let base = super::ignore_chain(&dir, &dir);
         let base: Vec<_> = base.iter().collect();
         let mut files = Vec::new();
-        let mut budget = 100;
-        collect_files(&dir, &base, &by_extension, &mut files, &mut budget);
+        collect_files(&dir, &base, &by_extension, &mut files);
         let out = count_all(&files, &specs);
 
         let counted = out.get("C-like").expect("the two source files");
@@ -4016,37 +4004,6 @@ code();
 
 
 
-
-    /// The cap has to stop the walk, not silently sample it.
-    #[test]
-    fn the_file_cap_stops_the_walk() {
-        let dir = std::env::temp_dir().join("justcode-metrics-cap");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        for n in 0..5 {
-            fs::write(dir.join(format!("f{n}.c")), "a();
-").unwrap();
-        }
-
-        let spec: LangSpec = serde_json::from_value(serde_json::json!({
-            "label": "C-like", "extensions": ["c"], "line": ["//"],
-        }))
-        .unwrap();
-        let specs = vec![spec];
-        let by_extension = HashMap::from([("c".to_string(), 0usize)]);
-
-        let base = super::ignore_chain(&dir, &dir);
-        let base: Vec<_> = base.iter().collect();
-        let mut files = Vec::new();
-        let mut budget = 2;
-        collect_files(&dir, &base, &by_extension, &mut files, &mut budget);
-
-        assert_eq!(budget, 0, "the caller reports a partial scan from this");
-        assert_eq!(files.len(), 2);
-        assert_eq!(count_all(&files, &specs).get("C-like").unwrap().files, 2);
-
-        let _ = fs::remove_dir_all(&dir);
-    }
 
     /// Threads must not change the answer. The merge is the only shared state
     /// in the scan, and a wrong merge shows up as a plausible number rather
@@ -4086,8 +4043,7 @@ two(); // trail
         let base = super::ignore_chain(&dir, &dir);
         let base: Vec<_> = base.iter().collect();
         let mut files = Vec::new();
-        let mut budget = 1000;
-        collect_files(&dir, &base, &by_extension, &mut files, &mut budget);
+        collect_files(&dir, &base, &by_extension, &mut files);
         assert_eq!(files.len(), 200, "the threshold for threading is cleared");
 
         let threaded = count_all(&files, &specs);
@@ -4144,8 +4100,7 @@ two(); // trail
         let base = super::ignore_chain(&dir, &dir);
         let base: Vec<_> = base.iter().collect();
         let mut files = Vec::new();
-        let mut budget = 1000;
-        collect_files(&dir, &base, &by_extension, &mut files, &mut budget);
+        collect_files(&dir, &base, &by_extension, &mut files);
 
         let mut found: Vec<String> = files
             .iter()
